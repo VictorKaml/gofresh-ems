@@ -34,7 +34,6 @@ import {
   Download,
   Clock,
   AlertTriangle,
-  UserCheck,
   Contact2,
   Building2,
   FileSpreadsheet,
@@ -47,7 +46,6 @@ import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
-// --- STRUCTURAL INTERFACE SCHEMATICS ---
 interface EmployeeProfile {
   staffCode: string;
   fullName: string;
@@ -87,13 +85,11 @@ export default function EMSDashboard() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bavInputRef = useRef<HTMLInputElement>(null);
 
-  // --- CORE CLIENT-SIDE MEMORY STATES ---
   const [user, setUser] = useState<SessionUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [employeeDirectory, setEmployeeDirectory] = useState<EmployeeProfile[]>([]);
   const [rawSwipesBuffer, setRawSwipesBuffer] = useState<RawSwipe[]>([]);
   
-  // --- APPLICATION INTERFACE VIEW CONTROLS ---
   const [activeTab, setActiveTab] = useState("OVERVIEW"); 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedEmployeeCode, setSelectedEmployeeCode] = useState<string | null>(null);
@@ -104,31 +100,37 @@ export default function EMSDashboard() {
   const [lowAttendanceThreshold, setLowAttendanceThreshold] = useState<number>(30); 
   const [isUploading, setIsUploading] = useState(false);
 
-  // --- BAV EXCEL STAGING QUEUE STATES ---
   const [bavStagedRecords, setBavStagedRecords] = useState<EmployeeProfile[]>([]);
   const [isBavSaving, setIsBavSaving] = useState(false);
   const [bavStatus, setBavStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [systemLogs, setSystemLogs] = useState<string[]>([
-    "[INFO] TypeORM Connection pool initialized safely.",
-    "[INFO] Ready for active biometric employee data packets."
+    "[INFO] System ready for biometric sequence analysis matrices."
   ]);
 
-  // --- SESSION HANDSHAKE ON RUNTIME MOUNT ---
   useEffect(() => {
-    async function verifySession() {
+    async function initializeDashboard() {
       try {
-        const response = await fetch("/api/auth/me");
-        if (!response.ok) throw new Error("Unauthenticated");
-        const data = await response.json();
-        setUser(data.user);
-        addLog(`[SUCCESS] Pool client identity handshake verified for ${data.user.email}`);
+        const authResponse = await fetch("/api/auth/me");
+        if (!authResponse.ok) throw new Error("Unauthenticated");
+        const authData = await authResponse.json();
+        setUser(authData.user);
+        addLog(`[SUCCESS] Verified access context for ${authData.user.email}`);
+
+        // Hydrate employees list from DB
+        const empResponse = await fetch("/api/employees");
+        if (empResponse.ok) {
+          const empData = await empResponse.json();
+          const records = Array.isArray(empData) ? empData : empData.employees || [];
+          setEmployeeDirectory(records);
+          addLog(`[DB_SYNC] Instantiated ${records.length} corporate staff directory models.`);
+        }
       } catch (err) {
         router.push("/login");
       } finally {
         setIsLoading(false);
       }
     }
-    verifySession();
+    initializeDashboard();
   }, [router]);
 
   const addLog = (msg: string) => {
@@ -143,11 +145,13 @@ export default function EMSDashboard() {
     return `Wk ${Math.ceil((pastDaysOfYear + startOfYear.getDay() + 1) / 7)}`;
   };
 
-  // --- AUTOMATED MASTER ROSTER & BIOMETRIC LOG INGESTION ---
+  // --- REWORKED: HANDLES FILE INGESTION AND STORES TO SUPABASE ---
   const handleFileUploadDispatch = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setIsUploading(true);
+    setBavStatus(null);
+    addLog(`[CHRONO] Analyzing ingestion data sequence: ${file.name}`);
 
     const reader = new FileReader();
     reader.onload = async (evt) => {
@@ -187,7 +191,7 @@ export default function EMSDashboard() {
 
           setEmployeeDirectory(parsedRoster);
           setActiveTab("EMPLOYEES");
-          addLog(`[ROSTER] Loaded ${parsedRoster.length} local workspace rows safely.`);
+          addLog(`[ROSTER] Parsed local memory registry containing ${parsedRoster.length} staff records.`);
         } else if (isBiometricLog) {
           const headerIdx = rawRows.findIndex(row => Array.isArray(row) && row.some(c => String(c).trim() === "Card Swiping Type"));
           const headers = rawRows[headerIdx].map((h: any) => String(h).trim());
@@ -214,12 +218,27 @@ export default function EMSDashboard() {
             });
           });
 
+          // 1. Sync state directly for immediate runtime interface updates
           setRawSwipesBuffer(dynamicSwipes);
+
+          // 2. Transmit block array directly to Supabase table repository
+          addLog(`[DB_COMMIT] Piping batch block of ${dynamicSwipes.length} items to database...`);
+          const dbResponse = await fetch("/api/attendance/batch", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ records: dynamicSwipes })
+          });
+
+          if (!dbResponse.ok) throw new Error("Supabase stream insertion error.");
+          
+          setBavStatus({ type: "success", message: `Successfully parsed and recorded ${dynamicSwipes.length} log transactions to database tables.` });
+          addLog(`[SUCCESS] Attendance records synced with database architecture.`);
           setActiveTab("OVERVIEW");
-          addLog(`[BIOMETRIC] Ingested ${dynamicSwipes.length} transactional swipe rows to system memory buffer.`);
         }
-      } catch (err) {
-        console.error("Ingestion parsing error", err);
+      } catch (err: any) {
+        console.error("Ingestion parsing pipeline failure:", err);
+        setBavStatus({ type: "error", message: err.message || "Failed to parse layout configuration or map matrix blocks." });
+        addLog(`[CRITICAL] Stream mapping processing execution fault.`);
       } finally {
         setIsUploading(false);
         if (fileInputRef.current) fileInputRef.current.value = "";
@@ -228,12 +247,11 @@ export default function EMSDashboard() {
     reader.readAsArrayBuffer(file);
   };
 
-  // --- BAV SECTION: EXCEL WORKFORCE FILE PARSER ---
   const handleBavExcelParse = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    addLog(`[BAV_PARSER] Ingesting binary matrix stream from: ${file.name}`);
+    addLog(`[BAV_PARSER] Extracting profile rows from: ${file.name}`);
     const reader = new FileReader();
     
     reader.onload = (evt) => {
@@ -254,21 +272,18 @@ export default function EMSDashboard() {
         setBavStagedRecords(validatedEmployees);
         setBavStatus(null);
         setActiveTab("BAV_PREVIEW");
-        addLog(`[SUCCESS] Staged ${validatedEmployees.length} rows to layout cache framework.`);
+        addLog(`[SUCCESS] Staged ${validatedEmployees.length} workforce assets inside workspace.`);
       } catch (err) {
-        setBavStatus({ type: "error", message: "Failed to parse structural layout configuration of sheet." });
-        addLog("[ERROR] BAV Ingestion matrix file verification mismatch.");
+        setBavStatus({ type: "error", message: "Failed to construct row array configuration mapping models." });
       }
     };
     reader.readAsArrayBuffer(file);
   };
 
-  // --- BAV SECTION: COMMIT STAGED BLOCK PERMANENTLY TO POSTGRESQL ---
   const saveBavRecordsToPostgres = async () => {
     if (bavStagedRecords.length === 0) return;
     setIsBavSaving(true);
     setBavStatus(null);
-    addLog(`[DB_COMMIT] Writing transaction block containing ${bavStagedRecords.length} records...`);
 
     try {
       const response = await fetch("/api/employees/batch", {
@@ -278,23 +293,19 @@ export default function EMSDashboard() {
       });
 
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Batch payload compilation error.");
+      if (!response.ok) throw new Error(result.error || "Batch compilation error.");
 
-      // Hydrate local runtime client engine array with the newly stored assets automatically
       setEmployeeDirectory(prev => {
         const uniqueMap = new Map(prev.map(item => [item.staffCode, item]));
         bavStagedRecords.forEach(rec => uniqueMap.set(rec.staffCode, rec));
         return Array.from(uniqueMap.values());
       });
 
-      setBavStatus({ type: "success", message: `Successfully saved ${bavStagedRecords.length} workforce profiles permanently into PostgreSQL.` });
-      addLog(`[SUCCESS] Postgres write verified. Transaction committed.`);
+      setBavStatus({ type: "success", message: `Successfully registered ${bavStagedRecords.length} staff records.` });
       setBavStagedRecords([]);
       setActiveTab("EMPLOYEES");
-      if (bavInputRef.current) bavInputRef.current.value = "";
     } catch (err: any) {
-      setBavStatus({ type: "error", message: err.message || "Postgres internal dispatcher execution failure." });
-      addLog(`[CRITICAL_FAULT] TypeORM entity update transaction rolled back: ${err.message}`);
+      setBavStatus({ type: "error", message: err.message || "Internal database transaction exception." });
     } finally {
       setIsBavSaving(false);
     }
@@ -326,7 +337,7 @@ export default function EMSDashboard() {
     };
   }, [rawSwipesBuffer]);
 
-  // --- CORE ATTENDANCE RULES PARSING COMPUTATION ENGINE ---
+  // --- AUTOMATIC CALCULATION & INTER-TABLE MAPPING ENGINE ---
   const systemProcessedDataset = useMemo(() => {
     const uniqueDates = Array.from(new Set(rawSwipesBuffer.map(s => s.date))).sort();
 
@@ -428,7 +439,6 @@ export default function EMSDashboard() {
     });
   }, [employeeDirectory, rawSwipesBuffer, monthFilter, weekFilter, dayFilter, lowAttendanceThreshold]);
 
-  // --- FILTERS & INTERSECTIONS ---
   const filteredViewDataset = useMemo(() => {
     return systemProcessedDataset.filter(row => {
       return row.fullName.toLowerCase().includes(searchQuery.toLowerCase()) || row.staffCode.toLowerCase().includes(searchQuery.toLowerCase());
@@ -503,13 +513,6 @@ export default function EMSDashboard() {
     const doc = new jsPDF("l", "mm", "a4");
     doc.setFillColor(15, 23, 42); 
     doc.rect(0, 0, 297, 42, "F");
-    
-    try {
-      doc.addImage("/gofresh_logo.jpg", "JPEG", 14, 6, 30, 30);
-    } catch (e) {
-      doc.setFillColor(239, 68, 68);
-      doc.rect(14, 6, 30, 30, "F");
-    }
 
     doc.setTextColor(255, 255, 255);
     doc.setFont("Helvetica", "bold");
@@ -581,22 +584,15 @@ export default function EMSDashboard() {
       headStyles: { fillColor: [15, 23, 42], halign: "center", fontSize: 9, fontStyle: "bold" },
       styles: { cellPadding: 5, fontSize: 10, halign: "center", font: "Helvetica", textColor: [51, 65, 85] },
       columnStyles: { 0: { fontStyle: "bold", halign: "left", fillColor: [241, 245, 249], cellWidth: 45 } },
-      didParseCell: (data) => {
-        if (data.row.index >= 0 && data.column.index > 0 && data.cell.text[0] !== "— / —") {
-          data.cell.styles.fontStyle = "bold";
-          data.cell.styles.textColor = [15, 23, 42];
-          data.cell.styles.fillColor = [239, 246, 255]; 
-        }
-      }
     });
 
-    doc.save(`GoFresh_Calendar_Matrix_${emp.staffCode}.pdf`);
+    doc.save(`GoFresh_Matrix_${emp.staffCode}.pdf`);
   };
 
   const exportLowAttendanceReportPDF = () => {
     const doc = new jsPDF();
     doc.setFont("Helvetica", "bold");
-    doc.text("GOFRESH OPERATION EXCEPTIONS REPORT", 14, 20);
+    doc.text("GOFRESH RUN EXCEPTIONS REPORT", 14, 20);
     const rows = lowAttendanceStaffList.map(emp => [
       emp.staffCode, emp.fullName, emp.department, `${emp.metrics.totalRegularHours} hrs`, `${emp.metrics.totalOvertimeHours} hrs`, `${emp.metrics.totalHoursSum} hrs`
     ]);
@@ -604,7 +600,6 @@ export default function EMSDashboard() {
       startY: 28,
       head: [["Staff Code", "Full Name", "Department", "Regular", "Overtime", "Total Accrued"]],
       body: rows,
-      theme: "striped"
     });
     doc.save(`GoFresh_Attendance_Deficits.pdf`);
   };
@@ -613,7 +608,7 @@ export default function EMSDashboard() {
     return (
       <div className="flex bg-slate-950 text-slate-100 min-h-screen items-center justify-center font-mono text-xs tracking-widest uppercase">
         <Activity className="w-4 h-4 animate-spin text-blue-500 mr-2" />
-        Syncing Postgres Matrix Context...
+        Syncing Processing Matrix Context...
       </div>
     );
   }
@@ -621,7 +616,6 @@ export default function EMSDashboard() {
   return (
     <div className="flex bg-slate-50 text-slate-900 min-h-screen antialiased selection:bg-blue-500 selection:text-white">
       
-      {/* ─── SIDE NAVIGATION BAR PANEL WITH BAV INTEGRATION ─── */}
       <aside className="w-64 bg-slate-900 text-white flex flex-col justify-between fixed h-full top-0 left-0 z-30 shadow-xl border-r border-slate-800">
         <div className="overflow-y-auto flex-1 p-4 space-y-4">
           <div className="py-3 px-3 border-b border-slate-800/80 flex items-center justify-between">
@@ -664,7 +658,6 @@ export default function EMSDashboard() {
             </button>
           </div>
 
-          {/* ─── DYNAMIC BAV UPLOADER SECTION (SIDEBAR ACTION WORKSPACE) ─── */}
           <div className="pt-4 border-t border-slate-800 space-y-2">
             <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest block px-3">BAV DB UPDATE LAYER</span>
             <div className="px-1">
@@ -676,10 +669,11 @@ export default function EMSDashboard() {
                 </label>
               </Button>
             </div>
+
             {bavStagedRecords.length > 0 && (
-              <div className="px-1 pt-1 animate-in fade-in duration-200">
-                <Button onClick={saveBavRecordsToPostgres} disabled={isBavSaving} className="w-full h-9 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wide gap-1">
-                  {isBavSaving ? "WRITING PG..." : `COMMIT ${bavStagedRecords.length} TO DB`}
+              <div className="px-1 pt-1">
+                <Button onClick={saveBavRecordsToPostgres} disabled={isBavSaving} className="w-full h-9 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wide">
+                  {isBavSaving ? "WRITING..." : `COMMIT ${bavStagedRecords.length} TO DB`}
                 </Button>
               </div>
             )}
@@ -696,16 +690,17 @@ export default function EMSDashboard() {
           </div>
 
           <div className="pt-4 border-t border-slate-800">
-            <input type="file" ref={fileInputRef} onChange={handleFileUploadDispatch} accept=".xlsx, .xls, .csv" className="hidden" />
-            <button onClick={() => fileInputRef.current?.click()} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold text-slate-400 hover:bg-slate-800 hover:text-white transition-all">
-              <UploadCloud className="w-4 h-4 text-blue-400" />
-              <span>{isUploading ? "INGESTING LOGS..." : "INGEST CHRONO MATRIX"}</span>
-            </button>
+            <input type="file" ref={fileInputRef} onChange={handleFileUploadDispatch} accept=".xlsx, .xls, .csv" className="hidden" id="chrono-file-uploader" />
+            <Button asChild variant="ghost" className="w-full justify-start gap-3 px-3 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-white rounded-lg text-xs font-bold cursor-pointer">
+              <label htmlFor="chrono-file-uploader">
+                <UploadCloud className="w-4 h-4 text-blue-400 shrink-0" />
+                <span>{isUploading ? "PERSISTING LOGS..." : "INGEST CHRONO MATRIX"}</span>
+              </label>
+            </Button>
           </div>
         </div>
       </aside>
 
-      {/* ─── MAIN WORKSPACE PANEL ─── */}
       <div className="flex-1 pl-64 flex flex-col min-w-0">
         <header className="bg-white border-b border-slate-200 px-8 py-4 sticky top-0 z-20 flex items-center justify-between shadow-sm">
           <div className="flex items-center gap-2">
@@ -715,76 +710,122 @@ export default function EMSDashboard() {
           </div>
           <div className="relative w-64">
             <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
-            <Input placeholder="SEARCH RECONCILED INDEX..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 text-xs uppercase font-bold rounded-lg h-9 border-slate-200" />
+            <Input placeholder="SEARCH INDEXED DATA..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 text-xs uppercase font-bold rounded-lg h-9 border-slate-200" />
           </div>
         </header>
 
         <div className="p-8 max-w-7xl w-full mx-auto space-y-6">
-          
-          {/* POSTGRES ACTION RESPONSE ALERTS */}
           {bavStatus && (
             <div className={`p-4 rounded-xl border text-xs font-bold flex items-start gap-2.5 ${
               bavStatus.type === "success" ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "bg-red-50 border-red-200 text-red-800"
             }`}>
-              <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" />
-              <span>{bavStatus.message}</span>
+              <CheckCircle2 className="w-4 h-4 mt-0.5 text-emerald-600 shrink-0" />
+              <div>{bavStatus.message}</div>
             </div>
           )}
 
-          {/* RUNTIME METRICS ROSTER COUNTERS */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card className="bg-white p-5 border border-slate-200/80 shadow-sm flex items-center justify-between">
-              <div><p className="text-[10px] text-slate-400 font-black uppercase tracking-wider">ROSTER POOL SIZE</p><p className="text-2xl font-black mt-1 text-slate-900">{metricsRollup.totalCount}</p></div>
-              <div className="p-2 bg-slate-50 border border-slate-100 rounded-lg"><Users className="w-4 h-4 text-slate-500" /></div>
-            </Card>
-            <Card className="bg-white p-5 border border-slate-200/80 shadow-sm flex items-center justify-between">
-              <div><p className="text-[10px] text-slate-400 font-black uppercase tracking-wider">COMPLIANT REGULAR</p><p className="text-2xl font-black mt-1 text-emerald-600">{metricsRollup.globalRegularHours} h</p></div>
-              <div className="p-2 bg-emerald-50 rounded-lg"><UserCheck className="w-4 h-4 text-emerald-600" /></div>
-            </Card>
-            <Card className="bg-white p-5 border border-slate-200/80 shadow-sm flex items-center justify-between border-l-4 border-l-blue-600">
-              <div><p className="text-[10px] text-slate-400 font-black uppercase tracking-wider">OVERTIME ALLOCATED</p><p className="text-2xl font-black mt-1 text-blue-600">+{metricsRollup.globalOvertimeHours} h</p></div>
-              <div className="p-2 bg-blue-50 rounded-lg"><Clock className="w-4 h-4 text-blue-600" /></div>
-            </Card>
-            <Card className="bg-white p-5 border border-slate-200/80 shadow-sm flex items-center justify-between border-l-4 border-l-red-500">
-              <div><p className="text-[10px] text-slate-400 font-black uppercase tracking-wider">PUNCH ANOMALIES</p><p className="text-2xl font-black mt-1 text-red-600">{metricsRollup.anomalyCount}</p></div>
-              <div className="p-2 bg-red-50 rounded-lg"><AlertTriangle className="w-4 h-4 text-red-600" /></div>
-            </Card>
-          </div>
+          {activeTab === "OVERVIEW" && !selectedEmployeeCode && (
+            <div className="space-y-6 animate-in fade-in duration-200">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+                <Card className="bg-white border border-slate-200 shadow-sm rounded-xl">
+                  <CardHeader className="pb-2">
+                    <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-blue-600" /> SYSTEM BASE RUNTIME</CardDescription>
+                    <CardTitle className="text-2xl font-black tracking-tight text-slate-900">{metricsRollup.globalRegularHours} <span className="text-xs font-bold text-slate-400">HRS</span></CardTitle>
+                  </CardHeader>
+                </Card>
+                <Card className="bg-white border border-slate-200 shadow-sm rounded-xl">
+                  <CardHeader className="pb-2">
+                    <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Activity className="w-3.5 h-3.5 text-amber-500" /> OVERTIME RUNTIME</CardDescription>
+                    <CardTitle className="text-2xl font-black tracking-tight text-slate-900">+{metricsRollup.globalOvertimeHours} <span className="text-xs font-bold text-slate-400">HRS</span></CardTitle>
+                  </CardHeader>
+                </Card>
+                <Card className="bg-white border border-slate-200 shadow-sm rounded-xl">
+                  <CardHeader className="pb-2">
+                    <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Users className="w-3.5 h-3.5 text-emerald-600" /> OPERATIONAL STAFF</CardDescription>
+                    <CardTitle className="text-2xl font-black tracking-tight text-slate-900">{metricsRollup.totalCount} <span className="text-xs font-bold text-slate-400">PROFILES</span></CardTitle>
+                  </CardHeader>
+                </Card>
+                <Card className="bg-white border border-slate-200 shadow-sm rounded-xl">
+                  <CardHeader className="pb-2">
+                    <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5 text-red-600" /> INVALID ANOMALIES</CardDescription>
+                    <CardTitle className="text-2xl font-black tracking-tight text-slate-900">{metricsRollup.anomalyCount} <span className="text-xs font-bold text-slate-400">PUNCHES</span></CardTitle>
+                  </CardHeader>
+                </Card>
+              </div>
 
-          {/* ─── BAV PREVIEW GRID SECTION WORKSPACE ─── */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <Card className="lg:col-span-2 bg-white border border-slate-200 shadow-sm rounded-xl">
+                  <CardHeader>
+                    <CardTitle className="text-xs font-black uppercase tracking-wider text-slate-400">OVERTIME ACQUISITION SPEED MATRIX</CardTitle>
+                  </CardHeader>
+                  <CardContent className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={overviewChartData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                        <XAxis dataKey="name" stroke="#94a3b8" fontSize={10} fontWeight="bold" />
+                        <YAxis stroke="#94a3b8" fontSize={10} fontWeight="bold" />
+                        <Tooltip />
+                        <Legend wrapperStyle={{ fontSize: 10, fontWeight: "bold" }} />
+                        <Line type="monotone" dataKey="Overtime Hours" stroke="#2563eb" strokeWidth={3} activeDot={{ r: 6 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-white border border-slate-200 shadow-sm rounded-xl">
+                  <CardHeader>
+                    <CardTitle className="text-xs font-black uppercase tracking-wider text-slate-400">DEPARTMENT RUNTIME DISTRO</CardTitle>
+                  </CardHeader>
+                  <CardContent className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={departmentAggregatedMetrics}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                        <XAxis dataKey="name" stroke="#94a3b8" fontSize={9} fontWeight="bold" tickFormatter={(v) => v.substring(0,6) + ".."} />
+                        <YAxis stroke="#94a3b8" fontSize={10} fontWeight="bold" />
+                        <Tooltip />
+                        <Bar dataKey="regHours" name="Regular Hours" fill="#10b981" stackId="a" />
+                        <Bar dataKey="otHours" name="Overtime Hours" fill="#f59e0b" stackId="a" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          )}
+
           {activeTab === "BAV_PREVIEW" && (
-            <Card className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm animate-in slide-in-from-bottom-2 duration-200">
-              <CardHeader className="bg-slate-50 border-b p-4 flex flex-row items-center justify-between">
+            <Card className="bg-white border border-slate-200 shadow-sm rounded-xl animate-in fade-in duration-200">
+              <CardHeader className="border-b border-slate-100 flex flex-row items-center justify-between">
                 <div>
-                  <CardTitle className="text-xs font-black text-slate-600 tracking-wider uppercase">Excel Staging Queue Preview (BAV Grid)</CardTitle>
-                  <CardDescription className="text-[11px] text-slate-500 font-medium">Verify spreadsheet layout matches your target TypeORM Postgres entity definition maps before sync validation.</CardDescription>
+                  <CardTitle className="text-sm font-black uppercase tracking-wider text-slate-800">Excel Ingestion Staging Verification Portal</CardTitle>
+                  <CardDescription className="text-xs font-bold text-slate-400">Review objects before initializing transaction sequence updates.</CardDescription>
                 </div>
                 <div className="flex gap-2">
-                  <Button onClick={() => { setBavStagedRecords([]); setActiveTab("OVERVIEW"); }} variant="ghost" className="h-8 text-xs font-bold text-slate-500 hover:bg-slate-100">Cancel</Button>
-                  <Button onClick={saveBavRecordsToPostgres} disabled={isBavSaving} className="h-8 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase px-4">Commit Staged Records</Button>
+                  <Button onClick={() => { setBavStagedRecords([]); setActiveTab("OVERVIEW"); }} variant="outline" className="h-9 font-bold text-xs uppercase tracking-wide px-4 border-slate-200">ABORT UPDATE</Button>
+                  <Button onClick={saveBavRecordsToPostgres} disabled={isBavSaving} className="h-9 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wide px-5">
+                    {isBavSaving ? "COMMITTING TRANSACTIONS..." : `COMMIT ${bavStagedRecords.length} RECORD BLOCKS`}
+                  </Button>
                 </div>
               </CardHeader>
-              <CardContent className="p-0 max-h-[360px] overflow-y-auto font-mono text-xs">
+              <CardContent className="p-0">
                 <Table>
-                  <TableHeader className="bg-slate-100 sticky top-0 border-b z-10">
+                  <TableHeader className="bg-slate-50/70">
                     <TableRow>
-                      <TableHead className="text-[10px] font-black h-9 text-slate-500">Index</TableHead>
-                      <TableHead className="text-[10px] font-black h-9 text-slate-500">Staff Code</TableHead>
-                      <TableHead className="text-[10px] font-black h-9 text-slate-500">Full Name</TableHead>
-                      <TableHead className="text-[10px] font-black h-9 text-slate-500">Designation Role</TableHead>
-                      <TableHead className="text-[10px] font-black h-9 text-slate-500">Department</TableHead>
-                      <TableHead className="text-[10px] font-black h-9 text-slate-500">Cost Center</TableHead>
+                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-6">STAFF CODE</TableHead>
+                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest">FULL NAME IDENTIFICATION</TableHead>
+                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest">DESIGNATION ROLE</TableHead>
+                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest">DEPARTMENT STRATUM</TableHead>
+                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest pr-6">COST CENTRE ID</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {bavStagedRecords.map((emp, index) => (
-                      <TableRow key={index} className="border-b hover:bg-slate-50/80 h-8">
-                        <TableCell className="text-slate-400 py-1 font-bold">{index + 1}</TableCell>
-                        <TableCell className="text-blue-600 font-black py-1">{emp.staffCode}</TableCell>
-                        <TableCell className="text-slate-900 font-bold py-1 uppercase">{emp.fullName}</TableCell>
-                        <TableCell className="text-slate-600 py-1 font-semibold">{emp.designation}</TableCell>
-                        <TableCell className="text-slate-500 py-1">{emp.department}</TableCell>
-                        <TableCell className="text-slate-400 py-1 font-bold">{emp.costCenter}</TableCell>
+                    {bavStagedRecords.slice(0, 50).map((emp, i) => (
+                      <TableRow key={i} className="hover:bg-slate-50/50 transition-all">
+                        <TableCell className="font-mono text-xs font-black text-blue-600 pl-6">{emp.staffCode}</TableCell>
+                        <TableCell className="text-xs font-bold uppercase text-slate-800">{emp.fullName}</TableCell>
+                        <TableCell className="text-xs font-medium text-slate-500">{emp.designation}</TableCell>
+                        <TableCell className="text-xs font-medium text-slate-500">{emp.department}</TableCell>
+                        <TableCell className="font-mono text-xs font-bold text-slate-600 pr-6">{emp.costCenter}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -793,151 +834,62 @@ export default function EMSDashboard() {
             </Card>
           )}
 
-          {/* ─── DEPARTMENTS WORKSPACE ─── */}
           {activeTab === "DEPARTMENTS" && (
-            <div className="space-y-6">
-              <Card className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
-                <h3 className="text-xs font-black text-slate-400 tracking-wider uppercase mb-4">DEPARTMENTAL PREMIUM OVERTIME SPEND DISTRIBUTION</h3>
-                <div className="h-[240px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={departmentAggregatedMetrics}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                      <XAxis dataKey="name" stroke="#64748b" fontSize={11} fontWeight="800" />
-                      <YAxis stroke="#64748b" fontSize={11} fontWeight="800" />
-                      <Tooltip />
-                      <Legend />
-                      <Bar dataKey="regHours" name="Regular Hours Worked" fill="#10b981" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="otHours" name="Premium Overtime Allocation" fill="#2563eb" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </Card>
-
-              <Card className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                <CardContent className="p-0">
-                  <Table>
-                    <TableHeader className="bg-slate-50 border-b">
-                      <TableRow>
-                        <TableHead className="px-6 text-xs font-black text-slate-500">OPERATIONAL CLUSTER DEPARTMENT</TableHead>
-                        <TableHead className="text-center text-xs font-black text-slate-500">ACTIVE STAFF CAPACITY</TableHead>
-                        <TableHead className="text-center text-xs font-black text-slate-500">CUMULATIVE REGULAR HOURS</TableHead>
-                        <TableHead className="text-right px-6 text-xs font-black text-slate-500">TOTAL PREMIUM OVERTIME HOURS</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {departmentAggregatedMetrics.map((dept, idx) => (
-                        <TableRow key={idx} className="border-b hover:bg-slate-50/60 transition-colors">
-                          <TableCell className="px-6 font-black text-xs uppercase text-slate-900">{dept.name}</TableCell>
-                          <TableCell className="text-center font-mono text-xs font-bold text-slate-600">{dept.staffCount} Workers</TableCell>
-                          <TableCell className="text-center font-mono text-xs font-bold text-emerald-600">{dept.regHours} hrs</TableCell>
-                          <TableCell className="text-right px-6 font-mono font-black text-xs text-blue-600">+{dept.otHours} hrs OT</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
-          {/* ─── CHRONO TREND TRAJECTORY WORKSPACE ─── */}
-          {activeTab === "OVERVIEW" && (
-            <Card className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-              <CardHeader className="bg-slate-50/50 border-b p-4">
-                <CardTitle className="text-xs font-black text-slate-500 tracking-wider uppercase">DYNAMIC CHRONOLOGICAL ACCUMULATED OVERTIME TRAJECTORY TRACKER</CardTitle>
+            <Card className="bg-white border border-slate-200 shadow-sm rounded-xl animate-in fade-in duration-200">
+              <CardHeader>
+                <CardTitle className="text-sm font-black uppercase tracking-wider text-slate-800">Operational Units Matrix Overview</CardTitle>
               </CardHeader>
-              <CardContent className="p-6 h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={overviewChartData} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                    <XAxis dataKey="name" stroke="#64748b" fontSize={11} fontWeight="800" />
-                    <YAxis stroke="#64748b" fontSize={11} fontWeight="800" />
-                    <Tooltip contentStyle={{ fontSize: '12px', fontWeight: 'bold', borderRadius: '8px' }} />
-                    <Legend wrapperStyle={{ fontSize: '11px', fontWeight: 'bold' }} />
-                    <Line type="monotone" dataKey="Overtime Hours" stroke="#2563eb" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 7 }} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* ─── EMPLOYEES INDEX DIRECTORY REPOSITORY ─── */}
-          {activeTab === "EMPLOYEES" && !selectedEmployeeCode && (
-            <Card className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
               <CardContent className="p-0">
                 <Table>
-                  <TableHeader className="bg-slate-50/80 border-b">
+                  <TableHeader className="bg-slate-50/70">
                     <TableRow>
-                      <TableHead className="px-6 text-xs font-black text-slate-500">STAFF IDENTIFIER</TableHead>
-                      <TableHead className="text-xs font-black text-slate-500">FULL RETAINED NAME</TableHead>
-                      <TableHead className="text-xs font-black text-slate-500">DESIGNATION WORKER ROLE</TableHead>
-                      <TableHead className="text-xs font-black text-slate-500">OPERATIONAL CLUSTER</TableHead>
-                      <TableHead className="text-xs font-black text-slate-500">COST CENTER</TableHead>
-                      <TableHead className="text-right px-6 text-xs font-black text-slate-500">ACTIONS</TableHead>
+                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-6">DEPARTMENT CLUSTER</TableHead>
+                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">HEADCOUNT</TableHead>
+                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">REGULAR BASE TIME</TableHead>
+                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-right pr-6">OVERTIME VOLUMES</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredEmployeeDirectory.map(emp => {
-                      const fullyProcessedEmp = systemProcessedDataset.find(e => e.staffCode === emp.staffCode);
-                      return (
-                        <TableRow key={emp.staffCode} className="border-b hover:bg-slate-50 cursor-pointer group">
-                          <TableCell onClick={() => setSelectedEmployeeCode(emp.staffCode)} className="px-6 font-mono text-xs font-bold text-slate-500 group-hover:text-blue-600 transition-colors">{emp.staffCode}</TableCell>
-                          <TableCell onClick={() => setSelectedEmployeeCode(emp.staffCode)} className="font-black text-sm uppercase text-slate-900">{emp.fullName}</TableCell>
-                          <TableCell onClick={() => setSelectedEmployeeCode(emp.staffCode)} className="text-xs text-slate-600 font-semibold uppercase">{emp.designation}</TableCell>
-                          <TableCell onClick={() => setSelectedEmployeeCode(emp.staffCode)} className="text-xs text-slate-500 font-bold uppercase">
-                            <Badge variant="outline" className="rounded bg-slate-50 text-slate-700 font-bold border-slate-200">{emp.department}</Badge>
-                          </TableCell>
-                          <TableCell onClick={() => setSelectedEmployeeCode(emp.staffCode)} className="font-mono text-xs font-semibold text-slate-600">{emp.costCenter}</TableCell>
-                          <TableCell className="text-right px-6">
-                            <Button 
-                              onClick={(e) => { 
-                                e.stopPropagation(); 
-                                if (fullyProcessedEmp) exportTargetEmployeePDF(fullyProcessedEmp); 
-                              }} 
-                              size="sm" 
-                              variant="outline"
-                              className="h-7 text-[10px] font-bold gap-1 border-blue-200 text-blue-600 hover:bg-blue-50"
-                            >
-                              <Download className="w-3 h-3" /> PDF
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
+                    {departmentAggregatedMetrics.map((dept, idx) => (
+                      <TableRow key={idx}>
+                        <TableCell className="text-xs font-black text-slate-800 pl-6 uppercase">{dept.name}</TableCell>
+                        <TableCell className="text-xs font-bold text-center text-slate-600">{dept.staffCount} Staff</TableCell>
+                        <TableCell className="text-xs font-bold text-right font-mono text-emerald-600">{dept.regHours} hrs</TableCell>
+                        <TableCell className="text-xs font-bold text-right font-mono text-amber-500 pr-6">+{dept.otHours} hrs</TableCell>
+                      </TableRow>
+                    ))}
                   </TableBody>
                 </Table>
               </CardContent>
             </Card>
           )}
 
-          {/* ─── ROSTER MODAL ALLOCATION REGISTRY ─── */}
-          {activeTab === "ROSTER" && !selectedEmployeeCode && (
-            <Card className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+          {activeTab === "EMPLOYEES" && (
+            <Card className="bg-white border border-slate-200 shadow-sm rounded-xl animate-in fade-in duration-200">
+              <CardHeader>
+                <CardTitle className="text-sm font-black uppercase tracking-wider text-slate-800">Workforce Asset Master Index ({filteredEmployeeDirectory.length})</CardTitle>
+              </CardHeader>
               <CardContent className="p-0">
                 <Table>
-                  <TableHeader className="bg-slate-50/80 border-b">
+                  <TableHeader className="bg-slate-50/70">
                     <TableRow>
-                      <TableHead className="px-6 text-xs font-black text-slate-500">STAFF ID</TableHead>
-                      <TableHead className="text-xs font-black text-slate-500">FULL OPERATIONAL NAME</TableHead>
-                      <TableHead className="text-xs font-black text-slate-500 text-center">SHIFTS</TableHead>
-                      <TableHead className="text-xs font-black text-slate-500 text-center">COMPLIANT REGULAR</TableHead>
-                      <TableHead className="text-xs font-black text-slate-500 text-center">GROSS ACCRUED</TableHead>
-                      <TableHead className="text-center text-xs font-black text-slate-500">ISOLATED OVERTIME</TableHead>
-                      <TableHead className="text-right px-6 text-xs font-black text-slate-500">ACTIONS</TableHead>
+                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-6">STAFF CODE</TableHead>
+                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest">FULL NAME IDENTIFICATION</TableHead>
+                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest">DESIGNATION</TableHead>
+                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest">DEPARTMENT</TableHead>
+                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-right pr-6">INTERACTION MATRIX</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredViewDataset.map(row => (
-                      <TableRow key={row.staffCode} className="border-b hover:bg-slate-50 cursor-pointer group">
-                        <TableCell onClick={() => setSelectedEmployeeCode(row.staffCode)} className="px-6 font-mono text-xs font-bold group-hover:text-blue-600">{row.staffCode}</TableCell>
-                        <TableCell onClick={() => setSelectedEmployeeCode(row.staffCode)} className="font-black text-sm uppercase text-slate-900">{row.fullName}</TableCell>
-                        <TableCell onClick={() => setSelectedEmployeeCode(row.staffCode)} className="text-center text-xs font-bold text-slate-600">{row.metrics.presentDaysCount}</TableCell>
-                        <TableCell onClick={() => setSelectedEmployeeCode(row.staffCode)} className="text-center font-black text-xs text-emerald-700 bg-emerald-50/10">{row.metrics.totalRegularHours} hrs</TableCell>
-                        <TableCell onClick={() => setSelectedEmployeeCode(row.staffCode)} className="text-center font-bold text-xs text-slate-900">{row.metrics.totalHoursSum} hrs</TableCell>
-                        <TableCell onClick={() => setSelectedEmployeeCode(row.staffCode)} className="text-center"><Badge className="bg-blue-50 text-blue-700 border border-blue-200 font-mono font-black rounded px-2 py-0.5">+{row.metrics.totalOvertimeHours} hr OT</Badge></TableCell>
-                        <TableCell className="text-right px-6">
-                          <Button onClick={(e) => { e.stopPropagation(); exportTargetEmployeePDF(row); }} size="sm" className="h-7 text-[10px] bg-blue-600 hover:bg-blue-700 text-white font-bold gap-1">
-                            <Download className="w-3 h-3" /> PDF
+                    {filteredEmployeeDirectory.map((emp) => (
+                      <TableRow key={emp.staffCode} className="hover:bg-slate-50/40 transition-all">
+                        <TableCell className="font-mono text-xs font-black text-slate-900 pl-6">{emp.staffCode}</TableCell>
+                        <TableCell className="text-xs font-black text-slate-800 uppercase">{emp.fullName}</TableCell>
+                        <TableCell className="text-xs font-medium text-slate-500">{emp.designation}</TableCell>
+                        <TableCell className="text-xs font-semibold text-slate-500 uppercase">{emp.department}</TableCell>
+                        <TableCell className="text-right pr-6">
+                          <Button onClick={() => { setSelectedEmployeeCode(emp.staffCode); setActiveTab("ROSTER"); }} size="sm" variant="outline" className="h-7 text-[10px] font-black uppercase tracking-wide border-slate-200 hover:bg-slate-50 hover:text-blue-600 transition-all">
+                            CALCULATE WORK BALANCE
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -948,38 +900,144 @@ export default function EMSDashboard() {
             </Card>
           )}
 
-          {/* ─── DEFICIT CONTROL SYSTEM EXCEPTIONS ─── */}
+          {activeTab === "ROSTER" && (
+            <div className="space-y-6 animate-in fade-in duration-200">
+              {!selectedEmployeeCode ? (
+                <Card className="bg-white border border-slate-200 shadow-sm rounded-xl">
+                  <CardHeader>
+                    <CardTitle className="text-sm font-black uppercase tracking-wider text-slate-800">Consolidated Overtime Ledger Reconciler</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <Table>
+                      <TableHeader className="bg-slate-50/70">
+                        <TableRow>
+                          <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-6">ID</TableHead>
+                          <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest">EMPLOYEE IDENTIFICATION</TableHead>
+                          <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest">DEPARTMENT STRATUM</TableHead>
+                          <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">ATTENDANCE COUNT</TableHead>
+                          <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">COMPLIANT TOTAL</TableHead>
+                          <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">PREMIUM OVERTIME</TableHead>
+                          <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-right pr-6">CALENDAR ENGINE</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredViewDataset.map((row) => (
+                          <TableRow key={row.staffCode} className="hover:bg-slate-50/40 transition-all">
+                            <TableCell className="font-mono text-xs font-black text-slate-900 pl-6">{row.staffCode}</TableCell>
+                            <TableCell className="text-xs font-black text-slate-800 uppercase">{row.fullName}</TableCell>
+                            <TableCell className="text-xs font-bold text-slate-400 uppercase">{row.department}</TableCell>
+                            <TableCell className="text-xs font-semibold text-center text-slate-600">{row.metrics.presentDaysCount} Active Days</TableCell>
+                            <TableCell className="text-xs font-bold text-right font-mono text-emerald-600">{row.metrics.totalRegularHours} hrs</TableCell>
+                            <TableCell className="text-xs font-black text-right font-mono text-blue-600">+{row.metrics.totalOvertimeHours} hrs</TableCell>
+                            <TableCell className="text-right pr-6 flex justify-end gap-2">
+                              <Button onClick={() => exportTargetEmployeePDF(row)} size="sm" variant="ghost" className="h-7 w-7 p-0 text-slate-400 hover:text-slate-900 rounded-md">
+                                <Download className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button onClick={() => setSelectedEmployeeCode(row.staffCode)} size="sm" variant="outline" className="h-7 text-[10px] font-black uppercase tracking-wide border-slate-200">
+                                MATRIX VIEW
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              ) : (
+                (() => {
+                  const punch = systemProcessedDataset.find(e => e.staffCode === selectedEmployeeCode);
+                  if (!punch) return null;
+                  return (
+                    <Card className="bg-white border border-slate-200 shadow-sm rounded-xl animate-in fade-in duration-200">
+                      <CardHeader className="border-b border-slate-100 flex flex-row items-center justify-between">
+                        <div>
+                          <Button onClick={() => setSelectedEmployeeCode(null)} variant="link" className="text-xs font-bold text-blue-600 p-0 h-auto uppercase tracking-wider mb-1 block">← RETURN TO MAIN CONSOLIDATED SHEET</Button>
+                          <CardTitle className="text-sm font-black uppercase tracking-wider text-slate-800">{punch.fullName} — Biometric Log Audit</CardTitle>
+                          <CardDescription className="text-xs font-bold text-slate-400">Chronological list of all biometric punches matching identity tracking configuration index {punch.staffCode}.</CardDescription>
+                        </div>
+                        <Button onClick={() => exportTargetEmployeePDF(punch)} className="bg-slate-900 hover:bg-slate-800 text-white font-black text-xs uppercase tracking-wide h-9 px-4 gap-2">
+                          <Download className="w-4 h-4" /> GENERATE ACCOUNTING MATRIX PDF
+                        </Button>
+                      </CardHeader>
+                      <CardContent className="p-0">
+                        <Table>
+                          <TableHeader className="bg-slate-50/70">
+                            <TableRow>
+                              <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-6">CALENDAR DATE</TableHead>
+                              <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest">WEEKDAY</TableHead>
+                              <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest">BIOMETRIC IN</TableHead>
+                              <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest">BIOMETRIC OUT</TableHead>
+                              <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">BASE TIME HOURS</TableHead>
+                              <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">OVERTIME ACCRUED</TableHead>
+                              <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-right pr-6">PUNCH STATUS</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {punch.records.map((punch, idx) => (
+                              <TableRow key={idx}>
+                                <TableCell className="font-mono text-xs font-bold text-slate-900 pl-6">{punch.date}</TableCell>
+                                <TableCell className="text-xs font-bold text-slate-400 uppercase">{punch.weekDay}</TableCell>
+                                <TableCell className="font-mono text-xs font-bold text-slate-700">{punch.clockIn}</TableCell>
+                                <TableCell className="font-mono text-xs font-bold text-slate-700">{punch.clockOut}</TableCell>
+                                <TableCell className="text-xs font-bold text-right font-mono text-slate-600">{punch.hoursWorked} hrs</TableCell>
+                                <TableCell className="text-xs font-black text-right font-mono text-blue-600">+{punch.overtimeHours} hrs</TableCell>
+                                <TableCell className="text-right pr-6">
+                                  <Badge className={`text-[9px] font-black uppercase tracking-wider rounded border shadow-none px-2 py-0.5 ${
+                                    punch.status === "PRESENT" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
+                                    punch.status === "LATE" ? "bg-amber-500 text-white" :
+                                    punch.status === "ABSENT (INVALID PUNCHES)" ? "bg-red-600 text-white" : "bg-slate-100 text-slate-400"
+                                  }`}>{punch.status}</Badge>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </CardContent>
+                    </Card>
+                  );
+                })()
+              )}
+            </div>
+          )}
+
           {activeTab === "DEFICITS" && (
-            <Card className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-              <CardHeader className="border-b bg-slate-50/60 px-6 py-4 flex flex-row items-center justify-between">
-                <span className="text-xs font-black text-slate-500 tracking-wider uppercase">HOURLY EXCEPTION DEFICIT CONTROL MATRIX</span>
+            <Card className="bg-white border border-slate-200 shadow-sm rounded-xl animate-in fade-in duration-200">
+              <CardHeader className="border-b border-slate-100 flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-sm font-black uppercase tracking-wider text-slate-800">Operational Exceptions & Run Deficits</CardTitle>
+                  <CardDescription className="text-xs font-bold text-slate-400">Listing records with total gross runtime summation values falling below threshold parameters.</CardDescription>
+                </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-xs font-bold text-slate-500 uppercase">Threshold:</span>
-                  <Input type="number" value={lowAttendanceThreshold} onChange={(e) => setLowAttendanceThreshold(Number(e.target.value))} className="w-16 h-8 text-xs font-black font-mono text-center" />
-                  <Button onClick={exportLowAttendanceReportPDF} size="sm" className="bg-red-600 hover:bg-red-700 text-white font-black text-xs gap-1.5 shadow-sm">
-                    <Download className="w-3.5 h-3.5" /> DOWNLOAD REPORT
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">THRESHOLD LIMIT:</span>
+                    <Input type="number" value={lowAttendanceThreshold} onChange={(e) => setLowAttendanceThreshold(Number(e.target.value))} className="w-16 h-8 text-xs font-black font-mono text-center rounded border-slate-200" />
+                  </div>
+                  <Button onClick={exportLowAttendanceReportPDF} className="bg-red-600 hover:bg-red-700 text-white font-black text-xs uppercase tracking-wide h-8 px-3 gap-1.5 shadow-sm rounded-lg">
+                    <Download className="w-3.5 h-3.5" /> EXPORT REPORT
                   </Button>
                 </div>
               </CardHeader>
               <CardContent className="p-0">
                 <Table>
-                  <TableHeader className="bg-red-50/40 border-b">
+                  <TableHeader className="bg-slate-50/70">
                     <TableRow>
-                      <TableHead className="px-6 text-xs font-black text-slate-500">STAFF CODE</TableHead>
-                      <TableHead className="text-xs font-black text-slate-500">FULL IDENTITY NAME</TableHead>
-                      <TableHead className="text-xs font-black text-slate-500">DEPARTMENT CLUSTER</TableHead>
-                      <TableHead className="text-xs font-black text-slate-500 text-center">SHIFTS ACTIVATED</TableHead>
-                      <TableHead className="text-right px-6 text-xs font-black text-slate-500">TOTAL COMBINED RUNTIME</TableHead>
+                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-6">STAFF CODE</TableHead>
+                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest">EMPLOYEE IDENTIFICATION</TableHead>
+                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest">DEPARTMENT CLUSTER</TableHead>
+                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">TOTAL ACCRUED WORKTIME</TableHead>
+                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-right pr-6">SYSTEM FLAG</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {lowAttendanceStaffList.map(row => (
-                      <TableRow key={row.staffCode} className="border-b hover:bg-red-50/10">
-                        <TableCell className="px-6 font-mono text-xs text-red-700 font-bold">{row.staffCode}</TableCell>
-                        <TableCell className="font-black text-sm uppercase text-slate-900">{row.fullName}</TableCell>
-                        <TableCell className="text-xs text-slate-500 font-medium uppercase">{row.department}</TableCell>
-                        <TableCell className="text-center text-xs font-bold text-slate-600">{row.metrics.presentDaysCount}</TableCell>
-                        <TableCell className="text-right px-6 font-mono font-black text-sm text-red-600">{row.metrics.totalHoursSum} / {lowAttendanceThreshold} hrs</TableCell>
+                    {lowAttendanceStaffList.map((emp) => (
+                      <TableRow key={emp.staffCode} className="hover:bg-red-50/20 transition-all">
+                        <TableCell className="font-mono text-xs font-black text-red-600 pl-6">{emp.staffCode}</TableCell>
+                        <TableCell className="text-xs font-black text-slate-800 uppercase">{emp.fullName}</TableCell>
+                        <TableCell className="text-xs font-bold text-slate-400 uppercase">{emp.department}</TableCell>
+                        <TableCell className="text-xs font-black text-right font-mono text-slate-900">{emp.metrics.totalHoursSum} hrs / {lowAttendanceThreshold} hrs</TableCell>
+                        <TableCell className="text-right pr-6">
+                          <Badge className="bg-red-50 border border-red-200 text-red-700 text-[9px] font-black uppercase tracking-wider rounded px-2 py-0.5">UNDER THRESHOLD RUNTIME</Badge>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -987,112 +1045,10 @@ export default function EMSDashboard() {
               </CardContent>
             </Card>
           )}
+        </div>
 
-          {/* ─── VIEW 5: SELECTED DRILLDOWN CHRONO TRANSACTION ENTRIES ─── */}
-          {selectedEmployeeCode && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Button onClick={() => setSelectedEmployeeCode(null)} variant="outline" size="sm" className="text-xs font-bold bg-white text-slate-700 border-slate-200 shadow-sm">
-                  ← UNMOUNT PROFILE DRILLDOWN
-                </Button>
-                {(() => {
-                  const emp = systemProcessedDataset.find(e => e.staffCode === selectedEmployeeCode);
-                  return emp ? (
-                    <Button onClick={() => exportTargetEmployeePDF(emp)} size="sm" className="bg-blue-600 hover:bg-blue-700 text-white font-black text-xs gap-1.5 shadow-md">
-                      <Download className="w-3.5 h-3.5" /> DOWNLOAD CALENDAR PDF REPORT
-                    </Button>
-                  ) : null;
-                })()}
-              </div>
-
-              {(() => {
-                const emp = systemProcessedDataset.find(e => e.staffCode === selectedEmployeeCode);
-                if (!emp) return null;
-
-                const workerGraphData = [...emp.records]
-                  .filter(r => r.status !== "NO RECORD")
-                  .reverse()
-                  .map(r => ({
-                    day: r.date.substring(5),
-                    "Regular": r.hoursWorked,
-                    "Overtime": r.overtimeHours
-                  }));
-
-                return (
-                  <Card className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                    <div className="bg-slate-900 p-6 text-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                      <div>
-                        <span className="text-blue-400 text-[10px] font-black tracking-widest block uppercase">{emp.department} // CC {emp.costCenter}</span>
-                        <h2 className="text-2xl font-black uppercase mt-0.5 tracking-tight text-slate-50">{emp.fullName}</h2>
-                        <span className="text-slate-400 text-xs font-semibold uppercase block tracking-wider mt-0.5">{emp.designation}</span>
-                      </div>
-                      <div className="flex gap-4 font-mono text-center">
-                        <div className="bg-slate-950 p-2 rounded-lg border border-slate-800 min-w-[70px]"><p className="text-[9px] text-slate-400 font-black uppercase">REGULAR</p><p className="text-emerald-400 font-black text-lg mt-0.5">{emp.metrics.totalRegularHours}</p></div>
-                        <div className="bg-slate-950 p-2 rounded-lg border border-slate-800 min-w-[70px]"><p className="text-[9px] text-slate-400 font-black uppercase">OVERTIME</p><p className="text-blue-400 font-black text-lg mt-0.5">+{emp.metrics.totalOvertimeHours}</p></div>
-                        <div className="bg-slate-950 p-2 rounded-lg border border-slate-800 min-w-[70px]"><p className="text-[9px] text-slate-400 font-black uppercase">GROSS</p><p className="text-slate-100 font-black text-lg mt-0.5">{emp.metrics.totalHoursSum}</p></div>
-                      </div>
-                    </div>
-
-                    <div className="p-4 bg-slate-50/50 border-b border-slate-200 h-[200px]">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={workerGraphData} margin={{ top: 10, right: 20, left: -20, bottom: 0 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                          <XAxis dataKey="day" stroke="#64748b" fontSize={10} fontWeight="bold" />
-                          <YAxis stroke="#64748b" fontSize={10} fontWeight="bold" />
-                          <Tooltip />
-                          <Line type="monotone" dataKey="Regular" stroke="#10b981" strokeWidth={3} dot={{ r: 2 }} />
-                          <Line type="monotone" dataKey="Overtime" stroke="#2563eb" strokeWidth={3} dot={{ r: 2 }} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-
-                    <CardHeader className="bg-white border-b px-6 py-4">
-                      <CardTitle className="text-xs font-black text-slate-500 tracking-wider uppercase">HISTORICAL CHRONOLOGICAL TRANSACTION ENTRIES</CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                      <Table>
-                        <TableHeader className="bg-slate-50">
-                          <TableRow>
-                            <TableHead className="px-6 text-xs font-bold text-slate-500">SHIFT CALENDAR DATE</TableHead>
-                            <TableHead className="text-xs font-bold text-slate-500">CLOCK IN</TableHead>
-                            <TableHead className="text-xs font-bold text-slate-500">CLOCK OUT</TableHead>
-                            <TableHead className="text-center text-xs font-bold text-slate-500">TOTAL SHIFT TIME</TableHead>
-                            <TableHead className="text-center text-xs font-bold text-slate-500 text-blue-600">OVERTIME SEGMENT</TableHead>
-                            <TableHead className="text-right px-6 text-xs font-bold text-slate-500">RECONCILED STATUS</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {emp.records.map((punch, idx) => (
-                            <TableRow key={idx} className="border-b hover:bg-slate-50/50 transition-colors">
-                              <TableCell className="font-mono text-xs font-bold text-slate-600 px-6">{punch.date} ({punch.weekDay.slice(0,3)})</TableCell>
-                              <TableCell className="text-slate-900 font-mono text-xs font-black">{punch.clockIn}</TableCell>
-                              <TableCell className="text-slate-900 font-mono text-xs font-black">{punch.clockOut}</TableCell>
-                              <TableCell className="text-center font-bold text-xs text-slate-900">{punch.totalShiftHours} hrs</TableCell>
-                              <TableCell className="text-center bg-blue-50/10">
-                                {punch.overtimeHours > 0 ? (
-                                  <Badge className="bg-blue-600 text-white font-mono font-black text-[11px] rounded border border-blue-700 px-2">+{punch.overtimeHours} hr OT</Badge>
-                                ) : <span className="text-slate-400 font-mono text-xs">—</span>}
-                              </TableCell>
-                              <TableCell className="text-right px-6">
-                                <Badge className={`font-black text-[9px] rounded px-2 py-0.5 uppercase tracking-wide ${
-                                  punch.status === "PRESENT" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
-                                  punch.status === "LATE" ? "bg-amber-500 text-white" :
-                                  punch.status === "ABSENT (INVALID PUNCHES)" ? "bg-red-600 text-white" : "bg-slate-100 text-slate-400"
-                                }`}>{punch.status}</Badge>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </CardContent>
-                  </Card>
-                );
-              })()}
-            </div>
-          )}
-
-          {/* SYSTEM TERMINAL LOG CONSOLE FOOTER */}
-          <Card className="bg-white border border-slate-200 shadow-sm">
+        <footer className="mt-auto p-8 max-w-7xl w-full mx-auto pt-0">
+          <Card className="bg-white border border-slate-200 shadow-sm rounded-xl">
             <CardHeader className="pb-1.5 pt-3 px-5">
               <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                 <Terminal className="w-3.5 h-3.5 text-blue-600" /> SYSTEM DIAGNOSTIC RUNTIME FEED
@@ -1106,8 +1062,7 @@ export default function EMSDashboard() {
               </div>
             </CardContent>
           </Card>
-
-        </div>
+        </footer>
       </div>
     </div>
   );

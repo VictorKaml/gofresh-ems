@@ -1,35 +1,55 @@
 datasource db {
   provider = "postgresql"
+  // The `url` property is no longer supported in schema files.
+  // Move connection URLs for Migrate to `prisma.config.ts` and
+  // pass `adapter` (for direct DB) or `accelerateUrl` (for Accelerate)
+  // to the PrismaClient constructor. See:
+  // https://pris.ly/d/config-datasource and https://pris.ly/d/prisma7-client-config
 }
 
 generator client {
   provider = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 model Employee {
-  staffCode      String          @id @map("staff_code")
-  fullName       String          @map("full_name")
-  designation    String
-  departmentName String          @map("department_name")
-  costCentre     String          @map("cost_centre")
-  dateJoined     String?         @map("date_joined")
-  attendanceLogs AttendanceLog[]
+  staffCode   String             @id @map("staff_code")
+  fullName    String             @map("full_name")
+  designation String             @default("Operator")
+  department  String             @default("Operations")
+  costCenter  String             @default("CC-LOCAL") @map("cost_center")
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+  
+  // Relations
+  attendance  AttendanceRecord[]
 
+  @@index([fullName])
   @@map("employees")
 }
 
-model AttendanceLog {
-  id                   String   @id @default(uuid())
-  staffCode            String   @map("staff_code")
-  date                 String   // YYYY-MM-DD
-  weekDay              String   @map("week_day")
-  time                 String   // HH:MM
-  type                 String   // "Check In" or "Check Out"
-  verificationMethod   String   @map("verification_method")
-  attendanceCheckPoint String   @map("attendance_check_point")
-  createdAt            DateTime @default(now()) @map("created_at")
+model AttendanceRecord {
+  id         String   @id @default(uuid())
+  staffCode  String   @map("staff_code")
+  date       String   // e.g., "2026-04-27"
+  weekDay    String   @map("week_day") // e.g., "Monday"
+  time       String   // e.g., "07:14"
+  swipeType  String   @map("swipe_type") // e.g., "Clock In" or "Clock Out"
+  createdAt  DateTime @default(now()) @map("created_at")
 
-  employee             Employee @relation(fields: [staffCode], references: [staffCode], onDelete: Cascade)
+  // Relational Integrity Constraint Mapping
+  employee   Employee @relation(fields: [staffCode], references: [staffCode], onDelete: Cascade)
 
-  @@map("farm_attendance_logs")
+  @@index([staffCode])
+  @@index([date])
+  @@map("attendance_records")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  role      String   @default("operator")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("users")
 }

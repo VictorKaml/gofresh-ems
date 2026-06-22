@@ -4,12 +4,16 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio"
   },
   "dependencies": {
     "@prisma/client": "^7.8.0",
+    "@supabase/ssr": "^0.12.0",
+    "@supabase/supabase-js": "^2.108.2",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.11.1",
     "class-variance-authority": "^0.7.1",
@@ -40,8 +44,11 @@
     "@types/pg": "^8.20.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "autoprefixer": "^10.4.19",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
+    "postcss": "^8.4.38",
+    "prisma": "^5.11.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
