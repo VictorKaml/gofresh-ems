@@ -1,0 +1,35 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Employee {
+  staffCode      String          @id @map("staff_code")
+  fullName       String          @map("full_name")
+  designation    String
+  departmentName String          @map("department_name")
+  costCentre     String          @map("cost_centre")
+  dateJoined     String?         @map("date_joined")
+  attendanceLogs AttendanceLog[]
+
+  @@map("employees")
+}
+
+model AttendanceLog {
+  id                   String   @id @default(uuid())
+  staffCode            String   @map("staff_code")
+  date                 String   // YYYY-MM-DD
+  weekDay              String   @map("week_day")
+  time                 String   // HH:MM
+  type                 String   // "Check In" or "Check Out"
+  verificationMethod   String   @map("verification_method")
+  attendanceCheckPoint String   @map("attendance_check_point")
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  employee             Employee @relation(fields: [staffCode], references: [staffCode], onDelete: Cascade)
+
+  @@map("farm_attendance_logs")
+}

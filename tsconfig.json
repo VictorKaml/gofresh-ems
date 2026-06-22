@@ -1,6 +1,9 @@
 {
   "compilerOptions": {
-    "target": "ES2017",
+    "target": "es2022",                /* Or es2021, es6, etc. */
+    "experimentalDecorators": true,    /* Enables experimental support for legacy decorators */
+    "emitDecoratorMetadata": true,     /* Enables experimental support for emitting type metadata */
+    "strictPropertyInitialization": false, /* Recommended for TypeORM entities (! fields) */
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,
