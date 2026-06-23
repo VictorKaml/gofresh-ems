@@ -165,31 +165,59 @@ export default function EMSDashboard() {
     initializeDashboard();
   }, [router]);
 
-  // Find this inside your page.tsx and change it to look like this:
+  // Inside src/app/dashboard/page.tsx (or your main EMS Dashboard component)
+
   useEffect(() => {
-    async function syncSavedAttendanceData() {
+    async function syncAllSavedAttendanceData() {
       if (!user) return;
       try {
-        addLog(`[API_SYNC] Fetching master log stream from backend...`);
+        addLog(`[API_SYNC] Initializing continuous table assembly sequence...`);
 
-        // Hit the route directly without query parameters
-        const response = await fetch("/api/attendance");
-        if (response.ok) {
-          const data = await response.json();
-          const swipes = Array.isArray(data)
-            ? data
-            : data.swipes || data.attendance_records || [];
-          setRawSwipesBuffer(swipes);
+        let masterBufferArray: RawSwipe[] = [];
+        let currentPage = 0;
+        let keepStreaming = true;
+        const batchChunkSize = 2500; // Matches backend batch sizing config
+
+        while (keepStreaming) {
           addLog(
-            `[SUCCESS] Loaded ${swipes.length} entries into local processing memory.`,
+            `[API_SYNC] Downloading biometric block sequence index: ${currentPage + 1}...`,
           );
+
+          const response = await fetch(
+            `/api/attendance?page=${currentPage}&size=${batchChunkSize}`,
+          );
+          if (!response.ok)
+            throw new Error(
+              `Data pipeline broke at sector chunk ${currentPage}`,
+            );
+
+          const payload = await response.json();
+          const incomingRows = payload.swipes || [];
+
+          // Append current segment chunk to aggregate collection matrix
+          masterBufferArray = [...masterBufferArray, ...incomingRows];
+
+          // Break out of the loop if we hit the final page
+          if (!payload.hasMore || incomingRows.length < batchChunkSize) {
+            keepStreaming = false;
+          } else {
+            currentPage++; // Increments range windows (e.g. 0-2499, then 2500-4999...)
+          }
         }
+
+        // Commit the complete assembled data array directly into state context memory
+        setRawSwipesBuffer(masterBufferArray);
+        addLog(
+          `[SUCCESS] Aggregation complete! Stored all ${masterBufferArray.length} transaction entries.`,
+        );
       } catch (err: any) {
-        addLog(`[ERROR] Synchronization error: ${err.message}`);
+        addLog(`[ERROR] Continuous stream tracking exception: ${err.message}`);
+        console.error("Pipeline failure:", err);
       }
     }
-    syncSavedAttendanceData();
-  }, [user]); // <-- Only sync when the user signs in or refreshes, not on filter changes!
+
+    syncAllSavedAttendanceData();
+  }, [user]); // Only fires once on login validation sequence, completely isolated from frontend dropdowns
 
   const getWeekNumber = (dateStr: string): string => {
     const date = new Date(dateStr);

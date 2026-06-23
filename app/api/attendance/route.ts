@@ -2,15 +2,24 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+
+    const { searchParams } = new URL(request.url);
+    
+    // Read page indexes from frontend. Default to index chunking window if none provided
+    const page = parseInt(searchParams.get("page") || "0", 10);
+    const size = parseInt(searchParams.get("size") || "25000", 10); // Elevated to hold all 21,980 rows safely
+
+    const offsetStart = page * size;
+    const offsetEnd = offsetStart + size - 1;
     const supabase = await createClient();
 
     // Fetch absolutely all records sorted chronologically
     const { data: records, error } = await supabase
       .from("attendance_records")
       .select("*")
-      .limit(50000) // Optional: Set a reasonable limit to prevent overwhelming responses
+      .range(offsetStart, offsetEnd)
       .order("swipe_date", { ascending: false })
       .order("swipe_time", { ascending: false });
 
