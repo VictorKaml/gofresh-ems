@@ -9,12 +9,12 @@ export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // 1. If token is absent and target is not login page, reroute to terminal auth
-  if (!token && pathname !== '/login') {
-    return NextResponse.redirect(new URL('/login', req.url));
+  if (!token && pathname !== '/') {
+    return NextResponse.redirect(new URL('/', req.url));
   }
 
   // 2. If token exists and user hits login page, kick straight back into application metrics
-  if (token && pathname === '/login') {
+  if (token && pathname === '/') {
     return NextResponse.redirect(new URL('/', req.url));
   }
 
