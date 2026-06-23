@@ -2,12 +2,12 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 // Local AttendanceLog type to avoid relying on @prisma/client exports
 type AttendanceLog = {
-  id?: number;
+  id?: string;
   staffCode: string;
   date: string; // YYYY-MM-DD
   time: string; // HH:MM
   weekDay: string;
-  type: string; // "Check In" | "Check Out"
+  swipeType: string; // "Check In" | "Check Out"
   attendanceCheckPoint?: string | null;
 };
 
@@ -17,7 +17,7 @@ export async function GET() {
       orderBy: { fullName: "asc" }
     });
 
-    const logs = await prisma.attendanceLog.findMany({
+    const logs = await prisma.attendanceRecord.findMany({
       orderBy: { date: "asc" }
     });
 
@@ -31,8 +31,8 @@ export async function GET() {
 
     logs.forEach((log: AttendanceLog) => {
       if (weekdayTrends[log.weekDay] !== undefined) weekdayTrends[log.weekDay]++;
-      if (log.type === "Check In") totalCheckIns++;
-      if (log.type === "Check Out") totalCheckOuts++;
+      if (log.swipeType === "Check In") totalCheckIns++;
+      if (log.swipeType === "Check Out") totalCheckOuts++;
     });
 
     // 2. Structuring Sequence: Pair sequential Swipes into Daily Shift Records
@@ -53,8 +53,8 @@ export async function GET() {
         };
       }
 
-      if (log.type === "Check In") shiftsByEmployeeAndDate[code][dateKey].checkIn = log.time;
-      if (log.type === "Check Out") shiftsByEmployeeAndDate[code][dateKey].checkOut = log.time;
+      if (log.swipeType === "Check In") shiftsByEmployeeAndDate[code][dateKey].checkIn = log.time;
+      if (log.swipeType === "Check Out") shiftsByEmployeeAndDate[code][dateKey].checkOut = log.time;
     });
 
     // 3. Compute Complex Dynamic KPIs (Shift Durations, Overtime thresholds, Punctuality)

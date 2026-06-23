@@ -1,0 +1,50 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "./generated"
+}
+
+model Employee {
+  staffCode   String   @id @map("staff_code")
+  fullName    String   @map("full_name")
+  designation String   @default("Operator")
+  department  String   @default("Operations")
+  costCenter  String   @default("CC-LOCAL") @map("cost_center")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  attendance AttendanceRecord[]
+
+  @@index([fullName])
+  @@map("employees")
+}
+
+model AttendanceRecord {
+  id        String   @id @default(uuid())
+  staffCode String   @map("staff_code")
+  date      String // e.g., "2026-04-27"
+  weekDay   String   @map("week_day") // e.g., "Monday"
+  time      String // e.g., "07:14"
+  swipeType String   @map("swipe_type") // e.g., "Clock In" or "Clock Out"
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relational Integrity Constraint Mapping
+  employee Employee @relation(fields: [staffCode], references: [staffCode], onDelete: Cascade)
+
+  @@index([staffCode])
+  @@index([date])
+  @@map("attendance_records")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  role      String   @default("operator")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("users")
+}
