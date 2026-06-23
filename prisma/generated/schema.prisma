@@ -26,10 +26,10 @@ model Employee {
 model AttendanceRecord {
   id        String   @id @default(uuid())
   staffCode String   @map("staff_code")
-  date      String // e.g., "2026-04-27"
-  weekDay   String   @map("week_day") // e.g., "Monday"
-  time      String // e.g., "07:14"
-  swipeType String   @map("swipe_type") // e.g., "Clock In" or "Clock Out"
+  date      String   @map("swipe_date") // 👈 FIX: Maps to swipe_date column
+  weekDay   String   @map("weekday") // 👈 FIX: Maps to weekday column
+  time      String   @map("swipe_time") // 👈 FIX: Maps to swipe_time column
+  swipeType String   @map("swipe_type") // 👈 FIX: Maps to swipe_type column
   createdAt DateTime @default(now()) @map("created_at")
 
   // Relational Integrity Constraint Mapping
