@@ -10,6 +10,10 @@ if (!databaseUrl) {
 }
 
 export default defineConfig({
+  schema: "prisma/schema.prisma",
+  migrations: {
+    path: "prisma/migrations",
+  },
   datasource: {
     url: directUrl // databaseUrl, // Use DIRECT_URL for migrations if available, otherwise fallback to DATABASE_URL
   },

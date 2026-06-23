@@ -4,7 +4,7 @@ datasource db {
 
 generator client {
   provider = "prisma-client-js"
-  url    = env("DIRECT_URL")
+  output   = "./generated"
 }
 
 model Employee {
