@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 
 export async function POST(request: Request) {
   try {
-    const { email, password, roleTier, isSuperuser, canIngestChrono, canModifyRoster } = await request.json();
+    const { email, password, role_tier, is_superuser, can_ingest_chrono, can_modify_roster } = await request.json();
     const supabase = await createClient();
 
     // 1. Generate the hash
@@ -16,10 +16,10 @@ export async function POST(request: Request) {
       .insert([{
         email: email.toLowerCase().trim(),
         password_hash: hashedPassword, // Store the hashed password
-        role_tier: roleTier,
-        is_superuser: isSuperuser,
-        can_ingest_chrono: canIngestChrono,
-        can_modify_roster: canModifyRoster
+        role_tier: role_tier,
+        is_superuser: is_superuser,
+        can_ingest_chrono: can_ingest_chrono,
+        can_modify_roster: can_modify_roster
       }]);
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
