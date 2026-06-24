@@ -19,7 +19,6 @@ export async function GET(request: Request) {
     const { data: records, error } = await supabase
       .from("attendance_records")
       .select("*")
-      .range(offsetStart, offsetEnd)
       .order("swipe_date", { ascending: false })
       .order("swipe_time", { ascending: false });
 
