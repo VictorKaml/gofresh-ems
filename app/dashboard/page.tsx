@@ -86,6 +86,13 @@ interface SessionUser {
   role: "superuser" | "manager" | "operator";
 }
 
+// ─── REUSABLE SKELETON COMPONENT FOR PIPELINE WAITS ───
+function Skeleton({ className }: { className: string }) {
+  return (
+    <div className={`bg-slate-200 animate-pulse rounded-md ${className}`} />
+  );
+}
+
 export default function EMSDashboard() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -102,6 +109,7 @@ export default function EMSDashboard() {
   const [selectedEmployeeCode, setSelectedEmployeeCode] = useState<
     string | null
   >(null);
+  const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
 
   const [monthFilter, setMonthFilter] = useState<string>("ALL");
   const [weekFilter, setWeekFilter] = useState<string>("ALL");
@@ -192,18 +200,15 @@ export default function EMSDashboard() {
           const payload = await response.json();
           const incomingRows = payload.swipes || [];
 
-          // Append current segment chunk to aggregate collection matrix
           masterBufferArray = [...masterBufferArray, ...incomingRows];
 
-          // Break out of the loop if we hit the final page
           if (!payload.hasMore || incomingRows.length < batchChunkSize) {
             keepStreaming = false;
           } else {
-            currentPage++; // Increments range windows (e.g. 0-2499, then 2500-4999...)
+            currentPage++;
           }
         }
 
-        // Commit the complete assembled data array directly into state context memory
         setRawSwipesBuffer(masterBufferArray);
         addLog(
           `[SUCCESS] Aggregation complete! Stored all ${masterBufferArray.length} transaction entries.`,
@@ -215,7 +220,7 @@ export default function EMSDashboard() {
     }
 
     syncAllSavedAttendanceData();
-  }, [user]); // Only fires once on login validation sequence, completely isolated from frontend dropdowns
+  }, [user]);
 
   const getWeekNumber = (dateStr: string): string => {
     const date = new Date(dateStr);
@@ -286,7 +291,6 @@ export default function EMSDashboard() {
             });
           });
 
-          // Bulk save employees to database
           const empDbRes = await fetch("/api/employees/batch", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -403,14 +407,11 @@ export default function EMSDashboard() {
       const dailyAttendanceRecords: DailyAttendanceGroup[] = [];
 
       uniqueDates.forEach((dateStr) => {
-        // 1. Frontend Month Filter Rule
         if (monthFilter !== "ALL" && !dateStr.startsWith(monthFilter)) return;
 
-        // 2. Frontend Week Filter Rule
         const weekNum = getWeekNumber(dateStr);
         if (weekFilter !== "ALL" && weekNum !== weekFilter) return;
 
-        // 3. Frontend Day Filter Rule
         if (dayFilter !== "ALL" && dateStr !== dayFilter) return;
 
         const daySwipes = rawSwipesBuffer.filter(
@@ -625,6 +626,47 @@ export default function EMSDashboard() {
       otHours: parseFloat(d.otHours.toFixed(1)),
     }));
   }, [systemProcessedDataset]);
+
+  // Per-Department Deep Dive Selection Metrics Calculation Engine
+  const selectedDepartmentDetails = useMemo(() => {
+    if (!selectedDepartment) return null;
+
+    const members = systemProcessedDataset.filter(
+      (emp) => (emp.department || "Operations Cluster") === selectedDepartment
+    );
+
+    const timelineMap: Record<string, { name: string; "Overtime Hours": number; "Regular Hours": number }> = {};
+
+    members.forEach((emp) => {
+      emp.records.forEach((rec) => {
+        if (rec.status === "NO RECORD") return;
+        const key = rec.date;
+        if (!timelineMap[key]) {
+          timelineMap[key] = {
+            name: key,
+            "Overtime Hours": 0,
+            "Regular Hours": 0,
+          };
+        }
+        timelineMap[key]["Overtime Hours"] += rec.overtimeHours;
+        timelineMap[key]["Regular Hours"] += rec.hoursWorked;
+      });
+    });
+
+    const chartData = Object.values(timelineMap)
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((item) => ({
+        ...item,
+        "Overtime Hours": parseFloat(item["Overtime Hours"].toFixed(1)),
+        "Regular Hours": parseFloat(item["Regular Hours"].toFixed(1)),
+      }));
+
+    return {
+      name: selectedDepartment,
+      members,
+      chartData,
+    };
+  }, [systemProcessedDataset, selectedDepartment]);
 
   const overviewChartData = useMemo(() => {
     if (metricsRollup.globalOvertimeHours > 0) {
@@ -854,59 +896,57 @@ export default function EMSDashboard() {
               onClick={() => {
                 setActiveTab("OVERVIEW");
                 setSelectedEmployeeCode(null);
+                setSelectedDepartment(null);
               }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold text-left transition-all ${activeTab === "OVERVIEW" ? "bg-blue-600 text-white shadow-md" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
             >
               <LayoutDashboard className="w-4 h-4" /> PERFORMANCE OVERVIEW
             </button>
-
             <button
               onClick={() => {
                 setActiveTab("DEPARTMENTS");
                 setSelectedEmployeeCode(null);
+                setSelectedDepartment(null);
               }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold text-left transition-all ${activeTab === "DEPARTMENTS" ? "bg-blue-600 text-white shadow-md" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
             >
-              <Building2 className="w-4 h-4 text-emerald-400" /> DEPARTMENT
-              OVERVIEW
+              <Building2 className="w-4 h-4 text-emerald-400" /> DEPARTMENT OVERVIEW
             </button>
-
             <button
               onClick={() => {
                 setActiveTab("EMPLOYEES");
                 setSelectedEmployeeCode(null);
+                setSelectedDepartment(null);
               }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold text-left transition-all ${activeTab === "EMPLOYEES" ? "bg-blue-600 text-white shadow-md" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
             >
-              <Contact2 className="w-4 h-4" /> ALL EMPLOYEES (
-              {metricsRollup.totalCount})
+              <Contact2 className="w-4 h-4" /> ALL EMPLOYEES ({metricsRollup.totalCount})
             </button>
-
             <button
               onClick={() => {
                 setActiveTab("ROSTER");
                 setSelectedEmployeeCode(null);
+                setSelectedDepartment(null);
               }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold text-left transition-all ${activeTab === "ROSTER" ? "bg-blue-600 text-white shadow-md" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
             >
               <Users className="w-4 h-4" /> ROSTER VIEW
             </button>
-
             <button
               onClick={() => {
                 setActiveTab("DEFICITS");
                 setSelectedEmployeeCode(null);
+                setSelectedDepartment(null);
               }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold text-left transition-all ${activeTab === "DEFICITS" ? "bg-blue-600 text-white shadow-md" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
             >
-              <AlertTriangle className="w-4 h-4 text-amber-500" /> RUN
-              EXCEPTIONS
+              <AlertTriangle className="w-4 h-4 text-amber-500" /> RUN EXCEPTIONS
             </button>
-
             <button
               onClick={() => {
                 setActiveTab("ACCESS_CONTROL");
                 setSelectedEmployeeCode(null);
+                setSelectedDepartment(null);
               }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold text-left transition-all ${activeTab === "ACCESS_CONTROL" ? "bg-blue-600 text-white shadow-md" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
             >
@@ -941,7 +981,6 @@ export default function EMSDashboard() {
                   ))}
                 </select>
               </div>
-
               <div>
                 <label className="text-[9px] font-bold text-slate-500 uppercase block mb-1">
                   Weekly Boundary
@@ -1025,658 +1064,584 @@ export default function EMSDashboard() {
 
           {activeTab === "OVERVIEW" && (
             <>
+              {/* Overview Rollups with Skeleton Loaders */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 <Card className="bg-white border border-slate-200 shadow-sm rounded-xl">
                   <CardHeader className="pb-2">
                     <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-emerald-600" /> BASE
-                      WORKTIME HOURS
+                      <Clock className="w-3.5 h-3.5 text-emerald-600" /> BASE WORKTIME HOURS
                     </CardDescription>
                     <CardTitle className="text-2xl font-black tracking-tight text-slate-900">
-                      {metricsRollup.globalRegularHours}{" "}
-                      <span className="text-xs font-bold text-slate-400">
-                        HOURS
-                      </span>
+                      {rawSwipesBuffer.length === 0 ? (
+                        <Skeleton className="h-7 w-24 mt-1" />
+                      ) : (
+                        `${metricsRollup.globalRegularHours} HOURS`
+                      )}
                     </CardTitle>
                   </CardHeader>
                 </Card>
-
                 <Card className="bg-white border border-slate-200 shadow-sm rounded-xl">
                   <CardHeader className="pb-2">
                     <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                      <Activity className="w-3.5 h-3.5 text-blue-600" /> PREMIUM
-                      OVERTIME ACCRUED
+                      <Activity className="w-3.5 h-3.5 text-blue-600" /> PREMIUM OVERTIME ACCRUED
                     </CardDescription>
                     <CardTitle className="text-2xl font-black tracking-tight text-blue-600">
-                      +{metricsRollup.globalOvertimeHours}{" "}
-                      <span className="text-xs font-bold text-slate-400">
-                        HOURS
-                      </span>
+                      {rawSwipesBuffer.length === 0 ? (
+                        <Skeleton className="h-7 w-20 mt-1" />
+                      ) : (
+                        `+${metricsRollup.globalOvertimeHours} HOURS`
+                      )}
                     </CardTitle>
                   </CardHeader>
                 </Card>
-
                 <Card className="bg-white border border-slate-200 shadow-sm rounded-xl">
                   <CardHeader className="pb-2">
                     <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                      <FileSpreadsheet className="w-3.5 h-3.5 text-purple-600" />{" "}
-                      GROSS COMBINED SUM
+                      <FileSpreadsheet className="w-3.5 h-3.5 text-purple-600" /> GROSS COMBINED SUM
                     </CardDescription>
                     <CardTitle className="text-2xl font-black tracking-tight text-slate-900">
-                      {metricsRollup.globalTotalSum}{" "}
-                      <span className="text-xs font-bold text-slate-400">
-                        HOURS
-                      </span>
+                      {rawSwipesBuffer.length === 0 ? (
+                        <Skeleton className="h-7 w-28 mt-1" />
+                      ) : (
+                        `${metricsRollup.globalTotalSum} HOURS`
+                      )}
                     </CardTitle>
                   </CardHeader>
                 </Card>
-
                 <Card className="bg-white border border-slate-200 shadow-sm rounded-xl">
                   <CardHeader className="pb-2">
                     <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                      <AlertTriangle className="w-3.5 h-3.5 text-red-600" />{" "}
-                      INVALID ANOMALIES
+                      <AlertTriangle className="w-3.5 h-3.5 text-red-600" /> INVALID ANOMALIES
                     </CardDescription>
                     <CardTitle className="text-2xl font-black tracking-tight text-slate-900">
-                      {metricsRollup.anomalyCount}{" "}
-                      <span className="text-xs font-bold text-slate-400">
-                        PUNCHES
-                      </span>
+                      {rawSwipesBuffer.length === 0 ? (
+                        <Skeleton className="h-7 w-16 mt-1" />
+                      ) : (
+                        `${metricsRollup.anomalyCount} PUNCHES`
+                      )}
                     </CardTitle>
                   </CardHeader>
                 </Card>
               </div>
 
+              {/* Chart & Sidebar Lists with Skeleton loaders */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <Card className="lg:col-span-2 bg-white border border-slate-200 shadow-sm rounded-xl">
                   <CardHeader>
-                    <CardTitle className="text-xs font-black uppercase tracking-wider text-slate-400">
-                      OVERTIME ACQUISITION SPEED MATRIX
+                    <CardTitle className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                      SYSTEMIC MONTHLY OVERTIME VARIANCE TREND
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={overviewChartData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                        <XAxis
-                          dataKey="name"
-                          stroke="#94a3b8"
-                          fontSize={10}
-                          fontWeight="bold"
-                        />
-                        <YAxis
-                          stroke="#94a3b8"
-                          fontSize={10}
-                          fontWeight="bold"
-                        />
-                        <Tooltip />
-                        <Legend
-                          wrapperStyle={{ fontSize: 10, fontWeight: "bold" }}
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="Overtime Hours"
-                          stroke="#2563eb"
-                          strokeWidth={3}
-                          activeDot={{ r: 6 }}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
+                  <CardContent>
+                    {rawSwipesBuffer.length === 0 ? (
+                      <div className="h-64 w-full flex flex-col justify-between pt-2">
+                        <div className="flex items-end justify-between h-48 px-4 gap-4">
+                          <Skeleton className="h-[30%] w-full" />
+                          <Skeleton className="h-[65%] w-full" />
+                          <Skeleton className="h-[45%] w-full" />
+                          <Skeleton className="h-[90%] w-full" />
+                        </div>
+                        <div className="flex justify-between px-2 pt-4">
+                          <Skeleton className="h-3 w-12" />
+                          <Skeleton className="h-3 w-12" />
+                          <Skeleton className="h-3 w-12" />
+                          <Skeleton className="h-3 w-12" />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="h-64 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={overviewChartData}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                            <XAxis dataKey="name" stroke="#94a3b8" fontSize={10} fontWeight="bold" />
+                            <YAxis stroke="#94a3b8" fontSize={10} fontWeight="bold" />
+                            <Tooltip />
+                            <Bar dataKey="Overtime Hours" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
 
                 <Card className="bg-white border border-slate-200 shadow-sm rounded-xl">
                   <CardHeader>
-                    <CardTitle className="text-xs font-black uppercase tracking-wider text-slate-400">
-                      DEPARTMENT RUNTIME DISTRO
+                    <CardTitle className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                      OPERATIONAL CLUSTER PROFILES
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={departmentAggregatedMetrics}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                        <XAxis
-                          dataKey="name"
-                          stroke="#94a3b8"
-                          fontSize={9}
-                          fontWeight="bold"
-                          tickFormatter={(v) => v.substring(0, 6) + ".."}
-                        />
-                        <YAxis
-                          stroke="#94a3b8"
-                          fontSize={10}
-                          fontWeight="bold"
-                        />
-                        <Tooltip />
-                        <Bar
-                          dataKey="regHours"
-                          name="Regular Hours"
-                          fill="#10b981"
-                          stackId="a"
-                        />
-                        <Bar
-                          dataKey="otHours"
-                          name="Overtime Hours"
-                          fill="#f59e0b"
-                          stackId="a"
-                        />
-                      </BarChart>
-                    </ResponsiveContainer>
+                  <CardContent className="space-y-4">
+                    {rawSwipesBuffer.length === 0 ? (
+                      Array.from({ length: 4 }).map((_, idx) => (
+                        <div key={idx} className="flex justify-between items-center border-b border-slate-100 pb-2">
+                          <div className="space-y-2 w-2/3">
+                            <Skeleton className="h-3.5 w-24" />
+                            <Skeleton className="h-2.5 w-32" />
+                          </div>
+                          <Skeleton className="h-6 w-14 rounded-full" />
+                        </div>
+                      ))
+                    ) : (
+                      departmentAggregatedMetrics.slice(0, 4).map((d) => (
+                        <div key={d.name} className="flex justify-between items-center border-b border-slate-100 pb-2">
+                          <div>
+                            <span className="text-xs font-black text-slate-900 uppercase block">{d.name}</span>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase">{d.staffCount} Agents Assigned</span>
+                          </div>
+                          <Badge className="text-blue-600 border-blue-200 bg-blue-50/50 text-[10px] font-black">
+                            +{d.otHours}h OT
+                          </Badge>
+                        </div>
+                      ))
+                    )}
                   </CardContent>
                 </Card>
               </div>
             </>
           )}
 
-          {activeTab === "ROSTER" && (
-            <Card className="bg-white border border-slate-200 shadow-sm rounded-xl">
-              <CardHeader>
-                <CardTitle className="text-sm font-black uppercase tracking-wider text-slate-800">
-                  Personnel Roster Directory Models
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader className="bg-slate-50/70">
-                    <TableRow>
-                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-6">
-                        STAFF CODE
-                      </TableHead>
-                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                        FULL IDENTITY NAME
-                      </TableHead>
-                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                        WORKER DESIGNATION
-                      </TableHead>
-                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                        OPERATIONAL DEPARTMENT
-                      </TableHead>
-                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest pr-6">
-                        COST CENTRE
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredEmployeeDirectory.map((emp) => (
-                      <TableRow key={emp.staffCode}>
-                        <TableCell className="font-mono text-xs font-black text-slate-900 pl-6">
-                          {emp.staffCode}
-                        </TableCell>
-                        <TableCell className="text-xs font-bold uppercase text-slate-800">
-                          {emp.fullName}
-                        </TableCell>
-                        <TableCell className="text-xs font-medium text-slate-500">
-                          {emp.designation}
-                        </TableCell>
-                        <TableCell className="text-xs font-medium text-slate-500">
-                          {emp.department}
-                        </TableCell>
-                        <TableCell className="font-mono text-xs font-bold text-slate-600 pr-6">
-                          {emp.costCenter}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          )}
-
           {activeTab === "DEPARTMENTS" && (
-            <Card className="bg-white border border-slate-200 shadow-sm rounded-xl animate-in fade-in duration-200">
-              <CardHeader>
-                <CardTitle className="text-sm font-black uppercase tracking-wider text-slate-800">
-                  Operational Units Matrix Overview
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader className="bg-slate-50/70">
-                    <TableRow>
-                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-6">
-                        DEPARTMENT CLUSTER
-                      </TableHead>
-                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">
-                        HEADCOUNT
-                      </TableHead>
-                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">
-                        REGULAR BASE TIME
-                      </TableHead>
-                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-right pr-6">
-                        OVERTIME VOLUMES
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {departmentAggregatedMetrics.map((dept, idx) => (
-                      <TableRow key={idx}>
-                        <TableCell className="text-xs font-black text-slate-800 pl-6 uppercase">
+            <div className="space-y-6">
+              {rawSwipesBuffer.length === 0 ? (
+                /* Master Department Loader Skeleton */
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {Array.from({ length: 3 }).map((_, idx) => (
+                    <Card key={idx} className="bg-white border border-slate-200 p-6 rounded-xl space-y-4">
+                      <div className="space-y-2">
+                        <Skeleton className="h-4 w-1/2" />
+                        <Skeleton className="h-3 w-1/3" />
+                      </div>
+                      <div className="pt-2 space-y-2">
+                        <Skeleton className="h-3 w-full" />
+                        <Skeleton className="h-3 w-full" />
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              ) : selectedDepartment ? (
+                /* ─── DRILL DOWN INDIVIDUAL DEPARTMENT VIEW ─── */
+                <div className="space-y-6 animate-in fade-in-50 duration-200">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedDepartment(null)}
+                        className="text-xs font-bold gap-2 border-slate-300 hover:bg-slate-100"
+                      >
+                        ← BACK TO ALL DEPARTMENTS
+                      </Button>
+                      <h2 className="text-xl font-black tracking-tight text-slate-900 uppercase mt-2">
+                        {selectedDepartmentDetails?.name} Analytics Matrix
+                      </h2>
+                    </div>
+                  </div>
+
+                  {/* Mini Rollup Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <Card className="bg-white border border-slate-200 shadow-sm rounded-xl">
+                      <CardContent className="pt-4">
+                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
+                          Active Staff Headcount
+                        </div>
+                        <div className="text-2xl font-black text-slate-900">
+                          {selectedDepartmentDetails?.members.length} <span className="text-xs text-slate-400">MEMBERS</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-white border border-slate-200 shadow-sm rounded-xl">
+                      <CardContent className="pt-4">
+                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
+                          Accumulated Overtime
+                        </div>
+                        <div className="text-2xl font-black text-blue-600">
+                          {selectedDepartmentDetails?.members.reduce((acc, curr) => acc + curr.metrics.totalOvertimeHours, 0).toFixed(1)} <span className="text-xs text-slate-400">HRS</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-white border border-slate-200 shadow-sm rounded-xl">
+                      <CardContent className="pt-4">
+                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
+                          Gross Productive Hours
+                        </div>
+                        <div className="text-2xl font-black text-slate-900">
+                          {selectedDepartmentDetails?.members.reduce((acc, curr) => acc + curr.metrics.totalHoursSum, 0).toFixed(1)} <span className="text-xs text-slate-400">HRS</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Smooth Curved Line Chart */}
+                  <Card className="bg-white border border-slate-200 shadow-sm rounded-xl">
+                    <CardHeader>
+                      <CardTitle className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                        Overtime & Regular Duty Timeline Metrics
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="h-64 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={selectedDepartmentDetails?.chartData || []}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                            <XAxis dataKey="name" stroke="#94a3b8" fontSize={10} fontWeight="bold" />
+                            <YAxis stroke="#94a3b8" fontSize={10} fontWeight="bold" />
+                            <Tooltip />
+                            <Legend verticalAlign="top" height={36} />
+                            <Line
+                              type="monotone"
+                              dataKey="Overtime Hours"
+                              stroke="#2563eb"
+                              strokeWidth={3}
+                              activeDot={{ r: 6 }}
+                            />
+                            <Line
+                              type="monotone"
+                              dataKey="Regular Hours"
+                              stroke="#10b981"
+                              strokeWidth={2}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Department Member Manifest List Table */}
+                  <Card className="bg-white border border-slate-200 shadow-sm rounded-xl">
+                    <CardHeader>
+                      <CardTitle className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                        Assigned Staff Operational Roster
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-slate-50 border-b border-slate-200">
+                            <TableHead className="text-[10px] font-black text-slate-500 uppercase">Code</TableHead>
+                            <TableHead className="text-[10px] font-black text-slate-500 uppercase">Employee Name</TableHead>
+                            <TableHead className="text-[10px] font-black text-slate-500 uppercase">Designation</TableHead>
+                            <TableHead className="text-[10px] font-black text-slate-500 uppercase text-right">Regular Hrs</TableHead>
+                            <TableHead className="text-[10px] font-black text-slate-500 uppercase text-right">Overtime Hrs</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {selectedDepartmentDetails?.members.map((emp) => (
+                            <TableRow key={emp.staffCode} className="border-b border-slate-100 hover:bg-slate-50/50">
+                              <TableCell className="font-mono text-xs font-bold text-slate-700">{emp.staffCode}</TableCell>
+                              <TableCell className="text-xs font-bold text-slate-900">{emp.fullName}</TableCell>
+                              <TableCell className="text-xs text-slate-600 uppercase">{emp.designation}</TableCell>
+                              <TableCell className="text-xs text-right font-semibold">{emp.metrics.totalRegularHours}</TableCell>
+                              <TableCell className="text-xs text-right font-black text-blue-600">+{emp.metrics.totalOvertimeHours}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
+                </div>
+              ) : (
+                /* ─── MASTER DEPARTMENTS OVERVIEW GRID ─── */
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {departmentAggregatedMetrics.map((dept) => (
+                    <Card
+                      key={dept.name}
+                      className="bg-white border border-slate-200 shadow-sm rounded-xl hover:shadow-md cursor-pointer transition-all border-l-4 border-l-blue-600"
+                      onClick={() => setSelectedDepartment(dept.name)}
+                    >
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-black tracking-tight text-slate-900 uppercase">
                           {dept.name}
-                        </TableCell>
-                        <TableCell className="text-xs font-bold text-center text-slate-600">
-                          {dept.staffCount} Staff
-                        </TableCell>
-                        <TableCell className="text-xs font-bold text-right font-mono text-emerald-600">
-                          {dept.regHours} hrs
-                        </TableCell>
-                        <TableCell className="text-xs font-bold text-right font-mono text-amber-500 pr-6">
-                          +{dept.otHours} hrs
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+                        </CardTitle>
+                        <CardDescription className="text-[10px] font-bold text-slate-400 uppercase">
+                          {dept.staffCount} ACTIVE OPERATIVES ASSIGNED
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2 mt-2">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-slate-500 font-medium">Regular Duty:</span>
+                            <span className="font-bold text-slate-800">{dept.regHours} hrs</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-slate-500 font-medium">Overtime Accrued:</span>
+                            <span className="font-black text-blue-600">+{dept.otHours} hrs</span>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
 
           {activeTab === "EMPLOYEES" && (
-            <Card className="bg-white border border-slate-200 shadow-sm rounded-xl animate-in fade-in duration-200">
-              <CardHeader>
-                <CardTitle className="text-sm font-black uppercase tracking-wider text-slate-800">
-                  Workforce Asset Master Index ({filteredViewDataset.length})
-                </CardTitle>
-              </CardHeader>
+            <Card className="bg-white border border-slate-200 shadow-sm rounded-xl">
               <CardContent className="p-0">
-                {!selectedEmployeeCode ? (
-                  <Table>
-                    <TableHeader className="bg-slate-50/70">
-                      <TableRow>
-                        <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-6">
-                          STAFF CODE
-                        </TableHead>
-                        <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                          EMPLOYEE IDENTIFICATION
-                        </TableHead>
-                        <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                          DEPARTMENT STRATUM
-                        </TableHead>
-                        <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">
-                          ATTENDANCE COUNT
-                        </TableHead>
-                        <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">
-                          COMPLIANT TOTAL
-                        </TableHead>
-                        <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">
-                          PREMIUM OVERTIME
-                        </TableHead>
-                        <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-right pr-6">
-                          CALENDAR ENGINE
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredViewDataset.map((row) => (
-                        <TableRow
-                          key={row.staffCode}
-                          className="hover:bg-slate-50/40 transition-all"
-                        >
-                          <TableCell className="font-mono text-xs font-black text-slate-900 pl-6">
-                            {row.staffCode}
-                          </TableCell>
-                          <TableCell className="text-xs font-black text-slate-800 uppercase">
-                            {row.fullName}
-                          </TableCell>
-                          <TableCell className="text-xs font-bold text-slate-400 uppercase">
-                            {row.department}
-                          </TableCell>
-                          <TableCell className="text-xs font-semibold text-center text-slate-600">
-                            {row.metrics.presentDaysCount} Active Days
-                          </TableCell>
-                          <TableCell className="text-xs font-bold text-right font-mono text-emerald-600">
-                            {row.metrics.totalRegularHours} hrs
-                          </TableCell>
-                          <TableCell className="text-xs font-black text-right font-mono text-blue-600">
-                            +{row.metrics.totalOvertimeHours} hrs
-                          </TableCell>
-                          <TableCell className="text-right pr-6 flex justify-end gap-2">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-slate-50 border-b border-slate-200">
+                      <TableHead className="text-[10px] font-black text-slate-500 uppercase">Code</TableHead>
+                      <TableHead className="text-[10px] font-black text-slate-500 uppercase">Full Name</TableHead>
+                      <TableHead className="text-[10px] font-black text-slate-500 uppercase">Department</TableHead>
+                      <TableHead className="text-[10px] font-black text-slate-500 uppercase text-right">Regular</TableHead>
+                      <TableHead className="text-[10px] font-black text-slate-500 uppercase text-right">Overtime</TableHead>
+                      <TableHead className="text-[10px] font-black text-slate-500 uppercase text-center">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {rawSwipesBuffer.length === 0 ? (
+                      Array.from({ length: 6 }).map((_, idx) => (
+                        <TableRow key={idx}>
+                          <TableCell><Skeleton className="h-4 w-12" /></TableCell>
+                          <TableCell><Skeleton className="h-4 w-36" /></TableCell>
+                          <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                          <TableCell className="text-right"><Skeleton className="h-4 w-10 ml-auto" /></TableCell>
+                          <TableCell className="text-right"><Skeleton className="h-4 w-10 ml-auto" /></TableCell>
+                          <TableCell><Skeleton className="h-6 w-24 mx-auto rounded" /></TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      filteredViewDataset.map((emp) => (
+                        <TableRow key={emp.staffCode} className="border-b border-slate-100 hover:bg-slate-50/40">
+                          <TableCell className="font-mono text-xs font-bold text-slate-600">{emp.staffCode}</TableCell>
+                          <TableCell className="text-xs font-bold text-slate-900">{emp.fullName}</TableCell>
+                          <TableCell className="text-xs text-slate-500 uppercase">{emp.department}</TableCell>
+                          <TableCell className="text-xs text-right font-medium">{emp.metrics.totalRegularHours}h</TableCell>
+                          <TableCell className="text-xs text-right font-black text-blue-600">+{emp.metrics.totalOvertimeHours}h</TableCell>
+                          <TableCell className="text-center">
                             <Button
-                              onClick={() => exportTargetEmployeePDF(row)}
                               size="sm"
                               variant="ghost"
-                              className="h-7 w-7 p-0 text-slate-400 hover:text-slate-900 rounded-md"
+                              onClick={() => exportTargetEmployeePDF(emp)}
+                              className="h-7 text-[10px] font-black tracking-wider text-slate-500 hover:text-blue-600 hover:bg-blue-50 uppercase"
                             >
-                              <Download className="w-3.5 h-3.5" />
-                            </Button>
-                            <Button
-                              onClick={() =>
-                                setSelectedEmployeeCode(row.staffCode)
-                              }
-                              size="sm"
-                              variant="outline"
-                              className="h-7 text-[10px] font-black uppercase tracking-wide border-slate-200"
-                            >
-                              MATRIX VIEW
+                              <Download className="w-3 h-3 mr-1" /> EXPORT MATRIX
                             </Button>
                           </TableCell>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                ) : (
-                  (() => {
-                    const punch = systemProcessedDataset.find(
-                      (e) => e.staffCode === selectedEmployeeCode,
-                    );
-                    if (!punch) return null;
-                    return (
-                      <div className="space-y-4 p-6">
-                        <div className="flex justify-between items-center pb-2 border-b">
-                          <div>
-                            <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">
-                              PUNCH LOG MATRIX PROFILE
-                            </h4>
-                            <div className="text-sm font-black text-slate-800 uppercase">
-                              {punch.fullName} ({punch.staffCode})
-                            </div>
-                          </div>
-                          <Button
-                            onClick={() => setSelectedEmployeeCode(null)}
-                            size="sm"
-                            variant="outline"
-                            className="text-[10px] font-black tracking-wide uppercase border-slate-200"
-                          >
-                            BACK TO INDEX
-                          </Button>
-                        </div>
-                        <Table>
-                          <TableHeader className="bg-slate-50">
-                            <TableRow>
-                              <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-6">
-                                CALENDAR DATE
-                              </TableHead>
-                              <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                WEEK DAY
-                              </TableHead>
-                              <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                CLOCK IN
-                              </TableHead>
-                              <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                CLOCK OUT
-                              </TableHead>
-                              <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">
-                                REGULAR TOTAL
-                              </TableHead>
-                              <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">
-                                OVERTIME HOURS
-                              </TableHead>
-                              <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-right pr-6">
-                                COMPLIANCE STATUS
-                              </TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {punch.records.map((punch, idx) => (
-                              <TableRow key={idx}>
-                                <TableCell className="font-mono text-xs font-bold text-slate-900 pl-6">
-                                  {punch.date}
-                                </TableCell>
-                                <TableCell className="text-xs font-bold text-slate-400 uppercase">
-                                  {punch.weekDay}
-                                </TableCell>
-                                <TableCell className="font-mono text-xs font-bold text-slate-700">
-                                  {punch.clockIn}
-                                </TableCell>
-                                <TableCell className="font-mono text-xs font-bold text-slate-700">
-                                  {punch.clockOut}
-                                </TableCell>
-                                <TableCell className="text-xs font-bold text-right font-mono text-slate-600">
-                                  {punch.hoursWorked} hrs
-                                </TableCell>
-                                <TableCell className="text-xs font-black text-right font-mono text-blue-600">
-                                  +{punch.overtimeHours} hrs
-                                </TableCell>
-                                <TableCell className="text-right pr-6">
-                                  <Badge
-                                    className={`text-[9px] font-black uppercase tracking-wider rounded border shadow-none px-2 py-0.5 ${punch.status === "PRESENT" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : punch.status === "LATE" ? "bg-amber-500 text-white" : punch.status === "ABSENT (INVALID PUNCHES)" ? "bg-red-600 text-white" : "bg-slate-100 text-slate-400"}`}
-                                  >
-                                    {punch.status}
-                                  </Badge>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    );
-                  })()
-                )}
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+
+          {activeTab === "ROSTER" && (
+            <Card className="bg-white border border-slate-200 shadow-sm rounded-xl">
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-slate-50 border-b border-slate-200">
+                      <TableHead className="text-[10px] font-black text-slate-500 uppercase">Staff Code</TableHead>
+                      <TableHead className="text-[10px] font-black text-slate-500 uppercase">Full Corporate Name</TableHead>
+                      <TableHead className="text-[10px] font-black text-slate-500 uppercase">Designation Role</TableHead>
+                      <TableHead className="text-[10px] font-black text-slate-500 uppercase">Department</TableHead>
+                      <TableHead className="text-[10px] font-black text-slate-500 uppercase">Cost Center</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {employeeDirectory.length === 0 ? (
+                      Array.from({ length: 5 }).map((_, idx) => (
+                        <TableRow key={idx}>
+                          <TableCell><Skeleton className="h-4 w-12" /></TableCell>
+                          <TableCell><Skeleton className="h-4 w-40" /></TableCell>
+                          <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+                          <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                          <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      filteredEmployeeDirectory.map((emp) => (
+                        <TableRow key={emp.staffCode} className="border-b border-slate-100 hover:bg-slate-50/50">
+                          <TableCell className="font-mono text-xs font-bold text-slate-700">{emp.staffCode}</TableCell>
+                          <TableCell className="text-xs font-bold text-slate-900">{emp.fullName}</TableCell>
+                          <TableCell className="text-xs text-slate-600 uppercase">{emp.designation}</TableCell>
+                          <TableCell className="text-xs text-slate-600 uppercase">{emp.department}</TableCell>
+                          <TableCell className="font-mono text-xs text-slate-500">{emp.costCenter}</TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
               </CardContent>
             </Card>
           )}
 
           {activeTab === "DEFICITS" && (
-            <Card className="bg-white border border-slate-200 shadow-sm rounded-xl animate-in fade-in duration-200">
-              <CardHeader className="border-b border-slate-100 flex flex-row items-center justify-between">
+            <div className="space-y-4">
+              <div className="flex justify-between items-center bg-white p-4 border border-slate-200 rounded-xl shadow-sm">
                 <div>
-                  <CardTitle className="text-sm font-black uppercase tracking-wider text-slate-800">
-                    Operational Exceptions & Run Deficits
-                  </CardTitle>
-                  <CardDescription className="text-xs font-bold text-slate-400">
-                    Listing records with total gross runtime summation values
-                    falling below threshold parameters.
-                  </CardDescription>
+                  <span className="text-xs font-black text-slate-900 block uppercase">Attendance Deficit Matrix Parameters</span>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase">Current Target Cutoff Window Threshold: {lowAttendanceThreshold} Hours</span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                      THRESHOLD LIMIT:
-                    </span>
-                    <Input
-                      type="number"
-                      value={lowAttendanceThreshold}
-                      onChange={(e) =>
-                        setLowAttendanceThreshold(Number(e.target.value))
-                      }
-                      className="w-16 h-8 text-xs font-black font-mono text-slate-900 border-slate-200"
-                    />
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                      HRS
-                    </span>
-                  </div>
+                  <Input
+                    type="number"
+                    value={lowAttendanceThreshold}
+                    onChange={(e) => setLowAttendanceThreshold(Number(e.target.value))}
+                    className="w-24 h-9 text-xs font-black text-center border-slate-200"
+                  />
                   <Button
                     onClick={exportLowAttendanceReportPDF}
-                    className="h-8 bg-slate-900 text-white text-[10px] font-black uppercase tracking-wide rounded-lg flex items-center gap-2 px-3 shadow-sm hover:bg-slate-800"
+                    size="sm"
+                    className="h-9 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-black tracking-wider gap-1.5 rounded-lg"
                   >
-                    <Download className="w-3.5 h-3.5" /> EXPORT EXCEPTION REPORT
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-amber-400" /> EXPORT EXCEPTIONS
                   </Button>
                 </div>
-              </CardHeader>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader className="bg-slate-50/70">
-                    <TableRow>
-                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-6">
-                        STAFF RECOGNITION CODE
-                      </TableHead>
-                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                        FULL INDIVIDUAL IDENTITY
-                      </TableHead>
-                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                        DEPARTMENTAL STRATUM
-                      </TableHead>
-                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">
-                        VALID ACTIVATIONS
-                      </TableHead>
-                      <TableHead className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-right pr-6">
-                        RUN TIME SUMMATION
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {lowAttendanceStaffList.map((emp) => (
-                      <TableRow key={emp.staffCode}>
-                        <TableCell className="font-mono text-xs font-black text-slate-900 pl-6">
-                          {emp.staffCode}
-                        </TableCell>
-                        <TableCell className="text-xs font-bold text-slate-800 uppercase">
-                          {emp.fullName}
-                        </TableCell>
-                        <TableCell className="text-xs font-medium text-slate-400 uppercase">
-                          {emp.department}
-                        </TableCell>
-                        <TableCell className="text-xs font-bold text-right text-slate-600">
-                          {emp.metrics.presentDaysCount} Days Present
-                        </TableCell>
-                        <TableCell className="text-xs font-black text-right font-mono text-rose-600 pr-6">
-                          {emp.metrics.totalHoursSum} hrs
-                        </TableCell>
+              </div>
+
+              <Card className="bg-white border border-slate-200 shadow-sm rounded-xl">
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-slate-50 border-b border-slate-200">
+                        <TableHead className="text-[10px] font-black text-slate-500 uppercase">Code</TableHead>
+                        <TableHead className="text-[10px] font-black text-slate-500 uppercase">Staff Name</TableHead>
+                        <TableHead className="text-[10px] font-black text-slate-500 uppercase">Department</TableHead>
+                        <TableHead className="text-[10px] font-black text-slate-500 uppercase text-right">Productive Hours</TableHead>
+                        <TableHead className="text-[10px] font-black text-slate-500 uppercase text-center">Status Flag</TableHead>
                       </TableRow>
-                    ))}
-                    {lowAttendanceStaffList.length === 0 && (
-                      <TableRow>
-                        <TableCell
-                          colSpan={5}
-                          className="py-12 text-center text-xs font-bold text-slate-400 uppercase tracking-widest"
-                        >
-                          No exceptions matching threshold configuration
-                          criteria found. All nodes compliant.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+                    </TableHeader>
+                    <TableBody>
+                      {rawSwipesBuffer.length === 0 ? (
+                        Array.from({ length: 4 }).map((_, idx) => (
+                          <TableRow key={idx}>
+                            <TableCell><Skeleton className="h-4 w-12" /></TableCell>
+                            <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                            <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                            <TableCell className="text-right"><Skeleton className="h-4 w-12 ml-auto" /></TableCell>
+                            <TableCell><Skeleton className="h-5 w-24 mx-auto rounded-full" /></TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        lowAttendanceStaffList.map((emp) => (
+                          <TableRow key={emp.staffCode} className="border-b border-slate-100 bg-amber-50/20">
+                            <TableCell className="font-mono text-xs font-bold text-slate-700">{emp.staffCode}</TableCell>
+                            <TableCell className="text-xs font-bold text-slate-900">{emp.fullName}</TableCell>
+                            <TableCell className="text-xs text-slate-500 uppercase">{emp.department}</TableCell>
+                            <TableCell className="text-xs text-right font-black text-amber-700">{emp.metrics.totalHoursSum} hrs</TableCell>
+                            <TableCell className="text-center">
+                              <Badge className="bg-amber-100 text-amber-800 border-amber-200 text-[9px] font-black uppercase">DEFICIT RUNTIME</Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </div>
           )}
 
           {activeTab === "ACCESS_CONTROL" && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-200">
-              <Card className="lg:col-span-1 bg-white border border-slate-200 shadow-sm rounded-xl">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-start">
+              <Card className="bg-white border border-slate-200 shadow-sm rounded-xl md:col-span-1">
                 <CardHeader>
-                  <CardTitle className="text-xs font-black uppercase tracking-wider text-slate-800">
-                    Provision Access Credentials
+                  <CardTitle className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                    PROVISION SECURITY OPERATOR
                   </CardTitle>
-                  <CardDescription className="text-xs font-bold text-slate-400">
-                    Deploy fresh personnel identifiers down to the database pool
-                    records.
-                  </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <form
-                    onSubmit={async (e) => {
-                      e.preventDefault();
-                      setProvisionStatus(null);
-                      try {
-                        const res = await fetch("/api/users/manage", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({
-                            email: newEmail,
-                            password: newPassword,
-                            roleTier: newRole,
-                            isSuperuser: isSuper,
-                            canIngestChrono: rightChrono,
-                            canModifyRoster: rightRoster,
-                          }),
-                        });
-                        if (!res.ok)
-                          throw new Error(
-                            "Could not register terminal credential matrices.",
-                          );
-                        setProvisionStatus(
-                          "SUCCESS: Operational user identity established successfully.",
-                        );
+                <CardContent className="space-y-4">
+                  {provisionStatus && (
+                    <div className="p-3 bg-slate-900 text-emerald-400 font-mono text-[10px] rounded-lg uppercase">
+                      {provisionStatus}
+                    </div>
+                  )}
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Corporate Email Address</label>
+                    <Input
+                      type="email"
+                      placeholder="operator@gofresh.corp"
+                      value={newEmail}
+                      onChange={(e) => setNewEmail(e.target.value)}
+                      className="text-xs font-bold border-slate-200 h-9"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Systemic Password Seed</label>
+                    <Input
+                      type="password"
+                      placeholder="••••••••••••"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="text-xs font-bold border-slate-200 h-9"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Authorization Privilege Stratum</label>
+                    <select
+                      value={newRole}
+                      onChange={(e: any) => setNewRole(e.target.value)}
+                      className="w-full bg-white border border-slate-200 text-xs font-bold rounded-lg p-2.5 uppercase text-slate-800"
+                    >
+                      <option value="operator">Standard Operations Operator</option>
+                      <option value="manager">Control Manager Stratum</option>
+                      <option value="admin">System Administration Architecture</option>
+                    </select>
+                  </div>
+                  <div className="flex gap-4 pt-2">
+                    <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+                      <input type="checkbox" checked={isSuper} onChange={(e) => setIsSuper(e.target.checked)} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+                      SUPERUSER FLAG
+                    </label>
+                  </div>
+                  <Button
+                    onClick={async () => {
+                      setProvisionStatus("[PENDING] Executing user creation...");
+                      const res = await fetch("/api/users/manage", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          email: newEmail,
+                          password: newPassword,
+                          role_tier: newRole,
+                          is_superuser: isSuper,
+                          can_ingest_chrono: rightChrono,
+                          can_modify_roster: rightRoster,
+                        }),
+                      });
+                      const dat = await res.json();
+                      if (res.ok) {
+                        setProvisionStatus(`[SUCCESS] Created entry user target id: ${dat.userId}`);
                         setNewEmail("");
                         setNewPassword("");
-                      } catch (err: any) {
-                        setProvisionStatus(`ERROR: ${err.message}`);
+                      } else {
+                        setProvisionStatus(`[ERROR] ${dat.error || "Execution failed."}`);
                       }
                     }}
-                    className="space-y-4"
+                    className="w-full h-9 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs uppercase rounded-lg tracking-wider"
                   >
-                    {provisionStatus && (
-                      <div className="p-3 bg-slate-950 text-white border border-slate-800 text-[10px] font-mono rounded-lg">
-                        {provisionStatus}
-                      </div>
-                    )}
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
-                        EMAIL ACCOUNT ACCESS
-                      </label>
-                      <Input
-                        type="email"
-                        required
-                        value={newEmail}
-                        onChange={(e) => setNewEmail(e.target.value)}
-                        placeholder="user@gofreshmw.local"
-                        className="text-xs border-slate-200"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
-                        PASSPHRASE KEY
-                      </label>
-                      <Input
-                        type="password"
-                        required
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                        placeholder="••••••••••••"
-                        className="text-xs border-slate-200"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
-                        SECURITY ROLE STRATUM
-                      </label>
-                      <select
-                        value={newRole}
-                        onChange={(e) => setNewRole(e.target.value as any)}
-                        className="w-full bg-white border border-slate-200 text-slate-900 text-xs rounded p-2 focus:outline-none focus:border-blue-500"
-                      >
-                        <option value="operator">OPERATOR STRATUM</option>
-                        <option value="manager">MANAGER STRATUM</option>
-                        <option value="admin">ADMIN STRATUM</option>
-                      </select>
-                    </div>
-                    <div className="flex items-center gap-2 pt-2">
-                      <input
-                        type="checkbox"
-                        id="issuper"
-                        checked={isSuper}
-                        onChange={(e) => setIsSuper(e.target.checked)}
-                        className="rounded border-slate-300"
-                      />
-                      <label
-                        htmlFor="issuper"
-                        className="text-[10px] font-black text-slate-600 uppercase tracking-wider cursor-pointer"
-                      >
-                        Bypass standard checks
-                      </label>
-                    </div>
-                    <Button
-                      type="submit"
-                      className="w-full h-9 bg-blue-600 text-white text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md hover:bg-blue-700"
-                    >
-                      PROVISION CREDENTIAL TARGET
-                    </Button>
-                  </form>
+                    PROVISION CREDENTIAL ENTITY
+                  </Button>
                 </CardContent>
               </Card>
 
-              <Card className="lg:col-span-2 bg-white border border-slate-200 shadow-sm rounded-xl">
-                <CardHeader>
-                  <CardTitle className="text-xs font-black uppercase tracking-wider text-slate-800">
-                    Secured System Access Rights Dictionary
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4 text-xs">
-                  <div className="p-3 bg-blue-50/60 border border-blue-100 rounded-lg text-blue-900">
-                    <strong>SUPERUSER RIGHT:</strong> Granting superuser rights
-                    bypasses standard permission checks across the system layer.
-                  </div>
-                  <div className="space-y-3">
-                    <div className="p-3 border border-slate-100 rounded-lg">
-                      <span className="font-black text-slate-900 block uppercase">
-                        OPERATOR STRATUM
-                      </span>
-                      Standard read-only runtime feed monitoring view and basic
-                      biometric file dropping actions.
+              <div className="md:col-span-2 space-y-4">
+                <Card className="bg-white border border-slate-200 shadow-sm rounded-xl">
+                  <CardHeader>
+                    <CardTitle className="text-xs font-black text-slate-400 uppercase tracking-widest">SYSTEM ARCHITECTURE RULES</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4 text-xs font-medium text-slate-600">
+                    <div className="flex gap-3 items-start border-b border-slate-100 pb-3">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-black text-slate-900 block uppercase mb-0.5">ADMINISTRATOR STRATUM</span>
+                        Full schematic modification engine tracking schemas, access keys context layer rules, database seeding configurations and matrix ingestion blocks.
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
+                    <div className="flex gap-3 items-start">
+                      <CheckCircle2 className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-black text-slate-900 block uppercase mb-0.5">OPERATOR STRATUM</span>
+                        Standard read-only runtime feed monitoring view and basic biometric file dropping actions.
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           )}
         </div>
@@ -1686,8 +1651,7 @@ export default function EMSDashboard() {
           <Card className="bg-white border border-slate-200 shadow-sm rounded-xl">
             <CardHeader className="pb-1.5 pt-3 px-5">
               <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                <Terminal className="w-3.5 h-3.5 text-blue-600" /> SYSTEM
-                DIAGNOSTIC RUNTIME FEED
+                <Terminal className="w-3.5 h-3.5 text-blue-600" /> SYSTEM DIAGNOSTIC RUNTIME FEED
               </div>
             </CardHeader>
             <CardContent className="p-4 pt-0">
