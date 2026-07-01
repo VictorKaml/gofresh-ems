@@ -1,42 +1,53 @@
-datasource db {
-  provider = "postgresql"
-}
-
 generator client {
   provider = "prisma-client-js"
   output   = "./generated"
 }
 
+datasource db {
+  provider = "postgresql"
+}
+
+model SystemUser {
+  id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email           String      @unique @db.VarChar(255)
+  passwordHash    String      @map("password_hash")
+  roleTier        AppRoleTier @default(operator) @map("role_tier")
+  isSuperuser     Boolean     @default(false) @map("is_superuser")
+  canIngestChrono Boolean     @default(true) @map("can_ingest_chrono")
+  canModifyRoster Boolean     @default(false) @map("can_modify_roster")
+  createdAt       DateTime    @default(dbgenerated("timezone('utc'::text, now())")) @map("created_at") @db.Timestamptz(6)
+
+  @@map("system_users")
+}
+
 model Employee {
-  staffCode   String             @id @map("staff_code")
-  fullName    String             @map("full_name")
-  designation String             @default("Operator")
-  department  String             @default("Operations")
-  costCenter  String             @default("CC-LOCAL") @map("cost_center")
-  createdAt   DateTime           @default(now()) @map("created_at")
-  updatedAt   DateTime           @updatedAt @map("updated_at")
-  
-  // Relations
-  attendance  AttendanceRecord[]
+  staffCode   String   @id @map("staff_code")
+  fullName    String   @map("full_name")
+  designation String   @default("Operator")
+  department  String   @default("Operations")
+  costCenter  String   @default("CC-LOCAL") @map("cost_center")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@index([fullName])
   @@map("employees")
 }
 
 model AttendanceRecord {
-  id         String   @id @default(uuid())
-  staffCode  String   @map("staff_code")
-  date       String   @map("swipe_date")  // 👈 FIX: Maps to swipe_date column
-  weekDay    String   @map("weekday")     // 👈 FIX: Maps to weekday column
-  time       String   @map("swipe_time")  // 👈 FIX: Maps to swipe_time column
-  swipeType  String   @map("swipe_type")  // 👈 FIX: Maps to swipe_type column
-  createdAt  DateTime @default(now()) @map("created_at")
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  staffCode          String   @map("staff_code") @db.VarChar(50)
+  date               DateTime @map("swipe_date") @db.Date
+  weekDay            String   @map("weekday") @db.VarChar(20)
+  time               DateTime @map("swipe_time") @db.Time(6)
+  swipeType          String   @map("swipe_type") @db.VarChar(50)
+  is_manual_override Boolean? @default(false)
+  adjusted_by        String?  @db.VarChar(255)
+  change_reason      String?
+  createdAt          DateTime @default(dbgenerated("timezone('utc'::text, now())")) @map("created_at") @db.Timestamptz(6)
+  updated_at         DateTime @default(dbgenerated("timezone('utc'::text, now())")) @db.Timestamptz(6)
 
-  // Relational Integrity Constraint Mapping
-  employee   Employee @relation(fields: [staffCode], references: [staffCode], onDelete: Cascade)
-
-  @@index([staffCode])
-  @@index([date])
+  @@unique([staffCode, date, time, swipeType], map: "idx_uniq_attendance_punch")
+  @@index([staffCode, date], map: "idx_attendance_lookup")
   @@map("attendance_records")
 }
 
@@ -47,4 +58,12 @@ model User {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("users")
+}
+
+enum AppRoleTier {
+  operator
+  manager
+  admin
+
+  @@map("app_role_tier")
 }

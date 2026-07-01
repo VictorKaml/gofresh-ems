@@ -14,6 +14,11 @@ export type PrismaPromise<T> = $Public.PrismaPromise<T>
 
 
 /**
+ * Model SystemUser
+ * 
+ */
+export type SystemUser = $Result.DefaultSelection<Prisma.$SystemUserPayload>
+/**
  * Model Employee
  * 
  */
@@ -30,6 +35,24 @@ export type AttendanceRecord = $Result.DefaultSelection<Prisma.$AttendanceRecord
 export type User = $Result.DefaultSelection<Prisma.$UserPayload>
 
 /**
+ * Enums
+ */
+export namespace $Enums {
+  export const AppRoleTier: {
+  operator: 'operator',
+  manager: 'manager',
+  admin: 'admin'
+};
+
+export type AppRoleTier = (typeof AppRoleTier)[keyof typeof AppRoleTier]
+
+}
+
+export type AppRoleTier = $Enums.AppRoleTier
+
+export const AppRoleTier: typeof $Enums.AppRoleTier
+
+/**
  * ##  Prisma Client ʲˢ
  *
  * Type-safe database client for TypeScript & Node.js
@@ -38,8 +61,8 @@ export type User = $Result.DefaultSelection<Prisma.$UserPayload>
  * const prisma = new PrismaClient({
  *   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL })
  * })
- * // Fetch zero or more Employees
- * const employees = await prisma.employee.findMany()
+ * // Fetch zero or more SystemUsers
+ * const systemUsers = await prisma.systemUser.findMany()
  * ```
  *
  *
@@ -61,8 +84,8 @@ export class PrismaClient<
    * const prisma = new PrismaClient({
    *   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL })
    * })
-   * // Fetch zero or more Employees
-   * const employees = await prisma.employee.findMany()
+   * // Fetch zero or more SystemUsers
+   * const systemUsers = await prisma.systemUser.findMany()
    * ```
    *
    *
@@ -151,6 +174,16 @@ export class PrismaClient<
   }>>
 
       /**
+   * `prisma.systemUser`: Exposes CRUD operations for the **SystemUser** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more SystemUsers
+    * const systemUsers = await prisma.systemUser.findMany()
+    * ```
+    */
+  get systemUser(): Prisma.SystemUserDelegate<ExtArgs, ClientOptions>;
+
+  /**
    * `prisma.employee`: Exposes CRUD operations for the **Employee** model.
     * Example usage:
     * ```ts
@@ -613,6 +646,7 @@ export namespace Prisma {
 
 
   export const ModelName: {
+    SystemUser: 'SystemUser',
     Employee: 'Employee',
     AttendanceRecord: 'AttendanceRecord',
     User: 'User'
@@ -631,10 +665,84 @@ export namespace Prisma {
       omit: GlobalOmitOptions
     }
     meta: {
-      modelProps: "employee" | "attendanceRecord" | "user"
+      modelProps: "systemUser" | "employee" | "attendanceRecord" | "user"
       txIsolationLevel: Prisma.TransactionIsolationLevel
     }
     model: {
+      SystemUser: {
+        payload: Prisma.$SystemUserPayload<ExtArgs>
+        fields: Prisma.SystemUserFieldRefs
+        operations: {
+          findUnique: {
+            args: Prisma.SystemUserFindUniqueArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$SystemUserPayload> | null
+          }
+          findUniqueOrThrow: {
+            args: Prisma.SystemUserFindUniqueOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$SystemUserPayload>
+          }
+          findFirst: {
+            args: Prisma.SystemUserFindFirstArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$SystemUserPayload> | null
+          }
+          findFirstOrThrow: {
+            args: Prisma.SystemUserFindFirstOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$SystemUserPayload>
+          }
+          findMany: {
+            args: Prisma.SystemUserFindManyArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$SystemUserPayload>[]
+          }
+          create: {
+            args: Prisma.SystemUserCreateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$SystemUserPayload>
+          }
+          createMany: {
+            args: Prisma.SystemUserCreateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          createManyAndReturn: {
+            args: Prisma.SystemUserCreateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$SystemUserPayload>[]
+          }
+          delete: {
+            args: Prisma.SystemUserDeleteArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$SystemUserPayload>
+          }
+          update: {
+            args: Prisma.SystemUserUpdateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$SystemUserPayload>
+          }
+          deleteMany: {
+            args: Prisma.SystemUserDeleteManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateMany: {
+            args: Prisma.SystemUserUpdateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateManyAndReturn: {
+            args: Prisma.SystemUserUpdateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$SystemUserPayload>[]
+          }
+          upsert: {
+            args: Prisma.SystemUserUpsertArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$SystemUserPayload>
+          }
+          aggregate: {
+            args: Prisma.SystemUserAggregateArgs<ExtArgs>
+            result: $Utils.Optional<AggregateSystemUser>
+          }
+          groupBy: {
+            args: Prisma.SystemUserGroupByArgs<ExtArgs>
+            result: $Utils.Optional<SystemUserGroupByOutputType>[]
+          }
+          count: {
+            args: Prisma.SystemUserCountArgs<ExtArgs>
+            result: $Utils.Optional<SystemUserCountAggregateOutputType> | number
+          }
+        }
+      }
       Employee: {
         payload: Prisma.$EmployeePayload<ExtArgs>
         fields: Prisma.EmployeeFieldRefs
@@ -965,6 +1073,7 @@ export namespace Prisma {
     comments?: runtime.SqlCommenterPlugin[]
   }
   export type GlobalOmitConfig = {
+    systemUser?: SystemUserOmit
     employee?: EmployeeOmit
     attendanceRecord?: AttendanceRecordOmit
     user?: UserOmit
@@ -1043,40 +1152,1049 @@ export namespace Prisma {
    */
 
 
-  /**
-   * Count Type EmployeeCountOutputType
-   */
-
-  export type EmployeeCountOutputType = {
-    attendance: number
-  }
-
-  export type EmployeeCountOutputTypeSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    attendance?: boolean | EmployeeCountOutputTypeCountAttendanceArgs
-  }
-
-  // Custom InputTypes
-  /**
-   * EmployeeCountOutputType without action
-   */
-  export type EmployeeCountOutputTypeDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    /**
-     * Select specific fields to fetch from the EmployeeCountOutputType
-     */
-    select?: EmployeeCountOutputTypeSelect<ExtArgs> | null
-  }
-
-  /**
-   * EmployeeCountOutputType without action
-   */
-  export type EmployeeCountOutputTypeCountAttendanceArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    where?: AttendanceRecordWhereInput
-  }
-
 
   /**
    * Models
    */
+
+  /**
+   * Model SystemUser
+   */
+
+  export type AggregateSystemUser = {
+    _count: SystemUserCountAggregateOutputType | null
+    _min: SystemUserMinAggregateOutputType | null
+    _max: SystemUserMaxAggregateOutputType | null
+  }
+
+  export type SystemUserMinAggregateOutputType = {
+    id: string | null
+    email: string | null
+    passwordHash: string | null
+    roleTier: $Enums.AppRoleTier | null
+    isSuperuser: boolean | null
+    canIngestChrono: boolean | null
+    canModifyRoster: boolean | null
+    createdAt: Date | null
+  }
+
+  export type SystemUserMaxAggregateOutputType = {
+    id: string | null
+    email: string | null
+    passwordHash: string | null
+    roleTier: $Enums.AppRoleTier | null
+    isSuperuser: boolean | null
+    canIngestChrono: boolean | null
+    canModifyRoster: boolean | null
+    createdAt: Date | null
+  }
+
+  export type SystemUserCountAggregateOutputType = {
+    id: number
+    email: number
+    passwordHash: number
+    roleTier: number
+    isSuperuser: number
+    canIngestChrono: number
+    canModifyRoster: number
+    createdAt: number
+    _all: number
+  }
+
+
+  export type SystemUserMinAggregateInputType = {
+    id?: true
+    email?: true
+    passwordHash?: true
+    roleTier?: true
+    isSuperuser?: true
+    canIngestChrono?: true
+    canModifyRoster?: true
+    createdAt?: true
+  }
+
+  export type SystemUserMaxAggregateInputType = {
+    id?: true
+    email?: true
+    passwordHash?: true
+    roleTier?: true
+    isSuperuser?: true
+    canIngestChrono?: true
+    canModifyRoster?: true
+    createdAt?: true
+  }
+
+  export type SystemUserCountAggregateInputType = {
+    id?: true
+    email?: true
+    passwordHash?: true
+    roleTier?: true
+    isSuperuser?: true
+    canIngestChrono?: true
+    canModifyRoster?: true
+    createdAt?: true
+    _all?: true
+  }
+
+  export type SystemUserAggregateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which SystemUser to aggregate.
+     */
+    where?: SystemUserWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of SystemUsers to fetch.
+     */
+    orderBy?: SystemUserOrderByWithRelationInput | SystemUserOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the start position
+     */
+    cursor?: SystemUserWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` SystemUsers from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` SystemUsers.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Count returned SystemUsers
+    **/
+    _count?: true | SystemUserCountAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the minimum value
+    **/
+    _min?: SystemUserMinAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the maximum value
+    **/
+    _max?: SystemUserMaxAggregateInputType
+  }
+
+  export type GetSystemUserAggregateType<T extends SystemUserAggregateArgs> = {
+        [P in keyof T & keyof AggregateSystemUser]: P extends '_count' | 'count'
+      ? T[P] extends true
+        ? number
+        : GetScalarType<T[P], AggregateSystemUser[P]>
+      : GetScalarType<T[P], AggregateSystemUser[P]>
+  }
+
+
+
+
+  export type SystemUserGroupByArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: SystemUserWhereInput
+    orderBy?: SystemUserOrderByWithAggregationInput | SystemUserOrderByWithAggregationInput[]
+    by: SystemUserScalarFieldEnum[] | SystemUserScalarFieldEnum
+    having?: SystemUserScalarWhereWithAggregatesInput
+    take?: number
+    skip?: number
+    _count?: SystemUserCountAggregateInputType | true
+    _min?: SystemUserMinAggregateInputType
+    _max?: SystemUserMaxAggregateInputType
+  }
+
+  export type SystemUserGroupByOutputType = {
+    id: string
+    email: string
+    passwordHash: string
+    roleTier: $Enums.AppRoleTier
+    isSuperuser: boolean
+    canIngestChrono: boolean
+    canModifyRoster: boolean
+    createdAt: Date
+    _count: SystemUserCountAggregateOutputType | null
+    _min: SystemUserMinAggregateOutputType | null
+    _max: SystemUserMaxAggregateOutputType | null
+  }
+
+  type GetSystemUserGroupByPayload<T extends SystemUserGroupByArgs> = Prisma.PrismaPromise<
+    Array<
+      PickEnumerable<SystemUserGroupByOutputType, T['by']> &
+        {
+          [P in ((keyof T) & (keyof SystemUserGroupByOutputType))]: P extends '_count'
+            ? T[P] extends boolean
+              ? number
+              : GetScalarType<T[P], SystemUserGroupByOutputType[P]>
+            : GetScalarType<T[P], SystemUserGroupByOutputType[P]>
+        }
+      >
+    >
+
+
+  export type SystemUserSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    email?: boolean
+    passwordHash?: boolean
+    roleTier?: boolean
+    isSuperuser?: boolean
+    canIngestChrono?: boolean
+    canModifyRoster?: boolean
+    createdAt?: boolean
+  }, ExtArgs["result"]["systemUser"]>
+
+  export type SystemUserSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    email?: boolean
+    passwordHash?: boolean
+    roleTier?: boolean
+    isSuperuser?: boolean
+    canIngestChrono?: boolean
+    canModifyRoster?: boolean
+    createdAt?: boolean
+  }, ExtArgs["result"]["systemUser"]>
+
+  export type SystemUserSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    email?: boolean
+    passwordHash?: boolean
+    roleTier?: boolean
+    isSuperuser?: boolean
+    canIngestChrono?: boolean
+    canModifyRoster?: boolean
+    createdAt?: boolean
+  }, ExtArgs["result"]["systemUser"]>
+
+  export type SystemUserSelectScalar = {
+    id?: boolean
+    email?: boolean
+    passwordHash?: boolean
+    roleTier?: boolean
+    isSuperuser?: boolean
+    canIngestChrono?: boolean
+    canModifyRoster?: boolean
+    createdAt?: boolean
+  }
+
+  export type SystemUserOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "email" | "passwordHash" | "roleTier" | "isSuperuser" | "canIngestChrono" | "canModifyRoster" | "createdAt", ExtArgs["result"]["systemUser"]>
+
+  export type $SystemUserPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    name: "SystemUser"
+    objects: {}
+    scalars: $Extensions.GetPayloadResult<{
+      id: string
+      email: string
+      passwordHash: string
+      roleTier: $Enums.AppRoleTier
+      isSuperuser: boolean
+      canIngestChrono: boolean
+      canModifyRoster: boolean
+      createdAt: Date
+    }, ExtArgs["result"]["systemUser"]>
+    composites: {}
+  }
+
+  type SystemUserGetPayload<S extends boolean | null | undefined | SystemUserDefaultArgs> = $Result.GetResult<Prisma.$SystemUserPayload, S>
+
+  type SystemUserCountArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> =
+    Omit<SystemUserFindManyArgs, 'select' | 'include' | 'distinct' | 'omit'> & {
+      select?: SystemUserCountAggregateInputType | true
+    }
+
+  export interface SystemUserDelegate<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> {
+    [K: symbol]: { types: Prisma.TypeMap<ExtArgs>['model']['SystemUser'], meta: { name: 'SystemUser' } }
+    /**
+     * Find zero or one SystemUser that matches the filter.
+     * @param {SystemUserFindUniqueArgs} args - Arguments to find a SystemUser
+     * @example
+     * // Get one SystemUser
+     * const systemUser = await prisma.systemUser.findUnique({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUnique<T extends SystemUserFindUniqueArgs>(args: SelectSubset<T, SystemUserFindUniqueArgs<ExtArgs>>): Prisma__SystemUserClient<$Result.GetResult<Prisma.$SystemUserPayload<ExtArgs>, T, "findUnique", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find one SystemUser that matches the filter or throw an error with `error.code='P2025'`
+     * if no matches were found.
+     * @param {SystemUserFindUniqueOrThrowArgs} args - Arguments to find a SystemUser
+     * @example
+     * // Get one SystemUser
+     * const systemUser = await prisma.systemUser.findUniqueOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUniqueOrThrow<T extends SystemUserFindUniqueOrThrowArgs>(args: SelectSubset<T, SystemUserFindUniqueOrThrowArgs<ExtArgs>>): Prisma__SystemUserClient<$Result.GetResult<Prisma.$SystemUserPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first SystemUser that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {SystemUserFindFirstArgs} args - Arguments to find a SystemUser
+     * @example
+     * // Get one SystemUser
+     * const systemUser = await prisma.systemUser.findFirst({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirst<T extends SystemUserFindFirstArgs>(args?: SelectSubset<T, SystemUserFindFirstArgs<ExtArgs>>): Prisma__SystemUserClient<$Result.GetResult<Prisma.$SystemUserPayload<ExtArgs>, T, "findFirst", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first SystemUser that matches the filter or
+     * throw `PrismaKnownClientError` with `P2025` code if no matches were found.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {SystemUserFindFirstOrThrowArgs} args - Arguments to find a SystemUser
+     * @example
+     * // Get one SystemUser
+     * const systemUser = await prisma.systemUser.findFirstOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirstOrThrow<T extends SystemUserFindFirstOrThrowArgs>(args?: SelectSubset<T, SystemUserFindFirstOrThrowArgs<ExtArgs>>): Prisma__SystemUserClient<$Result.GetResult<Prisma.$SystemUserPayload<ExtArgs>, T, "findFirstOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find zero or more SystemUsers that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {SystemUserFindManyArgs} args - Arguments to filter and select certain fields only.
+     * @example
+     * // Get all SystemUsers
+     * const systemUsers = await prisma.systemUser.findMany()
+     * 
+     * // Get first 10 SystemUsers
+     * const systemUsers = await prisma.systemUser.findMany({ take: 10 })
+     * 
+     * // Only select the `id`
+     * const systemUserWithIdOnly = await prisma.systemUser.findMany({ select: { id: true } })
+     * 
+     */
+    findMany<T extends SystemUserFindManyArgs>(args?: SelectSubset<T, SystemUserFindManyArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$SystemUserPayload<ExtArgs>, T, "findMany", GlobalOmitOptions>>
+
+    /**
+     * Create a SystemUser.
+     * @param {SystemUserCreateArgs} args - Arguments to create a SystemUser.
+     * @example
+     * // Create one SystemUser
+     * const SystemUser = await prisma.systemUser.create({
+     *   data: {
+     *     // ... data to create a SystemUser
+     *   }
+     * })
+     * 
+     */
+    create<T extends SystemUserCreateArgs>(args: SelectSubset<T, SystemUserCreateArgs<ExtArgs>>): Prisma__SystemUserClient<$Result.GetResult<Prisma.$SystemUserPayload<ExtArgs>, T, "create", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Create many SystemUsers.
+     * @param {SystemUserCreateManyArgs} args - Arguments to create many SystemUsers.
+     * @example
+     * // Create many SystemUsers
+     * const systemUser = await prisma.systemUser.createMany({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     *     
+     */
+    createMany<T extends SystemUserCreateManyArgs>(args?: SelectSubset<T, SystemUserCreateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Create many SystemUsers and returns the data saved in the database.
+     * @param {SystemUserCreateManyAndReturnArgs} args - Arguments to create many SystemUsers.
+     * @example
+     * // Create many SystemUsers
+     * const systemUser = await prisma.systemUser.createManyAndReturn({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Create many SystemUsers and only return the `id`
+     * const systemUserWithIdOnly = await prisma.systemUser.createManyAndReturn({
+     *   select: { id: true },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    createManyAndReturn<T extends SystemUserCreateManyAndReturnArgs>(args?: SelectSubset<T, SystemUserCreateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$SystemUserPayload<ExtArgs>, T, "createManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Delete a SystemUser.
+     * @param {SystemUserDeleteArgs} args - Arguments to delete one SystemUser.
+     * @example
+     * // Delete one SystemUser
+     * const SystemUser = await prisma.systemUser.delete({
+     *   where: {
+     *     // ... filter to delete one SystemUser
+     *   }
+     * })
+     * 
+     */
+    delete<T extends SystemUserDeleteArgs>(args: SelectSubset<T, SystemUserDeleteArgs<ExtArgs>>): Prisma__SystemUserClient<$Result.GetResult<Prisma.$SystemUserPayload<ExtArgs>, T, "delete", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Update one SystemUser.
+     * @param {SystemUserUpdateArgs} args - Arguments to update one SystemUser.
+     * @example
+     * // Update one SystemUser
+     * const systemUser = await prisma.systemUser.update({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    update<T extends SystemUserUpdateArgs>(args: SelectSubset<T, SystemUserUpdateArgs<ExtArgs>>): Prisma__SystemUserClient<$Result.GetResult<Prisma.$SystemUserPayload<ExtArgs>, T, "update", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Delete zero or more SystemUsers.
+     * @param {SystemUserDeleteManyArgs} args - Arguments to filter SystemUsers to delete.
+     * @example
+     * // Delete a few SystemUsers
+     * const { count } = await prisma.systemUser.deleteMany({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     * 
+     */
+    deleteMany<T extends SystemUserDeleteManyArgs>(args?: SelectSubset<T, SystemUserDeleteManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more SystemUsers.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {SystemUserUpdateManyArgs} args - Arguments to update one or more rows.
+     * @example
+     * // Update many SystemUsers
+     * const systemUser = await prisma.systemUser.updateMany({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    updateMany<T extends SystemUserUpdateManyArgs>(args: SelectSubset<T, SystemUserUpdateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more SystemUsers and returns the data updated in the database.
+     * @param {SystemUserUpdateManyAndReturnArgs} args - Arguments to update many SystemUsers.
+     * @example
+     * // Update many SystemUsers
+     * const systemUser = await prisma.systemUser.updateManyAndReturn({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Update zero or more SystemUsers and only return the `id`
+     * const systemUserWithIdOnly = await prisma.systemUser.updateManyAndReturn({
+     *   select: { id: true },
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    updateManyAndReturn<T extends SystemUserUpdateManyAndReturnArgs>(args: SelectSubset<T, SystemUserUpdateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$SystemUserPayload<ExtArgs>, T, "updateManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Create or update one SystemUser.
+     * @param {SystemUserUpsertArgs} args - Arguments to update or create a SystemUser.
+     * @example
+     * // Update or create a SystemUser
+     * const systemUser = await prisma.systemUser.upsert({
+     *   create: {
+     *     // ... data to create a SystemUser
+     *   },
+     *   update: {
+     *     // ... in case it already exists, update
+     *   },
+     *   where: {
+     *     // ... the filter for the SystemUser we want to update
+     *   }
+     * })
+     */
+    upsert<T extends SystemUserUpsertArgs>(args: SelectSubset<T, SystemUserUpsertArgs<ExtArgs>>): Prisma__SystemUserClient<$Result.GetResult<Prisma.$SystemUserPayload<ExtArgs>, T, "upsert", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+
+    /**
+     * Count the number of SystemUsers.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {SystemUserCountArgs} args - Arguments to filter SystemUsers to count.
+     * @example
+     * // Count the number of SystemUsers
+     * const count = await prisma.systemUser.count({
+     *   where: {
+     *     // ... the filter for the SystemUsers we want to count
+     *   }
+     * })
+    **/
+    count<T extends SystemUserCountArgs>(
+      args?: Subset<T, SystemUserCountArgs>,
+    ): Prisma.PrismaPromise<
+      T extends $Utils.Record<'select', any>
+        ? T['select'] extends true
+          ? number
+          : GetScalarType<T['select'], SystemUserCountAggregateOutputType>
+        : number
+    >
+
+    /**
+     * Allows you to perform aggregations operations on a SystemUser.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {SystemUserAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @example
+     * // Ordered by age ascending
+     * // Where email contains prisma.io
+     * // Limited to the 10 users
+     * const aggregations = await prisma.user.aggregate({
+     *   _avg: {
+     *     age: true,
+     *   },
+     *   where: {
+     *     email: {
+     *       contains: "prisma.io",
+     *     },
+     *   },
+     *   orderBy: {
+     *     age: "asc",
+     *   },
+     *   take: 10,
+     * })
+    **/
+    aggregate<T extends SystemUserAggregateArgs>(args: Subset<T, SystemUserAggregateArgs>): Prisma.PrismaPromise<GetSystemUserAggregateType<T>>
+
+    /**
+     * Group by SystemUser.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {SystemUserGroupByArgs} args - Group by arguments.
+     * @example
+     * // Group by city, order by createdAt, get count
+     * const result = await prisma.user.groupBy({
+     *   by: ['city', 'createdAt'],
+     *   orderBy: {
+     *     createdAt: true
+     *   },
+     *   _count: {
+     *     _all: true
+     *   },
+     * })
+     * 
+    **/
+    groupBy<
+      T extends SystemUserGroupByArgs,
+      HasSelectOrTake extends Or<
+        Extends<'skip', Keys<T>>,
+        Extends<'take', Keys<T>>
+      >,
+      OrderByArg extends True extends HasSelectOrTake
+        ? { orderBy: SystemUserGroupByArgs['orderBy'] }
+        : { orderBy?: SystemUserGroupByArgs['orderBy'] },
+      OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
+      ByFields extends MaybeTupleToUnion<T['by']>,
+      ByValid extends Has<ByFields, OrderFields>,
+      HavingFields extends GetHavingFields<T['having']>,
+      HavingValid extends Has<ByFields, HavingFields>,
+      ByEmpty extends T['by'] extends never[] ? True : False,
+      InputErrors extends ByEmpty extends True
+      ? `Error: "by" must not be empty.`
+      : HavingValid extends False
+      ? {
+          [P in HavingFields]: P extends ByFields
+            ? never
+            : P extends string
+            ? `Error: Field "${P}" used in "having" needs to be provided in "by".`
+            : [
+                Error,
+                'Field ',
+                P,
+                ` in "having" needs to be provided in "by"`,
+              ]
+        }[HavingFields]
+      : 'take' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "take", you also need to provide "orderBy"'
+      : 'skip' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "skip", you also need to provide "orderBy"'
+      : ByValid extends True
+      ? {}
+      : {
+          [P in OrderFields]: P extends ByFields
+            ? never
+            : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+        }[OrderFields]
+    >(args: SubsetIntersection<T, SystemUserGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetSystemUserGroupByPayload<T> : Prisma.PrismaPromise<InputErrors>
+  /**
+   * Fields of the SystemUser model
+   */
+  readonly fields: SystemUserFieldRefs;
+  }
+
+  /**
+   * The delegate class that acts as a "Promise-like" for SystemUser.
+   * Why is this prefixed with `Prisma__`?
+   * Because we want to prevent naming conflicts as mentioned in
+   * https://github.com/prisma/prisma-client-js/issues/707
+   */
+  export interface Prisma__SystemUserClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
+    readonly [Symbol.toStringTag]: "PrismaPromise"
+    /**
+     * Attaches callbacks for the resolution and/or rejection of the Promise.
+     * @param onfulfilled The callback to execute when the Promise is resolved.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of which ever callback is executed.
+     */
+    then<TResult1 = T, TResult2 = never>(onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null): $Utils.JsPromise<TResult1 | TResult2>
+    /**
+     * Attaches a callback for only the rejection of the Promise.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of the callback.
+     */
+    catch<TResult = never>(onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null): $Utils.JsPromise<T | TResult>
+    /**
+     * Attaches a callback that is invoked when the Promise is settled (fulfilled or rejected). The
+     * resolved value cannot be modified from the callback.
+     * @param onfinally The callback to execute when the Promise is settled (fulfilled or rejected).
+     * @returns A Promise for the completion of the callback.
+     */
+    finally(onfinally?: (() => void) | undefined | null): $Utils.JsPromise<T>
+  }
+
+
+
+
+  /**
+   * Fields of the SystemUser model
+   */
+  interface SystemUserFieldRefs {
+    readonly id: FieldRef<"SystemUser", 'String'>
+    readonly email: FieldRef<"SystemUser", 'String'>
+    readonly passwordHash: FieldRef<"SystemUser", 'String'>
+    readonly roleTier: FieldRef<"SystemUser", 'AppRoleTier'>
+    readonly isSuperuser: FieldRef<"SystemUser", 'Boolean'>
+    readonly canIngestChrono: FieldRef<"SystemUser", 'Boolean'>
+    readonly canModifyRoster: FieldRef<"SystemUser", 'Boolean'>
+    readonly createdAt: FieldRef<"SystemUser", 'DateTime'>
+  }
+    
+
+  // Custom InputTypes
+  /**
+   * SystemUser findUnique
+   */
+  export type SystemUserFindUniqueArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the SystemUser
+     */
+    select?: SystemUserSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the SystemUser
+     */
+    omit?: SystemUserOmit<ExtArgs> | null
+    /**
+     * Filter, which SystemUser to fetch.
+     */
+    where: SystemUserWhereUniqueInput
+  }
+
+  /**
+   * SystemUser findUniqueOrThrow
+   */
+  export type SystemUserFindUniqueOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the SystemUser
+     */
+    select?: SystemUserSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the SystemUser
+     */
+    omit?: SystemUserOmit<ExtArgs> | null
+    /**
+     * Filter, which SystemUser to fetch.
+     */
+    where: SystemUserWhereUniqueInput
+  }
+
+  /**
+   * SystemUser findFirst
+   */
+  export type SystemUserFindFirstArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the SystemUser
+     */
+    select?: SystemUserSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the SystemUser
+     */
+    omit?: SystemUserOmit<ExtArgs> | null
+    /**
+     * Filter, which SystemUser to fetch.
+     */
+    where?: SystemUserWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of SystemUsers to fetch.
+     */
+    orderBy?: SystemUserOrderByWithRelationInput | SystemUserOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for SystemUsers.
+     */
+    cursor?: SystemUserWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` SystemUsers from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` SystemUsers.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of SystemUsers.
+     */
+    distinct?: SystemUserScalarFieldEnum | SystemUserScalarFieldEnum[]
+  }
+
+  /**
+   * SystemUser findFirstOrThrow
+   */
+  export type SystemUserFindFirstOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the SystemUser
+     */
+    select?: SystemUserSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the SystemUser
+     */
+    omit?: SystemUserOmit<ExtArgs> | null
+    /**
+     * Filter, which SystemUser to fetch.
+     */
+    where?: SystemUserWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of SystemUsers to fetch.
+     */
+    orderBy?: SystemUserOrderByWithRelationInput | SystemUserOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for SystemUsers.
+     */
+    cursor?: SystemUserWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` SystemUsers from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` SystemUsers.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of SystemUsers.
+     */
+    distinct?: SystemUserScalarFieldEnum | SystemUserScalarFieldEnum[]
+  }
+
+  /**
+   * SystemUser findMany
+   */
+  export type SystemUserFindManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the SystemUser
+     */
+    select?: SystemUserSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the SystemUser
+     */
+    omit?: SystemUserOmit<ExtArgs> | null
+    /**
+     * Filter, which SystemUsers to fetch.
+     */
+    where?: SystemUserWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of SystemUsers to fetch.
+     */
+    orderBy?: SystemUserOrderByWithRelationInput | SystemUserOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for listing SystemUsers.
+     */
+    cursor?: SystemUserWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` SystemUsers from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` SystemUsers.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of SystemUsers.
+     */
+    distinct?: SystemUserScalarFieldEnum | SystemUserScalarFieldEnum[]
+  }
+
+  /**
+   * SystemUser create
+   */
+  export type SystemUserCreateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the SystemUser
+     */
+    select?: SystemUserSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the SystemUser
+     */
+    omit?: SystemUserOmit<ExtArgs> | null
+    /**
+     * The data needed to create a SystemUser.
+     */
+    data: XOR<SystemUserCreateInput, SystemUserUncheckedCreateInput>
+  }
+
+  /**
+   * SystemUser createMany
+   */
+  export type SystemUserCreateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to create many SystemUsers.
+     */
+    data: SystemUserCreateManyInput | SystemUserCreateManyInput[]
+    skipDuplicates?: boolean
+  }
+
+  /**
+   * SystemUser createManyAndReturn
+   */
+  export type SystemUserCreateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the SystemUser
+     */
+    select?: SystemUserSelectCreateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the SystemUser
+     */
+    omit?: SystemUserOmit<ExtArgs> | null
+    /**
+     * The data used to create many SystemUsers.
+     */
+    data: SystemUserCreateManyInput | SystemUserCreateManyInput[]
+    skipDuplicates?: boolean
+  }
+
+  /**
+   * SystemUser update
+   */
+  export type SystemUserUpdateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the SystemUser
+     */
+    select?: SystemUserSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the SystemUser
+     */
+    omit?: SystemUserOmit<ExtArgs> | null
+    /**
+     * The data needed to update a SystemUser.
+     */
+    data: XOR<SystemUserUpdateInput, SystemUserUncheckedUpdateInput>
+    /**
+     * Choose, which SystemUser to update.
+     */
+    where: SystemUserWhereUniqueInput
+  }
+
+  /**
+   * SystemUser updateMany
+   */
+  export type SystemUserUpdateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to update SystemUsers.
+     */
+    data: XOR<SystemUserUpdateManyMutationInput, SystemUserUncheckedUpdateManyInput>
+    /**
+     * Filter which SystemUsers to update
+     */
+    where?: SystemUserWhereInput
+    /**
+     * Limit how many SystemUsers to update.
+     */
+    limit?: number
+  }
+
+  /**
+   * SystemUser updateManyAndReturn
+   */
+  export type SystemUserUpdateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the SystemUser
+     */
+    select?: SystemUserSelectUpdateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the SystemUser
+     */
+    omit?: SystemUserOmit<ExtArgs> | null
+    /**
+     * The data used to update SystemUsers.
+     */
+    data: XOR<SystemUserUpdateManyMutationInput, SystemUserUncheckedUpdateManyInput>
+    /**
+     * Filter which SystemUsers to update
+     */
+    where?: SystemUserWhereInput
+    /**
+     * Limit how many SystemUsers to update.
+     */
+    limit?: number
+  }
+
+  /**
+   * SystemUser upsert
+   */
+  export type SystemUserUpsertArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the SystemUser
+     */
+    select?: SystemUserSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the SystemUser
+     */
+    omit?: SystemUserOmit<ExtArgs> | null
+    /**
+     * The filter to search for the SystemUser to update in case it exists.
+     */
+    where: SystemUserWhereUniqueInput
+    /**
+     * In case the SystemUser found by the `where` argument doesn't exist, create a new SystemUser with this data.
+     */
+    create: XOR<SystemUserCreateInput, SystemUserUncheckedCreateInput>
+    /**
+     * In case the SystemUser was found with the provided `where` argument, update it with this data.
+     */
+    update: XOR<SystemUserUpdateInput, SystemUserUncheckedUpdateInput>
+  }
+
+  /**
+   * SystemUser delete
+   */
+  export type SystemUserDeleteArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the SystemUser
+     */
+    select?: SystemUserSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the SystemUser
+     */
+    omit?: SystemUserOmit<ExtArgs> | null
+    /**
+     * Filter which SystemUser to delete.
+     */
+    where: SystemUserWhereUniqueInput
+  }
+
+  /**
+   * SystemUser deleteMany
+   */
+  export type SystemUserDeleteManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which SystemUsers to delete
+     */
+    where?: SystemUserWhereInput
+    /**
+     * Limit how many SystemUsers to delete.
+     */
+    limit?: number
+  }
+
+  /**
+   * SystemUser without action
+   */
+  export type SystemUserDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the SystemUser
+     */
+    select?: SystemUserSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the SystemUser
+     */
+    omit?: SystemUserOmit<ExtArgs> | null
+  }
+
 
   /**
    * Model Employee
@@ -1258,8 +2376,6 @@ export namespace Prisma {
     costCenter?: boolean
     createdAt?: boolean
     updatedAt?: boolean
-    attendance?: boolean | Employee$attendanceArgs<ExtArgs>
-    _count?: boolean | EmployeeCountOutputTypeDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["employee"]>
 
   export type EmployeeSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -1293,18 +2409,10 @@ export namespace Prisma {
   }
 
   export type EmployeeOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"staffCode" | "fullName" | "designation" | "department" | "costCenter" | "createdAt" | "updatedAt", ExtArgs["result"]["employee"]>
-  export type EmployeeInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    attendance?: boolean | Employee$attendanceArgs<ExtArgs>
-    _count?: boolean | EmployeeCountOutputTypeDefaultArgs<ExtArgs>
-  }
-  export type EmployeeIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {}
-  export type EmployeeIncludeUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {}
 
   export type $EmployeePayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "Employee"
-    objects: {
-      attendance: Prisma.$AttendanceRecordPayload<ExtArgs>[]
-    }
+    objects: {}
     scalars: $Extensions.GetPayloadResult<{
       staffCode: string
       fullName: string
@@ -1707,7 +2815,6 @@ export namespace Prisma {
    */
   export interface Prisma__EmployeeClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
     readonly [Symbol.toStringTag]: "PrismaPromise"
-    attendance<T extends Employee$attendanceArgs<ExtArgs> = {}>(args?: Subset<T, Employee$attendanceArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$AttendanceRecordPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     /**
      * Attaches callbacks for the resolution and/or rejection of the Promise.
      * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1761,10 +2868,6 @@ export namespace Prisma {
      */
     omit?: EmployeeOmit<ExtArgs> | null
     /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: EmployeeInclude<ExtArgs> | null
-    /**
      * Filter, which Employee to fetch.
      */
     where: EmployeeWhereUniqueInput
@@ -1783,10 +2886,6 @@ export namespace Prisma {
      */
     omit?: EmployeeOmit<ExtArgs> | null
     /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: EmployeeInclude<ExtArgs> | null
-    /**
      * Filter, which Employee to fetch.
      */
     where: EmployeeWhereUniqueInput
@@ -1804,10 +2903,6 @@ export namespace Prisma {
      * Omit specific fields from the Employee
      */
     omit?: EmployeeOmit<ExtArgs> | null
-    /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: EmployeeInclude<ExtArgs> | null
     /**
      * Filter, which Employee to fetch.
      */
@@ -1857,10 +2952,6 @@ export namespace Prisma {
      */
     omit?: EmployeeOmit<ExtArgs> | null
     /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: EmployeeInclude<ExtArgs> | null
-    /**
      * Filter, which Employee to fetch.
      */
     where?: EmployeeWhereInput
@@ -1908,10 +2999,6 @@ export namespace Prisma {
      * Omit specific fields from the Employee
      */
     omit?: EmployeeOmit<ExtArgs> | null
-    /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: EmployeeInclude<ExtArgs> | null
     /**
      * Filter, which Employees to fetch.
      */
@@ -1961,10 +3048,6 @@ export namespace Prisma {
      */
     omit?: EmployeeOmit<ExtArgs> | null
     /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: EmployeeInclude<ExtArgs> | null
-    /**
      * The data needed to create a Employee.
      */
     data: XOR<EmployeeCreateInput, EmployeeUncheckedCreateInput>
@@ -2012,10 +3095,6 @@ export namespace Prisma {
      * Omit specific fields from the Employee
      */
     omit?: EmployeeOmit<ExtArgs> | null
-    /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: EmployeeInclude<ExtArgs> | null
     /**
      * The data needed to update a Employee.
      */
@@ -2083,10 +3162,6 @@ export namespace Prisma {
      */
     omit?: EmployeeOmit<ExtArgs> | null
     /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: EmployeeInclude<ExtArgs> | null
-    /**
      * The filter to search for the Employee to update in case it exists.
      */
     where: EmployeeWhereUniqueInput
@@ -2113,10 +3188,6 @@ export namespace Prisma {
      */
     omit?: EmployeeOmit<ExtArgs> | null
     /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: EmployeeInclude<ExtArgs> | null
-    /**
      * Filter which Employee to delete.
      */
     where: EmployeeWhereUniqueInput
@@ -2137,30 +3208,6 @@ export namespace Prisma {
   }
 
   /**
-   * Employee.attendance
-   */
-  export type Employee$attendanceArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    /**
-     * Select specific fields to fetch from the AttendanceRecord
-     */
-    select?: AttendanceRecordSelect<ExtArgs> | null
-    /**
-     * Omit specific fields from the AttendanceRecord
-     */
-    omit?: AttendanceRecordOmit<ExtArgs> | null
-    /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: AttendanceRecordInclude<ExtArgs> | null
-    where?: AttendanceRecordWhereInput
-    orderBy?: AttendanceRecordOrderByWithRelationInput | AttendanceRecordOrderByWithRelationInput[]
-    cursor?: AttendanceRecordWhereUniqueInput
-    take?: number
-    skip?: number
-    distinct?: AttendanceRecordScalarFieldEnum | AttendanceRecordScalarFieldEnum[]
-  }
-
-  /**
    * Employee without action
    */
   export type EmployeeDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
@@ -2172,10 +3219,6 @@ export namespace Prisma {
      * Omit specific fields from the Employee
      */
     omit?: EmployeeOmit<ExtArgs> | null
-    /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: EmployeeInclude<ExtArgs> | null
   }
 
 
@@ -2192,21 +3235,29 @@ export namespace Prisma {
   export type AttendanceRecordMinAggregateOutputType = {
     id: string | null
     staffCode: string | null
-    date: string | null
+    date: Date | null
     weekDay: string | null
-    time: string | null
+    time: Date | null
     swipeType: string | null
+    is_manual_override: boolean | null
+    adjusted_by: string | null
+    change_reason: string | null
     createdAt: Date | null
+    updated_at: Date | null
   }
 
   export type AttendanceRecordMaxAggregateOutputType = {
     id: string | null
     staffCode: string | null
-    date: string | null
+    date: Date | null
     weekDay: string | null
-    time: string | null
+    time: Date | null
     swipeType: string | null
+    is_manual_override: boolean | null
+    adjusted_by: string | null
+    change_reason: string | null
     createdAt: Date | null
+    updated_at: Date | null
   }
 
   export type AttendanceRecordCountAggregateOutputType = {
@@ -2216,7 +3267,11 @@ export namespace Prisma {
     weekDay: number
     time: number
     swipeType: number
+    is_manual_override: number
+    adjusted_by: number
+    change_reason: number
     createdAt: number
+    updated_at: number
     _all: number
   }
 
@@ -2228,7 +3283,11 @@ export namespace Prisma {
     weekDay?: true
     time?: true
     swipeType?: true
+    is_manual_override?: true
+    adjusted_by?: true
+    change_reason?: true
     createdAt?: true
+    updated_at?: true
   }
 
   export type AttendanceRecordMaxAggregateInputType = {
@@ -2238,7 +3297,11 @@ export namespace Prisma {
     weekDay?: true
     time?: true
     swipeType?: true
+    is_manual_override?: true
+    adjusted_by?: true
+    change_reason?: true
     createdAt?: true
+    updated_at?: true
   }
 
   export type AttendanceRecordCountAggregateInputType = {
@@ -2248,7 +3311,11 @@ export namespace Prisma {
     weekDay?: true
     time?: true
     swipeType?: true
+    is_manual_override?: true
+    adjusted_by?: true
+    change_reason?: true
     createdAt?: true
+    updated_at?: true
     _all?: true
   }
 
@@ -2327,11 +3394,15 @@ export namespace Prisma {
   export type AttendanceRecordGroupByOutputType = {
     id: string
     staffCode: string
-    date: string
+    date: Date
     weekDay: string
-    time: string
+    time: Date
     swipeType: string
+    is_manual_override: boolean | null
+    adjusted_by: string | null
+    change_reason: string | null
     createdAt: Date
+    updated_at: Date
     _count: AttendanceRecordCountAggregateOutputType | null
     _min: AttendanceRecordMinAggregateOutputType | null
     _max: AttendanceRecordMaxAggregateOutputType | null
@@ -2358,8 +3429,11 @@ export namespace Prisma {
     weekDay?: boolean
     time?: boolean
     swipeType?: boolean
+    is_manual_override?: boolean
+    adjusted_by?: boolean
+    change_reason?: boolean
     createdAt?: boolean
-    employee?: boolean | EmployeeDefaultArgs<ExtArgs>
+    updated_at?: boolean
   }, ExtArgs["result"]["attendanceRecord"]>
 
   export type AttendanceRecordSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -2369,8 +3443,11 @@ export namespace Prisma {
     weekDay?: boolean
     time?: boolean
     swipeType?: boolean
+    is_manual_override?: boolean
+    adjusted_by?: boolean
+    change_reason?: boolean
     createdAt?: boolean
-    employee?: boolean | EmployeeDefaultArgs<ExtArgs>
+    updated_at?: boolean
   }, ExtArgs["result"]["attendanceRecord"]>
 
   export type AttendanceRecordSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -2380,8 +3457,11 @@ export namespace Prisma {
     weekDay?: boolean
     time?: boolean
     swipeType?: boolean
+    is_manual_override?: boolean
+    adjusted_by?: boolean
+    change_reason?: boolean
     createdAt?: boolean
-    employee?: boolean | EmployeeDefaultArgs<ExtArgs>
+    updated_at?: boolean
   }, ExtArgs["result"]["attendanceRecord"]>
 
   export type AttendanceRecordSelectScalar = {
@@ -2391,33 +3471,30 @@ export namespace Prisma {
     weekDay?: boolean
     time?: boolean
     swipeType?: boolean
+    is_manual_override?: boolean
+    adjusted_by?: boolean
+    change_reason?: boolean
     createdAt?: boolean
+    updated_at?: boolean
   }
 
-  export type AttendanceRecordOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "staffCode" | "date" | "weekDay" | "time" | "swipeType" | "createdAt", ExtArgs["result"]["attendanceRecord"]>
-  export type AttendanceRecordInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    employee?: boolean | EmployeeDefaultArgs<ExtArgs>
-  }
-  export type AttendanceRecordIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    employee?: boolean | EmployeeDefaultArgs<ExtArgs>
-  }
-  export type AttendanceRecordIncludeUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    employee?: boolean | EmployeeDefaultArgs<ExtArgs>
-  }
+  export type AttendanceRecordOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "staffCode" | "date" | "weekDay" | "time" | "swipeType" | "is_manual_override" | "adjusted_by" | "change_reason" | "createdAt" | "updated_at", ExtArgs["result"]["attendanceRecord"]>
 
   export type $AttendanceRecordPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "AttendanceRecord"
-    objects: {
-      employee: Prisma.$EmployeePayload<ExtArgs>
-    }
+    objects: {}
     scalars: $Extensions.GetPayloadResult<{
       id: string
       staffCode: string
-      date: string
+      date: Date
       weekDay: string
-      time: string
+      time: Date
       swipeType: string
+      is_manual_override: boolean | null
+      adjusted_by: string | null
+      change_reason: string | null
       createdAt: Date
+      updated_at: Date
     }, ExtArgs["result"]["attendanceRecord"]>
     composites: {}
   }
@@ -2812,7 +3889,6 @@ export namespace Prisma {
    */
   export interface Prisma__AttendanceRecordClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
     readonly [Symbol.toStringTag]: "PrismaPromise"
-    employee<T extends EmployeeDefaultArgs<ExtArgs> = {}>(args?: Subset<T, EmployeeDefaultArgs<ExtArgs>>): Prisma__EmployeeClient<$Result.GetResult<Prisma.$EmployeePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
     /**
      * Attaches callbacks for the resolution and/or rejection of the Promise.
      * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -2844,11 +3920,15 @@ export namespace Prisma {
   interface AttendanceRecordFieldRefs {
     readonly id: FieldRef<"AttendanceRecord", 'String'>
     readonly staffCode: FieldRef<"AttendanceRecord", 'String'>
-    readonly date: FieldRef<"AttendanceRecord", 'String'>
+    readonly date: FieldRef<"AttendanceRecord", 'DateTime'>
     readonly weekDay: FieldRef<"AttendanceRecord", 'String'>
-    readonly time: FieldRef<"AttendanceRecord", 'String'>
+    readonly time: FieldRef<"AttendanceRecord", 'DateTime'>
     readonly swipeType: FieldRef<"AttendanceRecord", 'String'>
+    readonly is_manual_override: FieldRef<"AttendanceRecord", 'Boolean'>
+    readonly adjusted_by: FieldRef<"AttendanceRecord", 'String'>
+    readonly change_reason: FieldRef<"AttendanceRecord", 'String'>
     readonly createdAt: FieldRef<"AttendanceRecord", 'DateTime'>
+    readonly updated_at: FieldRef<"AttendanceRecord", 'DateTime'>
   }
     
 
@@ -2865,10 +3945,6 @@ export namespace Prisma {
      * Omit specific fields from the AttendanceRecord
      */
     omit?: AttendanceRecordOmit<ExtArgs> | null
-    /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: AttendanceRecordInclude<ExtArgs> | null
     /**
      * Filter, which AttendanceRecord to fetch.
      */
@@ -2888,10 +3964,6 @@ export namespace Prisma {
      */
     omit?: AttendanceRecordOmit<ExtArgs> | null
     /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: AttendanceRecordInclude<ExtArgs> | null
-    /**
      * Filter, which AttendanceRecord to fetch.
      */
     where: AttendanceRecordWhereUniqueInput
@@ -2909,10 +3981,6 @@ export namespace Prisma {
      * Omit specific fields from the AttendanceRecord
      */
     omit?: AttendanceRecordOmit<ExtArgs> | null
-    /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: AttendanceRecordInclude<ExtArgs> | null
     /**
      * Filter, which AttendanceRecord to fetch.
      */
@@ -2962,10 +4030,6 @@ export namespace Prisma {
      */
     omit?: AttendanceRecordOmit<ExtArgs> | null
     /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: AttendanceRecordInclude<ExtArgs> | null
-    /**
      * Filter, which AttendanceRecord to fetch.
      */
     where?: AttendanceRecordWhereInput
@@ -3013,10 +4077,6 @@ export namespace Prisma {
      * Omit specific fields from the AttendanceRecord
      */
     omit?: AttendanceRecordOmit<ExtArgs> | null
-    /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: AttendanceRecordInclude<ExtArgs> | null
     /**
      * Filter, which AttendanceRecords to fetch.
      */
@@ -3066,10 +4126,6 @@ export namespace Prisma {
      */
     omit?: AttendanceRecordOmit<ExtArgs> | null
     /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: AttendanceRecordInclude<ExtArgs> | null
-    /**
      * The data needed to create a AttendanceRecord.
      */
     data: XOR<AttendanceRecordCreateInput, AttendanceRecordUncheckedCreateInput>
@@ -3103,10 +4159,6 @@ export namespace Prisma {
      */
     data: AttendanceRecordCreateManyInput | AttendanceRecordCreateManyInput[]
     skipDuplicates?: boolean
-    /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: AttendanceRecordIncludeCreateManyAndReturn<ExtArgs> | null
   }
 
   /**
@@ -3121,10 +4173,6 @@ export namespace Prisma {
      * Omit specific fields from the AttendanceRecord
      */
     omit?: AttendanceRecordOmit<ExtArgs> | null
-    /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: AttendanceRecordInclude<ExtArgs> | null
     /**
      * The data needed to update a AttendanceRecord.
      */
@@ -3177,10 +4225,6 @@ export namespace Prisma {
      * Limit how many AttendanceRecords to update.
      */
     limit?: number
-    /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: AttendanceRecordIncludeUpdateManyAndReturn<ExtArgs> | null
   }
 
   /**
@@ -3195,10 +4239,6 @@ export namespace Prisma {
      * Omit specific fields from the AttendanceRecord
      */
     omit?: AttendanceRecordOmit<ExtArgs> | null
-    /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: AttendanceRecordInclude<ExtArgs> | null
     /**
      * The filter to search for the AttendanceRecord to update in case it exists.
      */
@@ -3225,10 +4265,6 @@ export namespace Prisma {
      * Omit specific fields from the AttendanceRecord
      */
     omit?: AttendanceRecordOmit<ExtArgs> | null
-    /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: AttendanceRecordInclude<ExtArgs> | null
     /**
      * Filter which AttendanceRecord to delete.
      */
@@ -3261,10 +4297,6 @@ export namespace Prisma {
      * Omit specific fields from the AttendanceRecord
      */
     omit?: AttendanceRecordOmit<ExtArgs> | null
-    /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: AttendanceRecordInclude<ExtArgs> | null
   }
 
 
@@ -4269,6 +5301,20 @@ export namespace Prisma {
   export type TransactionIsolationLevel = (typeof TransactionIsolationLevel)[keyof typeof TransactionIsolationLevel]
 
 
+  export const SystemUserScalarFieldEnum: {
+    id: 'id',
+    email: 'email',
+    passwordHash: 'passwordHash',
+    roleTier: 'roleTier',
+    isSuperuser: 'isSuperuser',
+    canIngestChrono: 'canIngestChrono',
+    canModifyRoster: 'canModifyRoster',
+    createdAt: 'createdAt'
+  };
+
+  export type SystemUserScalarFieldEnum = (typeof SystemUserScalarFieldEnum)[keyof typeof SystemUserScalarFieldEnum]
+
+
   export const EmployeeScalarFieldEnum: {
     staffCode: 'staffCode',
     fullName: 'fullName',
@@ -4289,7 +5335,11 @@ export namespace Prisma {
     weekDay: 'weekDay',
     time: 'time',
     swipeType: 'swipeType',
-    createdAt: 'createdAt'
+    is_manual_override: 'is_manual_override',
+    adjusted_by: 'adjusted_by',
+    change_reason: 'change_reason',
+    createdAt: 'createdAt',
+    updated_at: 'updated_at'
   };
 
   export type AttendanceRecordScalarFieldEnum = (typeof AttendanceRecordScalarFieldEnum)[keyof typeof AttendanceRecordScalarFieldEnum]
@@ -4321,6 +5371,14 @@ export namespace Prisma {
   export type QueryMode = (typeof QueryMode)[keyof typeof QueryMode]
 
 
+  export const NullsOrder: {
+    first: 'first',
+    last: 'last'
+  };
+
+  export type NullsOrder = (typeof NullsOrder)[keyof typeof NullsOrder]
+
+
   /**
    * Field references
    */
@@ -4337,6 +5395,27 @@ export namespace Prisma {
    * Reference to a field of type 'String[]'
    */
   export type ListStringFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'String[]'>
+    
+
+
+  /**
+   * Reference to a field of type 'AppRoleTier'
+   */
+  export type EnumAppRoleTierFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'AppRoleTier'>
+    
+
+
+  /**
+   * Reference to a field of type 'AppRoleTier[]'
+   */
+  export type ListEnumAppRoleTierFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'AppRoleTier[]'>
+    
+
+
+  /**
+   * Reference to a field of type 'Boolean'
+   */
+  export type BooleanFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Boolean'>
     
 
 
@@ -4371,6 +5450,73 @@ export namespace Prisma {
    */
 
 
+  export type SystemUserWhereInput = {
+    AND?: SystemUserWhereInput | SystemUserWhereInput[]
+    OR?: SystemUserWhereInput[]
+    NOT?: SystemUserWhereInput | SystemUserWhereInput[]
+    id?: UuidFilter<"SystemUser"> | string
+    email?: StringFilter<"SystemUser"> | string
+    passwordHash?: StringFilter<"SystemUser"> | string
+    roleTier?: EnumAppRoleTierFilter<"SystemUser"> | $Enums.AppRoleTier
+    isSuperuser?: BoolFilter<"SystemUser"> | boolean
+    canIngestChrono?: BoolFilter<"SystemUser"> | boolean
+    canModifyRoster?: BoolFilter<"SystemUser"> | boolean
+    createdAt?: DateTimeFilter<"SystemUser"> | Date | string
+  }
+
+  export type SystemUserOrderByWithRelationInput = {
+    id?: SortOrder
+    email?: SortOrder
+    passwordHash?: SortOrder
+    roleTier?: SortOrder
+    isSuperuser?: SortOrder
+    canIngestChrono?: SortOrder
+    canModifyRoster?: SortOrder
+    createdAt?: SortOrder
+  }
+
+  export type SystemUserWhereUniqueInput = Prisma.AtLeast<{
+    id?: string
+    email?: string
+    AND?: SystemUserWhereInput | SystemUserWhereInput[]
+    OR?: SystemUserWhereInput[]
+    NOT?: SystemUserWhereInput | SystemUserWhereInput[]
+    passwordHash?: StringFilter<"SystemUser"> | string
+    roleTier?: EnumAppRoleTierFilter<"SystemUser"> | $Enums.AppRoleTier
+    isSuperuser?: BoolFilter<"SystemUser"> | boolean
+    canIngestChrono?: BoolFilter<"SystemUser"> | boolean
+    canModifyRoster?: BoolFilter<"SystemUser"> | boolean
+    createdAt?: DateTimeFilter<"SystemUser"> | Date | string
+  }, "id" | "email">
+
+  export type SystemUserOrderByWithAggregationInput = {
+    id?: SortOrder
+    email?: SortOrder
+    passwordHash?: SortOrder
+    roleTier?: SortOrder
+    isSuperuser?: SortOrder
+    canIngestChrono?: SortOrder
+    canModifyRoster?: SortOrder
+    createdAt?: SortOrder
+    _count?: SystemUserCountOrderByAggregateInput
+    _max?: SystemUserMaxOrderByAggregateInput
+    _min?: SystemUserMinOrderByAggregateInput
+  }
+
+  export type SystemUserScalarWhereWithAggregatesInput = {
+    AND?: SystemUserScalarWhereWithAggregatesInput | SystemUserScalarWhereWithAggregatesInput[]
+    OR?: SystemUserScalarWhereWithAggregatesInput[]
+    NOT?: SystemUserScalarWhereWithAggregatesInput | SystemUserScalarWhereWithAggregatesInput[]
+    id?: UuidWithAggregatesFilter<"SystemUser"> | string
+    email?: StringWithAggregatesFilter<"SystemUser"> | string
+    passwordHash?: StringWithAggregatesFilter<"SystemUser"> | string
+    roleTier?: EnumAppRoleTierWithAggregatesFilter<"SystemUser"> | $Enums.AppRoleTier
+    isSuperuser?: BoolWithAggregatesFilter<"SystemUser"> | boolean
+    canIngestChrono?: BoolWithAggregatesFilter<"SystemUser"> | boolean
+    canModifyRoster?: BoolWithAggregatesFilter<"SystemUser"> | boolean
+    createdAt?: DateTimeWithAggregatesFilter<"SystemUser"> | Date | string
+  }
+
   export type EmployeeWhereInput = {
     AND?: EmployeeWhereInput | EmployeeWhereInput[]
     OR?: EmployeeWhereInput[]
@@ -4382,7 +5528,6 @@ export namespace Prisma {
     costCenter?: StringFilter<"Employee"> | string
     createdAt?: DateTimeFilter<"Employee"> | Date | string
     updatedAt?: DateTimeFilter<"Employee"> | Date | string
-    attendance?: AttendanceRecordListRelationFilter
   }
 
   export type EmployeeOrderByWithRelationInput = {
@@ -4393,7 +5538,6 @@ export namespace Prisma {
     costCenter?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
-    attendance?: AttendanceRecordOrderByRelationAggregateInput
   }
 
   export type EmployeeWhereUniqueInput = Prisma.AtLeast<{
@@ -4407,7 +5551,6 @@ export namespace Prisma {
     costCenter?: StringFilter<"Employee"> | string
     createdAt?: DateTimeFilter<"Employee"> | Date | string
     updatedAt?: DateTimeFilter<"Employee"> | Date | string
-    attendance?: AttendanceRecordListRelationFilter
   }, "staffCode">
 
   export type EmployeeOrderByWithAggregationInput = {
@@ -4440,14 +5583,17 @@ export namespace Prisma {
     AND?: AttendanceRecordWhereInput | AttendanceRecordWhereInput[]
     OR?: AttendanceRecordWhereInput[]
     NOT?: AttendanceRecordWhereInput | AttendanceRecordWhereInput[]
-    id?: StringFilter<"AttendanceRecord"> | string
+    id?: UuidFilter<"AttendanceRecord"> | string
     staffCode?: StringFilter<"AttendanceRecord"> | string
-    date?: StringFilter<"AttendanceRecord"> | string
+    date?: DateTimeFilter<"AttendanceRecord"> | Date | string
     weekDay?: StringFilter<"AttendanceRecord"> | string
-    time?: StringFilter<"AttendanceRecord"> | string
+    time?: DateTimeFilter<"AttendanceRecord"> | Date | string
     swipeType?: StringFilter<"AttendanceRecord"> | string
+    is_manual_override?: BoolNullableFilter<"AttendanceRecord"> | boolean | null
+    adjusted_by?: StringNullableFilter<"AttendanceRecord"> | string | null
+    change_reason?: StringNullableFilter<"AttendanceRecord"> | string | null
     createdAt?: DateTimeFilter<"AttendanceRecord"> | Date | string
-    employee?: XOR<EmployeeScalarRelationFilter, EmployeeWhereInput>
+    updated_at?: DateTimeFilter<"AttendanceRecord"> | Date | string
   }
 
   export type AttendanceRecordOrderByWithRelationInput = {
@@ -4457,23 +5603,30 @@ export namespace Prisma {
     weekDay?: SortOrder
     time?: SortOrder
     swipeType?: SortOrder
+    is_manual_override?: SortOrderInput | SortOrder
+    adjusted_by?: SortOrderInput | SortOrder
+    change_reason?: SortOrderInput | SortOrder
     createdAt?: SortOrder
-    employee?: EmployeeOrderByWithRelationInput
+    updated_at?: SortOrder
   }
 
   export type AttendanceRecordWhereUniqueInput = Prisma.AtLeast<{
     id?: string
+    staffCode_date_time_swipeType?: AttendanceRecordStaffCodeDateTimeSwipeTypeCompoundUniqueInput
     AND?: AttendanceRecordWhereInput | AttendanceRecordWhereInput[]
     OR?: AttendanceRecordWhereInput[]
     NOT?: AttendanceRecordWhereInput | AttendanceRecordWhereInput[]
     staffCode?: StringFilter<"AttendanceRecord"> | string
-    date?: StringFilter<"AttendanceRecord"> | string
+    date?: DateTimeFilter<"AttendanceRecord"> | Date | string
     weekDay?: StringFilter<"AttendanceRecord"> | string
-    time?: StringFilter<"AttendanceRecord"> | string
+    time?: DateTimeFilter<"AttendanceRecord"> | Date | string
     swipeType?: StringFilter<"AttendanceRecord"> | string
+    is_manual_override?: BoolNullableFilter<"AttendanceRecord"> | boolean | null
+    adjusted_by?: StringNullableFilter<"AttendanceRecord"> | string | null
+    change_reason?: StringNullableFilter<"AttendanceRecord"> | string | null
     createdAt?: DateTimeFilter<"AttendanceRecord"> | Date | string
-    employee?: XOR<EmployeeScalarRelationFilter, EmployeeWhereInput>
-  }, "id">
+    updated_at?: DateTimeFilter<"AttendanceRecord"> | Date | string
+  }, "id" | "staffCode_date_time_swipeType">
 
   export type AttendanceRecordOrderByWithAggregationInput = {
     id?: SortOrder
@@ -4482,7 +5635,11 @@ export namespace Prisma {
     weekDay?: SortOrder
     time?: SortOrder
     swipeType?: SortOrder
+    is_manual_override?: SortOrderInput | SortOrder
+    adjusted_by?: SortOrderInput | SortOrder
+    change_reason?: SortOrderInput | SortOrder
     createdAt?: SortOrder
+    updated_at?: SortOrder
     _count?: AttendanceRecordCountOrderByAggregateInput
     _max?: AttendanceRecordMaxOrderByAggregateInput
     _min?: AttendanceRecordMinOrderByAggregateInput
@@ -4492,13 +5649,17 @@ export namespace Prisma {
     AND?: AttendanceRecordScalarWhereWithAggregatesInput | AttendanceRecordScalarWhereWithAggregatesInput[]
     OR?: AttendanceRecordScalarWhereWithAggregatesInput[]
     NOT?: AttendanceRecordScalarWhereWithAggregatesInput | AttendanceRecordScalarWhereWithAggregatesInput[]
-    id?: StringWithAggregatesFilter<"AttendanceRecord"> | string
+    id?: UuidWithAggregatesFilter<"AttendanceRecord"> | string
     staffCode?: StringWithAggregatesFilter<"AttendanceRecord"> | string
-    date?: StringWithAggregatesFilter<"AttendanceRecord"> | string
+    date?: DateTimeWithAggregatesFilter<"AttendanceRecord"> | Date | string
     weekDay?: StringWithAggregatesFilter<"AttendanceRecord"> | string
-    time?: StringWithAggregatesFilter<"AttendanceRecord"> | string
+    time?: DateTimeWithAggregatesFilter<"AttendanceRecord"> | Date | string
     swipeType?: StringWithAggregatesFilter<"AttendanceRecord"> | string
+    is_manual_override?: BoolNullableWithAggregatesFilter<"AttendanceRecord"> | boolean | null
+    adjusted_by?: StringNullableWithAggregatesFilter<"AttendanceRecord"> | string | null
+    change_reason?: StringNullableWithAggregatesFilter<"AttendanceRecord"> | string | null
     createdAt?: DateTimeWithAggregatesFilter<"AttendanceRecord"> | Date | string
+    updated_at?: DateTimeWithAggregatesFilter<"AttendanceRecord"> | Date | string
   }
 
   export type UserWhereInput = {
@@ -4548,6 +5709,83 @@ export namespace Prisma {
     createdAt?: DateTimeWithAggregatesFilter<"User"> | Date | string
   }
 
+  export type SystemUserCreateInput = {
+    id?: string
+    email: string
+    passwordHash: string
+    roleTier?: $Enums.AppRoleTier
+    isSuperuser?: boolean
+    canIngestChrono?: boolean
+    canModifyRoster?: boolean
+    createdAt?: Date | string
+  }
+
+  export type SystemUserUncheckedCreateInput = {
+    id?: string
+    email: string
+    passwordHash: string
+    roleTier?: $Enums.AppRoleTier
+    isSuperuser?: boolean
+    canIngestChrono?: boolean
+    canModifyRoster?: boolean
+    createdAt?: Date | string
+  }
+
+  export type SystemUserUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    email?: StringFieldUpdateOperationsInput | string
+    passwordHash?: StringFieldUpdateOperationsInput | string
+    roleTier?: EnumAppRoleTierFieldUpdateOperationsInput | $Enums.AppRoleTier
+    isSuperuser?: BoolFieldUpdateOperationsInput | boolean
+    canIngestChrono?: BoolFieldUpdateOperationsInput | boolean
+    canModifyRoster?: BoolFieldUpdateOperationsInput | boolean
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type SystemUserUncheckedUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    email?: StringFieldUpdateOperationsInput | string
+    passwordHash?: StringFieldUpdateOperationsInput | string
+    roleTier?: EnumAppRoleTierFieldUpdateOperationsInput | $Enums.AppRoleTier
+    isSuperuser?: BoolFieldUpdateOperationsInput | boolean
+    canIngestChrono?: BoolFieldUpdateOperationsInput | boolean
+    canModifyRoster?: BoolFieldUpdateOperationsInput | boolean
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type SystemUserCreateManyInput = {
+    id?: string
+    email: string
+    passwordHash: string
+    roleTier?: $Enums.AppRoleTier
+    isSuperuser?: boolean
+    canIngestChrono?: boolean
+    canModifyRoster?: boolean
+    createdAt?: Date | string
+  }
+
+  export type SystemUserUpdateManyMutationInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    email?: StringFieldUpdateOperationsInput | string
+    passwordHash?: StringFieldUpdateOperationsInput | string
+    roleTier?: EnumAppRoleTierFieldUpdateOperationsInput | $Enums.AppRoleTier
+    isSuperuser?: BoolFieldUpdateOperationsInput | boolean
+    canIngestChrono?: BoolFieldUpdateOperationsInput | boolean
+    canModifyRoster?: BoolFieldUpdateOperationsInput | boolean
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type SystemUserUncheckedUpdateManyInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    email?: StringFieldUpdateOperationsInput | string
+    passwordHash?: StringFieldUpdateOperationsInput | string
+    roleTier?: EnumAppRoleTierFieldUpdateOperationsInput | $Enums.AppRoleTier
+    isSuperuser?: BoolFieldUpdateOperationsInput | boolean
+    canIngestChrono?: BoolFieldUpdateOperationsInput | boolean
+    canModifyRoster?: BoolFieldUpdateOperationsInput | boolean
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
   export type EmployeeCreateInput = {
     staffCode: string
     fullName: string
@@ -4556,7 +5794,6 @@ export namespace Prisma {
     costCenter?: string
     createdAt?: Date | string
     updatedAt?: Date | string
-    attendance?: AttendanceRecordCreateNestedManyWithoutEmployeeInput
   }
 
   export type EmployeeUncheckedCreateInput = {
@@ -4567,7 +5804,6 @@ export namespace Prisma {
     costCenter?: string
     createdAt?: Date | string
     updatedAt?: Date | string
-    attendance?: AttendanceRecordUncheckedCreateNestedManyWithoutEmployeeInput
   }
 
   export type EmployeeUpdateInput = {
@@ -4578,7 +5814,6 @@ export namespace Prisma {
     costCenter?: StringFieldUpdateOperationsInput | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
-    attendance?: AttendanceRecordUpdateManyWithoutEmployeeNestedInput
   }
 
   export type EmployeeUncheckedUpdateInput = {
@@ -4589,7 +5824,6 @@ export namespace Prisma {
     costCenter?: StringFieldUpdateOperationsInput | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
-    attendance?: AttendanceRecordUncheckedUpdateManyWithoutEmployeeNestedInput
   }
 
   export type EmployeeCreateManyInput = {
@@ -4624,71 +5858,100 @@ export namespace Prisma {
 
   export type AttendanceRecordCreateInput = {
     id?: string
-    date: string
+    staffCode: string
+    date: Date | string
     weekDay: string
-    time: string
+    time: Date | string
     swipeType: string
+    is_manual_override?: boolean | null
+    adjusted_by?: string | null
+    change_reason?: string | null
     createdAt?: Date | string
-    employee: EmployeeCreateNestedOneWithoutAttendanceInput
+    updated_at?: Date | string
   }
 
   export type AttendanceRecordUncheckedCreateInput = {
     id?: string
     staffCode: string
-    date: string
+    date: Date | string
     weekDay: string
-    time: string
+    time: Date | string
     swipeType: string
+    is_manual_override?: boolean | null
+    adjusted_by?: string | null
+    change_reason?: string | null
     createdAt?: Date | string
+    updated_at?: Date | string
   }
 
   export type AttendanceRecordUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
-    date?: StringFieldUpdateOperationsInput | string
+    staffCode?: StringFieldUpdateOperationsInput | string
+    date?: DateTimeFieldUpdateOperationsInput | Date | string
     weekDay?: StringFieldUpdateOperationsInput | string
-    time?: StringFieldUpdateOperationsInput | string
+    time?: DateTimeFieldUpdateOperationsInput | Date | string
     swipeType?: StringFieldUpdateOperationsInput | string
+    is_manual_override?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    adjusted_by?: NullableStringFieldUpdateOperationsInput | string | null
+    change_reason?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
-    employee?: EmployeeUpdateOneRequiredWithoutAttendanceNestedInput
+    updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
   export type AttendanceRecordUncheckedUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
     staffCode?: StringFieldUpdateOperationsInput | string
-    date?: StringFieldUpdateOperationsInput | string
+    date?: DateTimeFieldUpdateOperationsInput | Date | string
     weekDay?: StringFieldUpdateOperationsInput | string
-    time?: StringFieldUpdateOperationsInput | string
+    time?: DateTimeFieldUpdateOperationsInput | Date | string
     swipeType?: StringFieldUpdateOperationsInput | string
+    is_manual_override?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    adjusted_by?: NullableStringFieldUpdateOperationsInput | string | null
+    change_reason?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
   export type AttendanceRecordCreateManyInput = {
     id?: string
     staffCode: string
-    date: string
+    date: Date | string
     weekDay: string
-    time: string
+    time: Date | string
     swipeType: string
+    is_manual_override?: boolean | null
+    adjusted_by?: string | null
+    change_reason?: string | null
     createdAt?: Date | string
+    updated_at?: Date | string
   }
 
   export type AttendanceRecordUpdateManyMutationInput = {
     id?: StringFieldUpdateOperationsInput | string
-    date?: StringFieldUpdateOperationsInput | string
+    staffCode?: StringFieldUpdateOperationsInput | string
+    date?: DateTimeFieldUpdateOperationsInput | Date | string
     weekDay?: StringFieldUpdateOperationsInput | string
-    time?: StringFieldUpdateOperationsInput | string
+    time?: DateTimeFieldUpdateOperationsInput | Date | string
     swipeType?: StringFieldUpdateOperationsInput | string
+    is_manual_override?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    adjusted_by?: NullableStringFieldUpdateOperationsInput | string | null
+    change_reason?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
   export type AttendanceRecordUncheckedUpdateManyInput = {
     id?: StringFieldUpdateOperationsInput | string
     staffCode?: StringFieldUpdateOperationsInput | string
-    date?: StringFieldUpdateOperationsInput | string
+    date?: DateTimeFieldUpdateOperationsInput | Date | string
     weekDay?: StringFieldUpdateOperationsInput | string
-    time?: StringFieldUpdateOperationsInput | string
+    time?: DateTimeFieldUpdateOperationsInput | Date | string
     swipeType?: StringFieldUpdateOperationsInput | string
+    is_manual_override?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    adjusted_by?: NullableStringFieldUpdateOperationsInput | string | null
+    change_reason?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
   export type UserCreateInput = {
@@ -4740,6 +6003,18 @@ export namespace Prisma {
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
+  export type UuidFilter<$PrismaModel = never> = {
+    equals?: string | StringFieldRefInput<$PrismaModel>
+    in?: string[] | ListStringFieldRefInput<$PrismaModel>
+    notIn?: string[] | ListStringFieldRefInput<$PrismaModel>
+    lt?: string | StringFieldRefInput<$PrismaModel>
+    lte?: string | StringFieldRefInput<$PrismaModel>
+    gt?: string | StringFieldRefInput<$PrismaModel>
+    gte?: string | StringFieldRefInput<$PrismaModel>
+    mode?: QueryMode
+    not?: NestedUuidFilter<$PrismaModel> | string
+  }
+
   export type StringFilter<$PrismaModel = never> = {
     equals?: string | StringFieldRefInput<$PrismaModel>
     in?: string[] | ListStringFieldRefInput<$PrismaModel>
@@ -4755,6 +6030,18 @@ export namespace Prisma {
     not?: NestedStringFilter<$PrismaModel> | string
   }
 
+  export type EnumAppRoleTierFilter<$PrismaModel = never> = {
+    equals?: $Enums.AppRoleTier | EnumAppRoleTierFieldRefInput<$PrismaModel>
+    in?: $Enums.AppRoleTier[] | ListEnumAppRoleTierFieldRefInput<$PrismaModel>
+    notIn?: $Enums.AppRoleTier[] | ListEnumAppRoleTierFieldRefInput<$PrismaModel>
+    not?: NestedEnumAppRoleTierFilter<$PrismaModel> | $Enums.AppRoleTier
+  }
+
+  export type BoolFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel>
+    not?: NestedBoolFilter<$PrismaModel> | boolean
+  }
+
   export type DateTimeFilter<$PrismaModel = never> = {
     equals?: Date | string | DateTimeFieldRefInput<$PrismaModel>
     in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
@@ -4766,14 +6053,102 @@ export namespace Prisma {
     not?: NestedDateTimeFilter<$PrismaModel> | Date | string
   }
 
-  export type AttendanceRecordListRelationFilter = {
-    every?: AttendanceRecordWhereInput
-    some?: AttendanceRecordWhereInput
-    none?: AttendanceRecordWhereInput
+  export type SystemUserCountOrderByAggregateInput = {
+    id?: SortOrder
+    email?: SortOrder
+    passwordHash?: SortOrder
+    roleTier?: SortOrder
+    isSuperuser?: SortOrder
+    canIngestChrono?: SortOrder
+    canModifyRoster?: SortOrder
+    createdAt?: SortOrder
   }
 
-  export type AttendanceRecordOrderByRelationAggregateInput = {
-    _count?: SortOrder
+  export type SystemUserMaxOrderByAggregateInput = {
+    id?: SortOrder
+    email?: SortOrder
+    passwordHash?: SortOrder
+    roleTier?: SortOrder
+    isSuperuser?: SortOrder
+    canIngestChrono?: SortOrder
+    canModifyRoster?: SortOrder
+    createdAt?: SortOrder
+  }
+
+  export type SystemUserMinOrderByAggregateInput = {
+    id?: SortOrder
+    email?: SortOrder
+    passwordHash?: SortOrder
+    roleTier?: SortOrder
+    isSuperuser?: SortOrder
+    canIngestChrono?: SortOrder
+    canModifyRoster?: SortOrder
+    createdAt?: SortOrder
+  }
+
+  export type UuidWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: string | StringFieldRefInput<$PrismaModel>
+    in?: string[] | ListStringFieldRefInput<$PrismaModel>
+    notIn?: string[] | ListStringFieldRefInput<$PrismaModel>
+    lt?: string | StringFieldRefInput<$PrismaModel>
+    lte?: string | StringFieldRefInput<$PrismaModel>
+    gt?: string | StringFieldRefInput<$PrismaModel>
+    gte?: string | StringFieldRefInput<$PrismaModel>
+    mode?: QueryMode
+    not?: NestedUuidWithAggregatesFilter<$PrismaModel> | string
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedStringFilter<$PrismaModel>
+    _max?: NestedStringFilter<$PrismaModel>
+  }
+
+  export type StringWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: string | StringFieldRefInput<$PrismaModel>
+    in?: string[] | ListStringFieldRefInput<$PrismaModel>
+    notIn?: string[] | ListStringFieldRefInput<$PrismaModel>
+    lt?: string | StringFieldRefInput<$PrismaModel>
+    lte?: string | StringFieldRefInput<$PrismaModel>
+    gt?: string | StringFieldRefInput<$PrismaModel>
+    gte?: string | StringFieldRefInput<$PrismaModel>
+    contains?: string | StringFieldRefInput<$PrismaModel>
+    startsWith?: string | StringFieldRefInput<$PrismaModel>
+    endsWith?: string | StringFieldRefInput<$PrismaModel>
+    mode?: QueryMode
+    not?: NestedStringWithAggregatesFilter<$PrismaModel> | string
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedStringFilter<$PrismaModel>
+    _max?: NestedStringFilter<$PrismaModel>
+  }
+
+  export type EnumAppRoleTierWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.AppRoleTier | EnumAppRoleTierFieldRefInput<$PrismaModel>
+    in?: $Enums.AppRoleTier[] | ListEnumAppRoleTierFieldRefInput<$PrismaModel>
+    notIn?: $Enums.AppRoleTier[] | ListEnumAppRoleTierFieldRefInput<$PrismaModel>
+    not?: NestedEnumAppRoleTierWithAggregatesFilter<$PrismaModel> | $Enums.AppRoleTier
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedEnumAppRoleTierFilter<$PrismaModel>
+    _max?: NestedEnumAppRoleTierFilter<$PrismaModel>
+  }
+
+  export type BoolWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel>
+    not?: NestedBoolWithAggregatesFilter<$PrismaModel> | boolean
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedBoolFilter<$PrismaModel>
+    _max?: NestedBoolFilter<$PrismaModel>
+  }
+
+  export type DateTimeWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
+    notIn?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
+    lt?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    lte?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    gt?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    gte?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    not?: NestedDateTimeWithAggregatesFilter<$PrismaModel> | Date | string
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedDateTimeFilter<$PrismaModel>
+    _max?: NestedDateTimeFilter<$PrismaModel>
   }
 
   export type EmployeeCountOrderByAggregateInput = {
@@ -4806,10 +6181,15 @@ export namespace Prisma {
     updatedAt?: SortOrder
   }
 
-  export type StringWithAggregatesFilter<$PrismaModel = never> = {
-    equals?: string | StringFieldRefInput<$PrismaModel>
-    in?: string[] | ListStringFieldRefInput<$PrismaModel>
-    notIn?: string[] | ListStringFieldRefInput<$PrismaModel>
+  export type BoolNullableFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel> | null
+    not?: NestedBoolNullableFilter<$PrismaModel> | boolean | null
+  }
+
+  export type StringNullableFilter<$PrismaModel = never> = {
+    equals?: string | StringFieldRefInput<$PrismaModel> | null
+    in?: string[] | ListStringFieldRefInput<$PrismaModel> | null
+    notIn?: string[] | ListStringFieldRefInput<$PrismaModel> | null
     lt?: string | StringFieldRefInput<$PrismaModel>
     lte?: string | StringFieldRefInput<$PrismaModel>
     gt?: string | StringFieldRefInput<$PrismaModel>
@@ -4818,29 +6198,19 @@ export namespace Prisma {
     startsWith?: string | StringFieldRefInput<$PrismaModel>
     endsWith?: string | StringFieldRefInput<$PrismaModel>
     mode?: QueryMode
-    not?: NestedStringWithAggregatesFilter<$PrismaModel> | string
-    _count?: NestedIntFilter<$PrismaModel>
-    _min?: NestedStringFilter<$PrismaModel>
-    _max?: NestedStringFilter<$PrismaModel>
+    not?: NestedStringNullableFilter<$PrismaModel> | string | null
   }
 
-  export type DateTimeWithAggregatesFilter<$PrismaModel = never> = {
-    equals?: Date | string | DateTimeFieldRefInput<$PrismaModel>
-    in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
-    notIn?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
-    lt?: Date | string | DateTimeFieldRefInput<$PrismaModel>
-    lte?: Date | string | DateTimeFieldRefInput<$PrismaModel>
-    gt?: Date | string | DateTimeFieldRefInput<$PrismaModel>
-    gte?: Date | string | DateTimeFieldRefInput<$PrismaModel>
-    not?: NestedDateTimeWithAggregatesFilter<$PrismaModel> | Date | string
-    _count?: NestedIntFilter<$PrismaModel>
-    _min?: NestedDateTimeFilter<$PrismaModel>
-    _max?: NestedDateTimeFilter<$PrismaModel>
+  export type SortOrderInput = {
+    sort: SortOrder
+    nulls?: NullsOrder
   }
 
-  export type EmployeeScalarRelationFilter = {
-    is?: EmployeeWhereInput
-    isNot?: EmployeeWhereInput
+  export type AttendanceRecordStaffCodeDateTimeSwipeTypeCompoundUniqueInput = {
+    staffCode: string
+    date: Date | string
+    time: Date | string
+    swipeType: string
   }
 
   export type AttendanceRecordCountOrderByAggregateInput = {
@@ -4850,7 +6220,11 @@ export namespace Prisma {
     weekDay?: SortOrder
     time?: SortOrder
     swipeType?: SortOrder
+    is_manual_override?: SortOrder
+    adjusted_by?: SortOrder
+    change_reason?: SortOrder
     createdAt?: SortOrder
+    updated_at?: SortOrder
   }
 
   export type AttendanceRecordMaxOrderByAggregateInput = {
@@ -4860,7 +6234,11 @@ export namespace Prisma {
     weekDay?: SortOrder
     time?: SortOrder
     swipeType?: SortOrder
+    is_manual_override?: SortOrder
+    adjusted_by?: SortOrder
+    change_reason?: SortOrder
     createdAt?: SortOrder
+    updated_at?: SortOrder
   }
 
   export type AttendanceRecordMinOrderByAggregateInput = {
@@ -4870,7 +6248,37 @@ export namespace Prisma {
     weekDay?: SortOrder
     time?: SortOrder
     swipeType?: SortOrder
+    is_manual_override?: SortOrder
+    adjusted_by?: SortOrder
+    change_reason?: SortOrder
     createdAt?: SortOrder
+    updated_at?: SortOrder
+  }
+
+  export type BoolNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel> | null
+    not?: NestedBoolNullableWithAggregatesFilter<$PrismaModel> | boolean | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedBoolNullableFilter<$PrismaModel>
+    _max?: NestedBoolNullableFilter<$PrismaModel>
+  }
+
+  export type StringNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: string | StringFieldRefInput<$PrismaModel> | null
+    in?: string[] | ListStringFieldRefInput<$PrismaModel> | null
+    notIn?: string[] | ListStringFieldRefInput<$PrismaModel> | null
+    lt?: string | StringFieldRefInput<$PrismaModel>
+    lte?: string | StringFieldRefInput<$PrismaModel>
+    gt?: string | StringFieldRefInput<$PrismaModel>
+    gte?: string | StringFieldRefInput<$PrismaModel>
+    contains?: string | StringFieldRefInput<$PrismaModel>
+    startsWith?: string | StringFieldRefInput<$PrismaModel>
+    endsWith?: string | StringFieldRefInput<$PrismaModel>
+    mode?: QueryMode
+    not?: NestedStringNullableWithAggregatesFilter<$PrismaModel> | string | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedStringNullableFilter<$PrismaModel>
+    _max?: NestedStringNullableFilter<$PrismaModel>
   }
 
   export type UserCountOrderByAggregateInput = {
@@ -4894,68 +6302,39 @@ export namespace Prisma {
     createdAt?: SortOrder
   }
 
-  export type AttendanceRecordCreateNestedManyWithoutEmployeeInput = {
-    create?: XOR<AttendanceRecordCreateWithoutEmployeeInput, AttendanceRecordUncheckedCreateWithoutEmployeeInput> | AttendanceRecordCreateWithoutEmployeeInput[] | AttendanceRecordUncheckedCreateWithoutEmployeeInput[]
-    connectOrCreate?: AttendanceRecordCreateOrConnectWithoutEmployeeInput | AttendanceRecordCreateOrConnectWithoutEmployeeInput[]
-    createMany?: AttendanceRecordCreateManyEmployeeInputEnvelope
-    connect?: AttendanceRecordWhereUniqueInput | AttendanceRecordWhereUniqueInput[]
-  }
-
-  export type AttendanceRecordUncheckedCreateNestedManyWithoutEmployeeInput = {
-    create?: XOR<AttendanceRecordCreateWithoutEmployeeInput, AttendanceRecordUncheckedCreateWithoutEmployeeInput> | AttendanceRecordCreateWithoutEmployeeInput[] | AttendanceRecordUncheckedCreateWithoutEmployeeInput[]
-    connectOrCreate?: AttendanceRecordCreateOrConnectWithoutEmployeeInput | AttendanceRecordCreateOrConnectWithoutEmployeeInput[]
-    createMany?: AttendanceRecordCreateManyEmployeeInputEnvelope
-    connect?: AttendanceRecordWhereUniqueInput | AttendanceRecordWhereUniqueInput[]
-  }
-
   export type StringFieldUpdateOperationsInput = {
     set?: string
+  }
+
+  export type EnumAppRoleTierFieldUpdateOperationsInput = {
+    set?: $Enums.AppRoleTier
+  }
+
+  export type BoolFieldUpdateOperationsInput = {
+    set?: boolean
   }
 
   export type DateTimeFieldUpdateOperationsInput = {
     set?: Date | string
   }
 
-  export type AttendanceRecordUpdateManyWithoutEmployeeNestedInput = {
-    create?: XOR<AttendanceRecordCreateWithoutEmployeeInput, AttendanceRecordUncheckedCreateWithoutEmployeeInput> | AttendanceRecordCreateWithoutEmployeeInput[] | AttendanceRecordUncheckedCreateWithoutEmployeeInput[]
-    connectOrCreate?: AttendanceRecordCreateOrConnectWithoutEmployeeInput | AttendanceRecordCreateOrConnectWithoutEmployeeInput[]
-    upsert?: AttendanceRecordUpsertWithWhereUniqueWithoutEmployeeInput | AttendanceRecordUpsertWithWhereUniqueWithoutEmployeeInput[]
-    createMany?: AttendanceRecordCreateManyEmployeeInputEnvelope
-    set?: AttendanceRecordWhereUniqueInput | AttendanceRecordWhereUniqueInput[]
-    disconnect?: AttendanceRecordWhereUniqueInput | AttendanceRecordWhereUniqueInput[]
-    delete?: AttendanceRecordWhereUniqueInput | AttendanceRecordWhereUniqueInput[]
-    connect?: AttendanceRecordWhereUniqueInput | AttendanceRecordWhereUniqueInput[]
-    update?: AttendanceRecordUpdateWithWhereUniqueWithoutEmployeeInput | AttendanceRecordUpdateWithWhereUniqueWithoutEmployeeInput[]
-    updateMany?: AttendanceRecordUpdateManyWithWhereWithoutEmployeeInput | AttendanceRecordUpdateManyWithWhereWithoutEmployeeInput[]
-    deleteMany?: AttendanceRecordScalarWhereInput | AttendanceRecordScalarWhereInput[]
+  export type NullableBoolFieldUpdateOperationsInput = {
+    set?: boolean | null
   }
 
-  export type AttendanceRecordUncheckedUpdateManyWithoutEmployeeNestedInput = {
-    create?: XOR<AttendanceRecordCreateWithoutEmployeeInput, AttendanceRecordUncheckedCreateWithoutEmployeeInput> | AttendanceRecordCreateWithoutEmployeeInput[] | AttendanceRecordUncheckedCreateWithoutEmployeeInput[]
-    connectOrCreate?: AttendanceRecordCreateOrConnectWithoutEmployeeInput | AttendanceRecordCreateOrConnectWithoutEmployeeInput[]
-    upsert?: AttendanceRecordUpsertWithWhereUniqueWithoutEmployeeInput | AttendanceRecordUpsertWithWhereUniqueWithoutEmployeeInput[]
-    createMany?: AttendanceRecordCreateManyEmployeeInputEnvelope
-    set?: AttendanceRecordWhereUniqueInput | AttendanceRecordWhereUniqueInput[]
-    disconnect?: AttendanceRecordWhereUniqueInput | AttendanceRecordWhereUniqueInput[]
-    delete?: AttendanceRecordWhereUniqueInput | AttendanceRecordWhereUniqueInput[]
-    connect?: AttendanceRecordWhereUniqueInput | AttendanceRecordWhereUniqueInput[]
-    update?: AttendanceRecordUpdateWithWhereUniqueWithoutEmployeeInput | AttendanceRecordUpdateWithWhereUniqueWithoutEmployeeInput[]
-    updateMany?: AttendanceRecordUpdateManyWithWhereWithoutEmployeeInput | AttendanceRecordUpdateManyWithWhereWithoutEmployeeInput[]
-    deleteMany?: AttendanceRecordScalarWhereInput | AttendanceRecordScalarWhereInput[]
+  export type NullableStringFieldUpdateOperationsInput = {
+    set?: string | null
   }
 
-  export type EmployeeCreateNestedOneWithoutAttendanceInput = {
-    create?: XOR<EmployeeCreateWithoutAttendanceInput, EmployeeUncheckedCreateWithoutAttendanceInput>
-    connectOrCreate?: EmployeeCreateOrConnectWithoutAttendanceInput
-    connect?: EmployeeWhereUniqueInput
-  }
-
-  export type EmployeeUpdateOneRequiredWithoutAttendanceNestedInput = {
-    create?: XOR<EmployeeCreateWithoutAttendanceInput, EmployeeUncheckedCreateWithoutAttendanceInput>
-    connectOrCreate?: EmployeeCreateOrConnectWithoutAttendanceInput
-    upsert?: EmployeeUpsertWithoutAttendanceInput
-    connect?: EmployeeWhereUniqueInput
-    update?: XOR<XOR<EmployeeUpdateToOneWithWhereWithoutAttendanceInput, EmployeeUpdateWithoutAttendanceInput>, EmployeeUncheckedUpdateWithoutAttendanceInput>
+  export type NestedUuidFilter<$PrismaModel = never> = {
+    equals?: string | StringFieldRefInput<$PrismaModel>
+    in?: string[] | ListStringFieldRefInput<$PrismaModel>
+    notIn?: string[] | ListStringFieldRefInput<$PrismaModel>
+    lt?: string | StringFieldRefInput<$PrismaModel>
+    lte?: string | StringFieldRefInput<$PrismaModel>
+    gt?: string | StringFieldRefInput<$PrismaModel>
+    gte?: string | StringFieldRefInput<$PrismaModel>
+    not?: NestedUuidFilter<$PrismaModel> | string
   }
 
   export type NestedStringFilter<$PrismaModel = never> = {
@@ -4972,6 +6351,18 @@ export namespace Prisma {
     not?: NestedStringFilter<$PrismaModel> | string
   }
 
+  export type NestedEnumAppRoleTierFilter<$PrismaModel = never> = {
+    equals?: $Enums.AppRoleTier | EnumAppRoleTierFieldRefInput<$PrismaModel>
+    in?: $Enums.AppRoleTier[] | ListEnumAppRoleTierFieldRefInput<$PrismaModel>
+    notIn?: $Enums.AppRoleTier[] | ListEnumAppRoleTierFieldRefInput<$PrismaModel>
+    not?: NestedEnumAppRoleTierFilter<$PrismaModel> | $Enums.AppRoleTier
+  }
+
+  export type NestedBoolFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel>
+    not?: NestedBoolFilter<$PrismaModel> | boolean
+  }
+
   export type NestedDateTimeFilter<$PrismaModel = never> = {
     equals?: Date | string | DateTimeFieldRefInput<$PrismaModel>
     in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
@@ -4981,6 +6372,31 @@ export namespace Prisma {
     gt?: Date | string | DateTimeFieldRefInput<$PrismaModel>
     gte?: Date | string | DateTimeFieldRefInput<$PrismaModel>
     not?: NestedDateTimeFilter<$PrismaModel> | Date | string
+  }
+
+  export type NestedUuidWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: string | StringFieldRefInput<$PrismaModel>
+    in?: string[] | ListStringFieldRefInput<$PrismaModel>
+    notIn?: string[] | ListStringFieldRefInput<$PrismaModel>
+    lt?: string | StringFieldRefInput<$PrismaModel>
+    lte?: string | StringFieldRefInput<$PrismaModel>
+    gt?: string | StringFieldRefInput<$PrismaModel>
+    gte?: string | StringFieldRefInput<$PrismaModel>
+    not?: NestedUuidWithAggregatesFilter<$PrismaModel> | string
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedStringFilter<$PrismaModel>
+    _max?: NestedStringFilter<$PrismaModel>
+  }
+
+  export type NestedIntFilter<$PrismaModel = never> = {
+    equals?: number | IntFieldRefInput<$PrismaModel>
+    in?: number[] | ListIntFieldRefInput<$PrismaModel>
+    notIn?: number[] | ListIntFieldRefInput<$PrismaModel>
+    lt?: number | IntFieldRefInput<$PrismaModel>
+    lte?: number | IntFieldRefInput<$PrismaModel>
+    gt?: number | IntFieldRefInput<$PrismaModel>
+    gte?: number | IntFieldRefInput<$PrismaModel>
+    not?: NestedIntFilter<$PrismaModel> | number
   }
 
   export type NestedStringWithAggregatesFilter<$PrismaModel = never> = {
@@ -5000,15 +6416,22 @@ export namespace Prisma {
     _max?: NestedStringFilter<$PrismaModel>
   }
 
-  export type NestedIntFilter<$PrismaModel = never> = {
-    equals?: number | IntFieldRefInput<$PrismaModel>
-    in?: number[] | ListIntFieldRefInput<$PrismaModel>
-    notIn?: number[] | ListIntFieldRefInput<$PrismaModel>
-    lt?: number | IntFieldRefInput<$PrismaModel>
-    lte?: number | IntFieldRefInput<$PrismaModel>
-    gt?: number | IntFieldRefInput<$PrismaModel>
-    gte?: number | IntFieldRefInput<$PrismaModel>
-    not?: NestedIntFilter<$PrismaModel> | number
+  export type NestedEnumAppRoleTierWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.AppRoleTier | EnumAppRoleTierFieldRefInput<$PrismaModel>
+    in?: $Enums.AppRoleTier[] | ListEnumAppRoleTierFieldRefInput<$PrismaModel>
+    notIn?: $Enums.AppRoleTier[] | ListEnumAppRoleTierFieldRefInput<$PrismaModel>
+    not?: NestedEnumAppRoleTierWithAggregatesFilter<$PrismaModel> | $Enums.AppRoleTier
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedEnumAppRoleTierFilter<$PrismaModel>
+    _max?: NestedEnumAppRoleTierFilter<$PrismaModel>
+  }
+
+  export type NestedBoolWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel>
+    not?: NestedBoolWithAggregatesFilter<$PrismaModel> | boolean
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedBoolFilter<$PrismaModel>
+    _max?: NestedBoolFilter<$PrismaModel>
   }
 
   export type NestedDateTimeWithAggregatesFilter<$PrismaModel = never> = {
@@ -5025,153 +6448,59 @@ export namespace Prisma {
     _max?: NestedDateTimeFilter<$PrismaModel>
   }
 
-  export type AttendanceRecordCreateWithoutEmployeeInput = {
-    id?: string
-    date: string
-    weekDay: string
-    time: string
-    swipeType: string
-    createdAt?: Date | string
+  export type NestedBoolNullableFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel> | null
+    not?: NestedBoolNullableFilter<$PrismaModel> | boolean | null
   }
 
-  export type AttendanceRecordUncheckedCreateWithoutEmployeeInput = {
-    id?: string
-    date: string
-    weekDay: string
-    time: string
-    swipeType: string
-    createdAt?: Date | string
+  export type NestedStringNullableFilter<$PrismaModel = never> = {
+    equals?: string | StringFieldRefInput<$PrismaModel> | null
+    in?: string[] | ListStringFieldRefInput<$PrismaModel> | null
+    notIn?: string[] | ListStringFieldRefInput<$PrismaModel> | null
+    lt?: string | StringFieldRefInput<$PrismaModel>
+    lte?: string | StringFieldRefInput<$PrismaModel>
+    gt?: string | StringFieldRefInput<$PrismaModel>
+    gte?: string | StringFieldRefInput<$PrismaModel>
+    contains?: string | StringFieldRefInput<$PrismaModel>
+    startsWith?: string | StringFieldRefInput<$PrismaModel>
+    endsWith?: string | StringFieldRefInput<$PrismaModel>
+    not?: NestedStringNullableFilter<$PrismaModel> | string | null
   }
 
-  export type AttendanceRecordCreateOrConnectWithoutEmployeeInput = {
-    where: AttendanceRecordWhereUniqueInput
-    create: XOR<AttendanceRecordCreateWithoutEmployeeInput, AttendanceRecordUncheckedCreateWithoutEmployeeInput>
+  export type NestedBoolNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel> | null
+    not?: NestedBoolNullableWithAggregatesFilter<$PrismaModel> | boolean | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedBoolNullableFilter<$PrismaModel>
+    _max?: NestedBoolNullableFilter<$PrismaModel>
   }
 
-  export type AttendanceRecordCreateManyEmployeeInputEnvelope = {
-    data: AttendanceRecordCreateManyEmployeeInput | AttendanceRecordCreateManyEmployeeInput[]
-    skipDuplicates?: boolean
+  export type NestedIntNullableFilter<$PrismaModel = never> = {
+    equals?: number | IntFieldRefInput<$PrismaModel> | null
+    in?: number[] | ListIntFieldRefInput<$PrismaModel> | null
+    notIn?: number[] | ListIntFieldRefInput<$PrismaModel> | null
+    lt?: number | IntFieldRefInput<$PrismaModel>
+    lte?: number | IntFieldRefInput<$PrismaModel>
+    gt?: number | IntFieldRefInput<$PrismaModel>
+    gte?: number | IntFieldRefInput<$PrismaModel>
+    not?: NestedIntNullableFilter<$PrismaModel> | number | null
   }
 
-  export type AttendanceRecordUpsertWithWhereUniqueWithoutEmployeeInput = {
-    where: AttendanceRecordWhereUniqueInput
-    update: XOR<AttendanceRecordUpdateWithoutEmployeeInput, AttendanceRecordUncheckedUpdateWithoutEmployeeInput>
-    create: XOR<AttendanceRecordCreateWithoutEmployeeInput, AttendanceRecordUncheckedCreateWithoutEmployeeInput>
-  }
-
-  export type AttendanceRecordUpdateWithWhereUniqueWithoutEmployeeInput = {
-    where: AttendanceRecordWhereUniqueInput
-    data: XOR<AttendanceRecordUpdateWithoutEmployeeInput, AttendanceRecordUncheckedUpdateWithoutEmployeeInput>
-  }
-
-  export type AttendanceRecordUpdateManyWithWhereWithoutEmployeeInput = {
-    where: AttendanceRecordScalarWhereInput
-    data: XOR<AttendanceRecordUpdateManyMutationInput, AttendanceRecordUncheckedUpdateManyWithoutEmployeeInput>
-  }
-
-  export type AttendanceRecordScalarWhereInput = {
-    AND?: AttendanceRecordScalarWhereInput | AttendanceRecordScalarWhereInput[]
-    OR?: AttendanceRecordScalarWhereInput[]
-    NOT?: AttendanceRecordScalarWhereInput | AttendanceRecordScalarWhereInput[]
-    id?: StringFilter<"AttendanceRecord"> | string
-    staffCode?: StringFilter<"AttendanceRecord"> | string
-    date?: StringFilter<"AttendanceRecord"> | string
-    weekDay?: StringFilter<"AttendanceRecord"> | string
-    time?: StringFilter<"AttendanceRecord"> | string
-    swipeType?: StringFilter<"AttendanceRecord"> | string
-    createdAt?: DateTimeFilter<"AttendanceRecord"> | Date | string
-  }
-
-  export type EmployeeCreateWithoutAttendanceInput = {
-    staffCode: string
-    fullName: string
-    designation?: string
-    department?: string
-    costCenter?: string
-    createdAt?: Date | string
-    updatedAt?: Date | string
-  }
-
-  export type EmployeeUncheckedCreateWithoutAttendanceInput = {
-    staffCode: string
-    fullName: string
-    designation?: string
-    department?: string
-    costCenter?: string
-    createdAt?: Date | string
-    updatedAt?: Date | string
-  }
-
-  export type EmployeeCreateOrConnectWithoutAttendanceInput = {
-    where: EmployeeWhereUniqueInput
-    create: XOR<EmployeeCreateWithoutAttendanceInput, EmployeeUncheckedCreateWithoutAttendanceInput>
-  }
-
-  export type EmployeeUpsertWithoutAttendanceInput = {
-    update: XOR<EmployeeUpdateWithoutAttendanceInput, EmployeeUncheckedUpdateWithoutAttendanceInput>
-    create: XOR<EmployeeCreateWithoutAttendanceInput, EmployeeUncheckedCreateWithoutAttendanceInput>
-    where?: EmployeeWhereInput
-  }
-
-  export type EmployeeUpdateToOneWithWhereWithoutAttendanceInput = {
-    where?: EmployeeWhereInput
-    data: XOR<EmployeeUpdateWithoutAttendanceInput, EmployeeUncheckedUpdateWithoutAttendanceInput>
-  }
-
-  export type EmployeeUpdateWithoutAttendanceInput = {
-    staffCode?: StringFieldUpdateOperationsInput | string
-    fullName?: StringFieldUpdateOperationsInput | string
-    designation?: StringFieldUpdateOperationsInput | string
-    department?: StringFieldUpdateOperationsInput | string
-    costCenter?: StringFieldUpdateOperationsInput | string
-    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
-    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
-  }
-
-  export type EmployeeUncheckedUpdateWithoutAttendanceInput = {
-    staffCode?: StringFieldUpdateOperationsInput | string
-    fullName?: StringFieldUpdateOperationsInput | string
-    designation?: StringFieldUpdateOperationsInput | string
-    department?: StringFieldUpdateOperationsInput | string
-    costCenter?: StringFieldUpdateOperationsInput | string
-    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
-    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
-  }
-
-  export type AttendanceRecordCreateManyEmployeeInput = {
-    id?: string
-    date: string
-    weekDay: string
-    time: string
-    swipeType: string
-    createdAt?: Date | string
-  }
-
-  export type AttendanceRecordUpdateWithoutEmployeeInput = {
-    id?: StringFieldUpdateOperationsInput | string
-    date?: StringFieldUpdateOperationsInput | string
-    weekDay?: StringFieldUpdateOperationsInput | string
-    time?: StringFieldUpdateOperationsInput | string
-    swipeType?: StringFieldUpdateOperationsInput | string
-    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
-  }
-
-  export type AttendanceRecordUncheckedUpdateWithoutEmployeeInput = {
-    id?: StringFieldUpdateOperationsInput | string
-    date?: StringFieldUpdateOperationsInput | string
-    weekDay?: StringFieldUpdateOperationsInput | string
-    time?: StringFieldUpdateOperationsInput | string
-    swipeType?: StringFieldUpdateOperationsInput | string
-    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
-  }
-
-  export type AttendanceRecordUncheckedUpdateManyWithoutEmployeeInput = {
-    id?: StringFieldUpdateOperationsInput | string
-    date?: StringFieldUpdateOperationsInput | string
-    weekDay?: StringFieldUpdateOperationsInput | string
-    time?: StringFieldUpdateOperationsInput | string
-    swipeType?: StringFieldUpdateOperationsInput | string
-    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  export type NestedStringNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: string | StringFieldRefInput<$PrismaModel> | null
+    in?: string[] | ListStringFieldRefInput<$PrismaModel> | null
+    notIn?: string[] | ListStringFieldRefInput<$PrismaModel> | null
+    lt?: string | StringFieldRefInput<$PrismaModel>
+    lte?: string | StringFieldRefInput<$PrismaModel>
+    gt?: string | StringFieldRefInput<$PrismaModel>
+    gte?: string | StringFieldRefInput<$PrismaModel>
+    contains?: string | StringFieldRefInput<$PrismaModel>
+    startsWith?: string | StringFieldRefInput<$PrismaModel>
+    endsWith?: string | StringFieldRefInput<$PrismaModel>
+    not?: NestedStringNullableWithAggregatesFilter<$PrismaModel> | string | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedStringNullableFilter<$PrismaModel>
+    _max?: NestedStringNullableFilter<$PrismaModel>
   }
 
 

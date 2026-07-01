@@ -120,6 +120,17 @@ exports.Prisma.TransactionIsolationLevel = makeStrictEnum({
   Serializable: 'Serializable'
 });
 
+exports.Prisma.SystemUserScalarFieldEnum = {
+  id: 'id',
+  email: 'email',
+  passwordHash: 'passwordHash',
+  roleTier: 'roleTier',
+  isSuperuser: 'isSuperuser',
+  canIngestChrono: 'canIngestChrono',
+  canModifyRoster: 'canModifyRoster',
+  createdAt: 'createdAt'
+};
+
 exports.Prisma.EmployeeScalarFieldEnum = {
   staffCode: 'staffCode',
   fullName: 'fullName',
@@ -137,7 +148,11 @@ exports.Prisma.AttendanceRecordScalarFieldEnum = {
   weekDay: 'weekDay',
   time: 'time',
   swipeType: 'swipeType',
-  createdAt: 'createdAt'
+  is_manual_override: 'is_manual_override',
+  adjusted_by: 'adjusted_by',
+  change_reason: 'change_reason',
+  createdAt: 'createdAt',
+  updated_at: 'updated_at'
 };
 
 exports.Prisma.UserScalarFieldEnum = {
@@ -157,8 +172,18 @@ exports.Prisma.QueryMode = {
   insensitive: 'insensitive'
 };
 
+exports.Prisma.NullsOrder = {
+  first: 'first',
+  last: 'last'
+};
+exports.AppRoleTier = exports.$Enums.AppRoleTier = {
+  operator: 'operator',
+  manager: 'manager',
+  admin: 'admin'
+};
 
 exports.Prisma.ModelName = {
+  SystemUser: 'SystemUser',
   Employee: 'Employee',
   AttendanceRecord: 'AttendanceRecord',
   User: 'User'
