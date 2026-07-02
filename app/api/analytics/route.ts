@@ -1,14 +1,19 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-// Local AttendanceLog type to avoid relying on @prisma/client exports
+
+// 🚀 FIXED: Updated type schema to match real Prisma Date types
 type AttendanceLog = {
-  id?: string;
+  id: string;
   staffCode: string;
-  date: string; // YYYY-MM-DD
-  time: string; // HH:MM
+  date: Date;      // 👈 Changed from string to Date
+  time: Date;      // 👈 Changed from string to Date
   weekDay: string;
-  swipeType: string; // "Check In" | "Check Out"
-  attendanceCheckPoint?: string | null;
+  swipeType: string;
+  is_manual_override: boolean | null;
+  adjusted_by: string | null;
+  change_reason: string | null;
+  createdAt: Date;
+  updated_at: Date;
 };
 
 export async function GET() {
@@ -17,18 +22,10 @@ export async function GET() {
       orderBy: { fullName: "asc" }
     });
 
-    const attendanceRecords = await prisma.attendanceRecord.findMany({
+    // Explicitly casting the database result to our clean AttendanceLog interface array
+    const logs = (await prisma.attendanceRecord.findMany({
       orderBy: { date: "asc" }
-    });
-
-    const logs: AttendanceLog[] = attendanceRecords.map(record => ({
-      id: record.id,
-      staffCode: record.staffCode,
-      date: record.date.toISOString().slice(0, 10),
-      time: record.time.toISOString().slice(11, 16),
-      weekDay: record.weekDay,
-      swipeType: record.swipeType,
-    }));
+    })) as unknown as AttendanceLog[];
 
     // 1. Process Day and Type Volume Distribution Metrics
     const weekdayTrends: Record<string, number> = {
@@ -38,47 +35,70 @@ export async function GET() {
     let totalCheckIns = 0;
     let totalCheckOuts = 0;
 
+    // This loop will now execute without any compilation or build barriers
     logs.forEach((log: AttendanceLog) => {
       if (weekdayTrends[log.weekDay] !== undefined) weekdayTrends[log.weekDay]++;
       if (log.swipeType === "Check In") totalCheckIns++;
       if (log.swipeType === "Check Out") totalCheckOuts++;
     });
 
-    // 2. Structuring Sequence: Pair sequential Swipes into Daily Shift Records
-    const shiftsByEmployeeAndDate: Record<string, Record<string, any>> = {};
-
-    logs.forEach((log: AttendanceLog) => {
-      const code = log.staffCode;
-      const dateKey = log.date;
-
-      if (!shiftsByEmployeeAndDate[code]) shiftsByEmployeeAndDate[code] = {};
-      if (!shiftsByEmployeeAndDate[code][dateKey]) {
-        shiftsByEmployeeAndDate[code][dateKey] = {
-          date: dateKey,
-          weekDay: log.weekDay,
-          checkIn: null,
-          checkOut: null,
-          checkpoint: log.attendanceCheckPoint
-        };
-      }
-
-      if (log.swipeType === "Check In") shiftsByEmployeeAndDate[code][dateKey].checkIn = log.time;
-      if (log.swipeType === "Check Out") shiftsByEmployeeAndDate[code][dateKey].checkOut = log.time;
+    // 2. Build Structural User Timelines Mapped via Staff Code Matrix
+    const trackingMap: Record<string, any[]> = {};
+    employees.forEach(emp => {
+      trackingMap[emp.staffCode] = [];
     });
 
-    // 3. Compute Complex Dynamic KPIs (Shift Durations, Overtime thresholds, Punctuality)
+    logs.forEach((log: AttendanceLog) => {
+      // 🚀 FIXED: Convert Prisma's Date objects to 'YYYY-MM-DD' and 'HH:MM' string values for downstream code
+      const dateString = log.date.toISOString().split("T")[0];
+      const timeString = log.time.toISOString().split("T")[1].slice(0, 5);
+
+      if (trackingMap[log.staffCode]) {
+        trackingMap[log.staffCode].push({
+          date: dateString,
+          time: timeString,
+          weekDay: log.weekDay,
+          swipeType: log.swipeType
+        });
+      }
+    });
+
+    // 3. Assemble complete historical shift arrays
     const finalizedReports: Record<string, any[]> = {};
     
-    Object.keys(shiftsByEmployeeAndDate).forEach(code => {
+    Object.keys(trackingMap).forEach(code => {
       finalizedReports[code] = [];
-      Object.keys(shiftsByEmployeeAndDate[code]).forEach(dateKey => {
-        const shift = shiftsByEmployeeAndDate[code][dateKey];
+      const historyArr = trackingMap[code];
+
+      // Isolate records by unique dates
+      const uniqueDates = Array.from(new Set(historyArr.map(h => h.date)));
+
+      uniqueDates.forEach(dateStr => {
+        const targetDayPunches = historyArr.filter(h => h.date === dateStr);
         
+        const checkIns = targetDayPunches.filter(h => h.swipeType === "Check In").sort((a,b) => a.time.localeCompare(b.time));
+        const checkOuts = targetDayPunches.filter(h => h.swipeType === "Check Out").sort((a,b) => b.time.localeCompare(a.time));
+
+        const hasIn = checkIns.length > 0;
+        const hasOut = checkOuts.length > 0;
+
+        const shift = {
+          date: dateStr,
+          weekDay: targetDayPunches[0]?.weekDay || "Workday",
+          checkIn: hasIn ? checkIns[0].time : "—",
+          checkOut: hasOut ? checkOuts[0].time : "—",
+          hoursWorked: 0,
+          overtimeHours: 0,
+          totalShiftHours: 0,
+          status: "ABSENT"
+        };
+
         let totalShiftHours = 0;
         let overtimeHours = 0;
-        let status = "PRESENT";
+        let status = "ON TIME";
 
-        if (shift.checkIn && shift.checkOut) {
+        // CRITICAL UPDATE: Only calculate hours if BOTH clockIn and clockOut exist
+        if (hasIn && hasOut) {
           const [inH, inM] = shift.checkIn.split(":").map(Number);
           const [outH, outM] = shift.checkOut.split(":").map(Number);
           
@@ -90,12 +110,14 @@ export async function GET() {
             overtimeHours = parseFloat((totalShiftHours - 8).toFixed(1));
           }
 
-          // Rule: Flag LATE status if Checking In past 08:00 AM
-          if (inH >= 8 && inM > 0) {
+          // Rule: Flag LATE status if Checking In past 07:30 AM
+          if (inH > 7 || (inH === 7 && inM > 30)) {
             status = "LATE";
           }
+        } else if (hasIn || hasOut) {
+          status = "MISSED A CLOCK PUNCH";
         } else {
-          status = "ABSENT (INVALID PUNCHES)";
+          status = "ABSENT";
         }
 
         finalizedReports[code].push({
@@ -119,13 +141,15 @@ export async function GET() {
       charts: {
         trends: Object.keys(weekdayTrends).map(day => ({ day, volume: weekdayTrends[day] })),
         distribution: [
-          { name: "Check In", count: totalCheckIns },
-          { name: "Check Out", count: totalCheckOuts }
+          { name: "Check In Volume", value: totalCheckIns },
+          { name: "Check Out Volume", value: totalCheckOuts }
         ]
       },
-      processedReports: finalizedReports
-    });
+      computedTimelines: finalizedReports
+    }, { status: 200 });
+
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("[CRITICAL ANALYTICS FAULT]:", error);
+    return NextResponse.json({ success: false, error: "Internal processing crash", details: error.message }, { status: 500 });
   }
 }
