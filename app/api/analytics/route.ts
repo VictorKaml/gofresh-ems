@@ -17,9 +17,18 @@ export async function GET() {
       orderBy: { fullName: "asc" }
     });
 
-    const logs = await prisma.attendanceRecord.findMany({
+    const attendanceRecords = await prisma.attendanceRecord.findMany({
       orderBy: { date: "asc" }
     });
+
+    const logs: AttendanceLog[] = attendanceRecords.map(record => ({
+      id: record.id,
+      staffCode: record.staffCode,
+      date: record.date.toISOString().slice(0, 10),
+      time: record.time.toISOString().slice(11, 16),
+      weekDay: record.weekDay,
+      swipeType: record.swipeType,
+    }));
 
     // 1. Process Day and Type Volume Distribution Metrics
     const weekdayTrends: Record<string, number> = {
