@@ -1,0 +1,12 @@
+create table public.system_users (
+  id uuid not null default gen_random_uuid (),
+  email character varying(255) not null,
+  password_hash text not null,
+  role_tier public.app_role_tier not null default 'operator'::app_role_tier,
+  is_superuser boolean not null default false,
+  can_ingest_chrono boolean not null default true,
+  can_modify_roster boolean not null default false,
+  created_at timestamp with time zone not null default timezone ('utc'::text, now()),
+  constraint system_users_pkey primary key (id),
+  constraint system_users_email_key unique (email)
+) TABLESPACE pg_default;

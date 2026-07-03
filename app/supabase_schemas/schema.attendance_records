@@ -1,0 +1,18 @@
+create table public.attendance_records (
+  id uuid not null default gen_random_uuid (),
+  staff_code character varying(50) not null,
+  swipe_date date not null,
+  weekday character varying(20) not null,
+  swipe_time time without time zone not null,
+  swipe_type character varying(50) not null,
+  is_manual_override boolean null default false,
+  adjusted_by character varying(255) null,
+  change_reason text null,
+  created_at timestamp with time zone not null default timezone ('utc'::text, now()),
+  updated_at timestamp with time zone not null default timezone ('utc'::text, now()),
+  constraint attendance_records_pkey primary key (id)
+) TABLESPACE pg_default;
+
+create unique INDEX IF not exists idx_uniq_attendance_punch on public.attendance_records using btree (staff_code, swipe_date, swipe_time, swipe_type) TABLESPACE pg_default;
+
+create index IF not exists idx_attendance_lookup on public.attendance_records using btree (staff_code, swipe_date) TABLESPACE pg_default;
