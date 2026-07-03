@@ -1040,162 +1040,185 @@ export default function EMSDashboard() {
   };
 
   const downloadOverallAnalyticsPDF = () => {
-    if (!checklistDept || !checklistCostCenter) {
-      alert("Please select a Department and Cost Center first.");
-      return;
+  if (!checklistDept || !checklistCostCenter) {
+    alert("Please select a Department and Cost Center first.");
+    return;
+  }
+
+  // Helper engine to convert "HH:MM" timestamp strings into total minutes
+  const parseTimeToMinutes = (timeStr: string): number => {
+    if (!timeStr || timeStr === "—") return 0;
+    const [hours, minutes] = timeStr.split(":").map(Number);
+    return hours * 60 + minutes;
+  };
+
+  try {
+    const doc = new jsPDF();
+
+    // 1. Determine Day of the Week & Shift Benchmarks
+    // Expects selectedDate to be in a standard format (e.g., "YYYY-MM-DD" or "MM/DD/YYYY")
+    const dateObj = new Date(selectedDate);
+    const dayOfWeek = dateObj.getDay(); // 0 = Sunday, 6 = Saturday, 1-5 = Mon-Fri
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+    // Define standard working configurations in minutes (minus 1 hour lunch break)
+    const lunchDeductionMins = 60;
+    let standardShiftMins = 0;
+    let dayTypeText = "";
+
+    if (isWeekend) {
+      // 07:30 to 13:00 is 5.5 hours (330 mins). Minus 60 mins lunch = 270 mins (4.5 hours)
+      standardShiftMins = (5.5 * 60) - lunchDeductionMins; 
+      dayTypeText = "Weekend Rules Apply (4.5h Regular Benchmark)";
+    } else {
+      // 07:30 to 17:00 is 9.5 hours (570 mins). Minus 60 mins lunch = 510 mins (8.5 hours)
+      standardShiftMins = (9.5 * 60) - lunchDeductionMins; 
+      dayTypeText = "Weekday Rules Apply (8.5h Regular Benchmark)";
     }
 
+    // 2. Render Corporate Branding Header
     try {
-      // 1. Initialize Document Context (jsPDF instance)
-      const doc = new jsPDF();
+      doc.addImage("/gofresh_logo.jpg", "JPEG", 14, 12, 25, 25);
+    } catch (logoErr) {
+      console.warn("Logo image could not be loaded, skipping render.", logoErr);
+    }
 
-      // 2. Render Corporate Branding Header
-      try {
-        doc.addImage("/gofresh_logo.jpg", "JPEG", 14, 12, 25, 25);
-      } catch (logoErr) {
-        console.warn(
-          "Logo image could not be loaded, skipping render.",
-          logoErr,
-        );
-      }
+    // 3. Document Title & Operational Metadata Layout
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.setTextColor(37, 99, 235); // Blue-600
+    doc.text("OVERALL OPERATIONAL ANALTICS REPORT", 44, 20);
 
-      // 3. Document Title & Operational Metadata Layout
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(16);
-      doc.setTextColor(37, 99, 235); // Blue-600
-      doc.text("OVERALL OPERATIONAL ANALTICS REPORT", 44, 20);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(71, 85, 105);
+    doc.text(`Department: ${checklistDept}  |  Cost Center: ${checklistCostCenter}`, 44, 27);
+    doc.text(`Target Date: ${selectedDate} (${dayTypeText})  |  Generated: ${new Date().toLocaleTimeString()}`, 44, 33);
 
-      doc.setFontSize(9);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(71, 85, 105);
-      doc.text(
-        `Department: ${checklistDept}  |  Cost Center: ${checklistCostCenter}`,
-        44,
-        27,
+    doc.setDrawColor(226, 232, 240);
+    doc.line(14, 42, 196, 42);
+
+    // 4. Filter Target Personnel Dataset Matrix
+    const subsetWorkers = systemProcessedDataset.filter(
+      (emp) => emp.department === checklistDept && emp.costCenter === checklistCostCenter
+    );
+
+    // Trackers for Summary KPI Blocks
+    let onsiteCount = 0;
+    let onTimeCount = 0;
+    let lateCount = 0;
+    let absentCount = 0;
+
+    // 5. Compute Swipe Metrics, Hours, & Compile Rows
+    const tableRows = subsetWorkers.map((emp) => {
+      const daySwipes = rawSwipesBuffer.filter(
+        (s) => s.id === emp.staffCode && s.date === selectedDate
       );
-      doc.text(
-        `Target Date: ${selectedDate}  |  Generated: ${new Date().toLocaleTimeString()}`,
-        44,
-        33,
-      );
+      
+      const checkIns = daySwipes
+        .filter((s) => s.type.toLowerCase().includes("in"))
+        .sort((a, b) => a.time.localeCompare(b.time));
+        
+      const checkOuts = daySwipes
+        .filter((s) => s.type.toLowerCase().includes("out"))
+        .sort((a, b) => a.time.localeCompare(b.time));
 
-      doc.setDrawColor(226, 232, 240);
-      doc.line(14, 42, 196, 42);
+      const clockIn = checkIns.length > 0 ? checkIns[0].time : "—";
+      const clockOut = checkOuts.length > 0 ? checkOuts[checkOuts.length - 1].time : "—";
 
-      // 4. Filter Target Personnel Dataset Matrix
-      const subsetWorkers = systemProcessedDataset.filter(
-        (emp) =>
-          emp.department === checklistDept &&
-          emp.costCenter === checklistCostCenter,
-      );
+      let status = "ABSENT";
+      let regularHoursStr = "0.00";
+      let overtimeStr = "0.00";
 
-      // Trackers for Summary KPI Blocks
-      let onsiteCount = 0;
-      let onTimeCount = 0;
-      let lateCount = 0;
-      let absentCount = 0;
-
-      // 5. Compute Swipe Metrics & Compile Rows
-      const tableRows = subsetWorkers.map((emp) => {
-        const daySwipes = rawSwipesBuffer.filter(
-          (s) => s.id === emp.staffCode && s.date === selectedDate,
-        );
-
-        const checkIns = daySwipes
-          .filter((s) => s.type.toLowerCase().includes("in"))
-          .sort((a, b) => a.time.localeCompare(b.time));
-
-        const checkOuts = daySwipes
-          .filter((s) => s.type.toLowerCase().includes("out"))
-          .sort((a, b) => a.time.localeCompare(b.time));
-
-        const clockIn = checkIns.length > 0 ? checkIns[0].time : "—";
-        const clockOut =
-          checkOuts.length > 0 ? checkOuts[checkOuts.length - 1].time : "—";
-
-        let status = "ABSENT";
-
-        // Strict historical logic: requires both pieces of structural data
-        if (clockIn !== "—" && clockOut !== "—") {
-          onsiteCount++; // Fully clocked onsite
-
-          if (clockIn <= "07:30") {
-            onTimeCount++;
-            status = "ON TIME";
-          } else {
-            lateCount++;
-            status = "LATE";
-          }
+      // Strict historical logic: requires both pieces of structural data
+      if (clockIn !== "—" && clockOut !== "—") {
+        onsiteCount++; 
+        
+        if (clockIn <= "07:30") {
+          onTimeCount++;
+          status = "ON TIME";
         } else {
-          // Encompasses "clocked in only", "clocked out only", or "no punches at all"
-          absentCount++;
+          lateCount++;
+          status = "LATE";
         }
 
-        return [
-          emp.staffCode,
-          emp.fullName,
-          emp.designation,
-          clockIn,
-          clockOut,
-          status,
-        ];
-      });
+        // Calculate total gross time in minutes
+        const startMins = parseTimeToMinutes(clockIn);
+        const endMins = parseTimeToMinutes(clockOut);
+        
+        // Net Time worked after enforcing the 1-hour unpaid lunch break deduction
+        const totalMinsWorked = Math.max(0, (endMins - startMins) - lunchDeductionMins);
 
-      // 6. Draw Aggregate Summary Matrix Banner Block
-      doc.setFont("helvetica", "bold");
-      doc.setFillColor(248, 250, 252); // slate-50
-      doc.rect(14, 46, 182, 12, "F");
-      doc.setFontSize(9);
-      doc.setTextColor(51, 65, 85);
-      doc.text(
-        `Summary Matrix -> Total Headcount: ${subsetWorkers.length}  |  Fully Onsite: ${onsiteCount}  |  On Time: ${onTimeCount}  |  Late: ${lateCount}  |  Absent/Incomplete: ${absentCount}`,
-        18,
-        54,
-      );
-
-      // 7. Generate Master Data Table via autoTable Engine
-      autoTable(doc, {
-        startY: 64,
-        head: [
-          [
-            "Staff ID",
-            "Employee Full Name",
-            "Designation",
-            "Clock In",
-            "Clock Out",
-            "Status",
-          ],
-        ],
-        body: tableRows,
-        theme: "striped",
-        headStyles: { fillColor: [79, 70, 229] }, // Indigo-600
-        styles: { fontSize: 9, cellPadding: 3 },
-        didParseCell: (data) => {
-          if (data.section === "body" && data.column.index === 5) {
-            if (data.cell.raw === "ON TIME")
-              data.cell.styles.textColor = [16, 185, 129]; // Emerald-500
-            if (data.cell.raw === "LATE")
-              data.cell.styles.textColor = [245, 158, 11]; // Amber-500
-            if (data.cell.raw === "ABSENT")
-              data.cell.styles.textColor = [244, 63, 94]; // Rose-500
-          }
-        },
-      });
-
-      // 8. Trigger File Save Dialog & Write System Log
-      doc.save(
-        `Overall_Analytics_${checklistDept.replace(/\s+/g, "_")}_${selectedDate}.pdf`,
-      );
-
-      if (typeof addLog === "function") {
-        addLog(
-          `Master analytics report successfully compiled for ${checklistDept} on date ${selectedDate}.`,
-        );
+        if (totalMinsWorked > standardShiftMins) {
+          regularHoursStr = (standardShiftMins / 60).toFixed(2); // caps at max standard shift limit (8.5 or 4.5)
+          const otMins = totalMinsWorked - standardShiftMins;
+          overtimeStr = (otMins / 60).toFixed(2);
+        } else {
+          regularHoursStr = (totalMinsWorked / 60).toFixed(2);
+          overtimeStr = "0.00";
+        }
+      } else {
+        absentCount++;
       }
-    } catch (err) {
-      console.error("Master PDF generation block failure", err);
+
+      return [
+        emp.staffCode, 
+        emp.fullName, 
+        clockIn, 
+        clockOut, 
+        status, 
+        regularHoursStr, 
+        overtimeStr
+      ];
+    });
+
+    // 6. Draw Aggregate Summary Matrix Banner Block
+    doc.setFont("helvetica", "bold");
+    doc.setFillColor(248, 250, 252); // slate-50
+    doc.rect(14, 46, 182, 12, "F");
+    doc.setFontSize(9);
+    doc.setTextColor(51, 65, 85);
+    doc.text(
+      `Summary Matrix -> Total Headcount: ${subsetWorkers.length}  |  Fully Onsite: ${onsiteCount}  |  On Time: ${onTimeCount}  |  Late: ${lateCount}  |  Absent/Incomplete: ${absentCount}`,
+      18,
+      54
+    );
+
+    // 7. Generate Master Data Table via autoTable Engine
+    autoTable(doc, {
+      startY: 64,
+      head: [["Staff ID", "Employee Full Name", "Clock In", "Clock Out", "Status", "Reg Hours", "OT Hours"]],
+      body: tableRows,
+      theme: "striped",
+      headStyles: { fillColor: [79, 70, 229] }, // Indigo-600
+      styles: { fontSize: 8.5, cellPadding: 2.5 },
+      columnStyles: {
+        5: { halign: 'right' },
+        6: { halign: 'right' }
+      },
+      didParseCell: (data) => {
+        if (data.section === 'body' && data.column.index === 4) {
+          if (data.cell.raw === 'ON TIME') data.cell.styles.textColor = [16, 185, 129];
+          if (data.cell.raw === 'LATE') data.cell.styles.textColor = [245, 158, 11]; 
+          if (data.cell.raw === 'ABSENT') data.cell.styles.textColor = [244, 63, 94]; 
+        }
+        if (data.section === 'body' && data.column.index === 6 && data.cell.raw !== '0.00') {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.textColor = [79, 70, 229];
+        }
+      }
+    });
+
+    // 8. Trigger File Save Dialog & Write System Log
+    doc.save(`Overall_Analytics_${checklistDept.replace(/\s+/g, "_")}_${selectedDate}.pdf`);
+    
+    if (typeof addLog === "function") {
+      addLog(`Master analytics report successfully compiled for ${checklistDept} on date ${selectedDate}.`);
     }
-  };
+  } catch (err) {
+    console.error("Master PDF generation block failure", err);
+  }
+};
 
   return (
     <div className="bg-slate-50 text-slate-900 min-h-screen flex flex-col font-sans antialiased">
