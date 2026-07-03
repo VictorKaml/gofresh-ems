@@ -22,7 +22,6 @@ import {
   Search,
   FileSpreadsheet,
   FileText,
-  LogOut,
   Terminal,
   Activity,
   RefreshCw,
@@ -127,11 +126,12 @@ export default function AttendanceReportPage() {
     initializeDashboard();
   }, [router]);
 
+  // Find your existing syncAllSavedAttendanceData function and update it to this:
   const syncAllSavedAttendanceData = async () => {
     if (!user || isFetchingData) return;
     setIsFetchingData(true);
     try {
-      addLog(`[API_SYNC] Initializing continuous table assembly sequence...`);
+      addLog(`[API_SYNC] Initializing range-filtered matrix assembly sequence...`);
 
       let masterBufferArray: RawSwipe[] = [];
       let currentPage = 0;
@@ -139,9 +139,17 @@ export default function AttendanceReportPage() {
       const batchChunkSize = 2500;
 
       while (keepStreaming) {
-        addLog(`[API_SYNC] Downloading biometric block sequence index: ${currentPage + 1}...`);
+        addLog(`[API_SYNC] Downloading biometric block chunk index: ${currentPage + 1}...`);
 
-        const response = await fetch(`/api/attendance?page=${currentPage}&size=${batchChunkSize}`);
+        // 📅 Append your local state parameters directly to the fetch query string
+        const queryParams = new URLSearchParams({
+          page: String(currentPage),
+          size: String(batchChunkSize),
+          ...(startDate && { startDate }),
+          ...(endDate && { endDate })
+        });
+
+        const response = await fetch(`/api/attendance?${queryParams.toString()}`);
         if (!response.ok) throw new Error(`Data pipeline broke at sector chunk ${currentPage}`);
 
         const payload = await response.json();
@@ -157,13 +165,18 @@ export default function AttendanceReportPage() {
       }
 
       setRawSwipesBuffer(masterBufferArray);
-      addLog(`[SUCCESS] Aggregation complete! Compiled ${masterBufferArray.length} transaction entries.`);
+      addLog(`[SUCCESS] Aggregation complete! Compiled ${masterBufferArray.length} entries for current window.`);
     } catch (err: any) {
       addLog(`[ERROR] Continuous stream exception: ${err.message}`);
     } finally {
       setIsFetchingData(false);
     }
   };
+
+  // 🔄 UPDATE THIS EFFECT'S DEPENDENCY ARRAY SO IT LISTENS TO DATE CHANGES
+  useEffect(() => {
+    if (user) syncAllSavedAttendanceData();
+  }, [user, startDate, endDate]); // 👈 Added startDate and endDate here
 
   useEffect(() => {
     if (user) syncAllSavedAttendanceData();
@@ -222,7 +235,6 @@ export default function AttendanceReportPage() {
         const isWeekend = dateObj.weekDay === "Saturday" || dateObj.weekDay === "Sunday";
         const maxStandardThreshold = isWeekend ? 5.5 : 8.5;
 
-        // Condition 1: Completely empty dataset for the day -> Mark as Off Day (OD)
         if (matches.length === 0) {
           dailyMap[dateObj.iso] = { display: "0", hours: 0, ot: 0 };
           od++;
@@ -245,7 +257,6 @@ export default function AttendanceReportPage() {
         const checkIns = matches.filter(m => m.type.toLowerCase().includes("in")).sort((a, b) => a.time.localeCompare(b.time));
         const checkOuts = matches.filter(m => m.type.toLowerCase().includes("out")).sort((a, b) => b.time.localeCompare(a.time));
 
-        // Condition 2: Check-In exists but missing Check-Out -> Award standard daily allocation hours
         if (checkIns.length > 0 && checkOuts.length === 0) {
           totalHours += maxStandardThreshold;
           std_hr += maxStandardThreshold;
@@ -257,14 +268,12 @@ export default function AttendanceReportPage() {
           return;
         }
 
-        // Condition 3: Incomplete Punch (Missing In OR Out) -> Default to "0" and add to Absence Hours
         if (checkIns.length === 0 || checkOuts.length === 0) {
           dailyMap[dateObj.iso] = { display: "0", hours: 0, ot: 0 };
           ab_hr += maxStandardThreshold; 
           return;
         }
 
-        // Dynamic standard duration math using dynamic check-in points
         const firstInDecimal = timeStringToDecimal(checkIns[0].time);
         const lastOutDecimal = timeStringToDecimal(checkOuts[0].time);
         const standardCheckOutTime = isWeekend ? timeStringToDecimal("13:00") : timeStringToDecimal("17:00");
@@ -406,105 +415,84 @@ export default function AttendanceReportPage() {
   }
 
   return (
-    <div className="flex bg-slate-50 text-slate-900 min-h-screen antialiased">
-      <aside className="w-64 bg-slate-900 text-white flex flex-col justify-between fixed h-full top-0 left-0 z-30 shadow-xl border-r border-slate-800">
-        <div className="overflow-y-auto flex-1 p-4 space-y-5">
-          <div className="py-3 px-3 border-b border-slate-800 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-7 h-7 bg-blue-600 rounded flex items-center justify-center font-black text-xs shadow-md">GF</div>
-              <div>
-                <span className="font-black text-xs tracking-wider uppercase block text-slate-100">GoFresh Engine</span>
-                <span className="text-[9px] font-bold text-slate-500 tracking-widest block">EXTENDED_MATRIX</span>
-              </div>
-            </div>
-            <Button onClick={() => router.push("/")} variant="ghost" className="h-7 w-7 p-0 text-slate-400 hover:text-red-400 hover:bg-red-500/10">
-              <LogOut className="w-3.5 h-3.5" />
-            </Button>
-          </div>
-
-          <div className="space-y-4 pt-2">
-            <span className="text-[10px] font-black text-slate-500 tracking-widest block px-3">PIPELINE ENGINE</span>
-            <Button 
-              onClick={syncAllSavedAttendanceData} 
-              disabled={isFetchingData}
-              variant="outline" 
-              className="w-full justify-start gap-3 px-3 py-2.5 text-white bg-slate-950 border-slate-800 hover:bg-slate-800 text-xs font-bold"
-            >
-              <RefreshCw className={`w-4 h-4 text-cyan-400 ${isFetchingData ? "animate-spin" : ""}`} />
-              <span>{isFetchingData ? "SYNCING TABLES..." : "RE-RUN BACKEND SYNC"}</span>
-            </Button>
-          </div>
-
-          <div className="pt-4 border-t border-slate-800 space-y-3">
-            <span className="text-[10px] font-black text-slate-500 tracking-widest block px-3">FILTER DEPARTMENT</span>
-            <div className="px-1">
-              <select 
-                value={selectedDepartment || "ALL"} 
-                onChange={(e) => setSelectedDepartment(e.target.value === "ALL" ? null : e.target.value)} 
-                className="w-full bg-slate-950 border border-slate-800 text-white text-[11px] font-bold rounded p-2.5 uppercase tracking-wide"
+    <div className="flex bg-slate-50 text-slate-900 min-h-screen antialiased flex-col w-full">
+      <header className="bg-white border-b border-slate-200 px-8 py-4 sticky top-0 z-20 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+        
+        {/* Upper Left Filter Controls Container */}
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <input 
+              type="date" 
+              value={startDate} 
+              onChange={(e) => setStartDate(e.target.value)}
+              className="bg-slate-950 border border-slate-800 text-white text-[11px] rounded p-2 font-mono uppercase tracking-wide outline-none focus:border-blue-500 h-9"
+              placeholder="Start Date"
+            />
+            <span className="text-slate-400 text-xs font-bold font-mono">TO</span>
+            <input 
+              type="date" 
+              value={endDate} 
+              onChange={(e) => setEndDate(e.target.value)}
+              className="bg-slate-950 border border-slate-800 text-white text-[11px] rounded p-2 font-mono uppercase tracking-wide outline-none focus:border-blue-500 h-9"
+              placeholder="End Date"
+            />
+            {(startDate || endDate) && (
+              <Button 
+                onClick={() => { setStartDate(""); setEndDate(""); }}
+                variant="ghost" 
+                className="text-[10px] h-9 px-3 text-rose-500 hover:bg-rose-50 hover:text-rose-600 font-bold border border-rose-200 rounded-lg"
               >
-                <option value="ALL">ALL DEPARTMENTS</option>
-                {uniqueDepartments.map(d => <option key={d} value={d}>{d}</option>)}
-              </select>
-            </div>
+                CLEAR TIMELINE
+              </Button>
+            )}
           </div>
 
-          <div className="pt-4 border-t border-slate-800 space-y-3">
-            <span className="text-[10px] font-black text-slate-500 tracking-widest block px-3">TIMELINE LIMITER</span>
-            <div className="px-1 space-y-2">
-              <div>
-                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Start Date</label>
-                <input 
-                  type="date" 
-                  value={startDate} 
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 text-white text-[11px] rounded p-2 text-center font-mono uppercase tracking-wide outline-none focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">End Date</label>
-                <input 
-                  type="date" 
-                  value={endDate} 
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 text-white text-[11px] rounded p-2 text-center font-mono uppercase tracking-wide outline-none focus:border-blue-500"
-                />
-              </div>
-              {(startDate || endDate) && (
-                <Button 
-                  onClick={() => { setStartDate(""); setEndDate(""); }}
-                  variant="ghost" 
-                  className="w-full text-[10px] h-7 text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 font-bold"
-                >
-                  CLEAR TIMELINE
-                </Button>
-              )}
-            </div>
+          <div className="h-6 w-[1px] bg-slate-200 hidden sm:block" />
+
+          {/* Department Select Filter */}
+          <div>
+            <select 
+              value={selectedDepartment || "ALL"} 
+              onChange={(e) => setSelectedDepartment(e.target.value === "ALL" ? null : e.target.value)} 
+              className="bg-slate-950 border border-slate-800 text-white text-[11px] font-bold rounded-lg px-3 h-9 uppercase tracking-wide outline-none focus:border-blue-500"
+            >
+              <option value="ALL">ALL DEPARTMENTS</option>
+              {uniqueDepartments.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
           </div>
+
+          <div className="h-6 w-[1px] bg-slate-200 hidden sm:block" />
+
+          {/* Pipeline Sync Actions */}
+          <Button 
+            onClick={syncAllSavedAttendanceData} 
+            disabled={isFetchingData}
+            variant="outline" 
+            className="justify-start gap-2 h-9 px-3 text-slate-800 bg-white border-slate-200 hover:bg-slate-100 text-xs font-bold rounded-lg"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-blue-600 ${isFetchingData ? "animate-spin" : ""}`} />
+            <span>{isFetchingData ? "Loading..." : "Reload"}</span>
+          </Button>
         </div>
-      </aside>
 
-      <div className="flex-1 pl-64 flex flex-col min-w-0">
-        <header className="bg-white border-b border-slate-200 px-8 py-4 sticky top-0 z-20 flex items-center justify-between shadow-sm">
-          <div className="flex items-center gap-2 text-xs font-black tracking-widest uppercase">
-            <span className="text-slate-400">FINANCIAL COMPLIANCE RECONCILIATION</span>
-            <span className="text-slate-300">/</span>
-            <span className="text-slate-900">EXTENDED ATTENDANCE OVERVIEW</span>
-          </div>
-          <div className="relative w-72">
+        {/* Upper Right Metadata Search and Session Control */}
+        <div className="flex items-center gap-3 ml-auto md:ml-0">
+          <div className="relative w-64">
             <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
             <Input 
-              placeholder="SEARCH RECONCILIATION CODES..." 
+              placeholder="SEARCH CODES..." 
               value={searchQuery} 
               onChange={(e) => setSearchQuery(e.target.value)} 
               className="pl-9 text-xs uppercase font-bold rounded-lg h-9 border-slate-200" 
             />
           </div>
-        </header>
+        </div>
+      </header>
 
+      <div className="flex-1 flex flex-col min-w-0">
         <div className="p-8 w-full space-y-6">
           <Card className="bg-white border border-slate-200 shadow-sm rounded-xl">
-            <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 pb-4">
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-4 gap-4">
               <div>
                 <CardTitle className="text-xs font-black text-slate-400 uppercase tracking-widest">
                   COMPREHENSIVE LABOUR METRICS & PAYROLL RECONCILIATION LAYOUT
@@ -513,7 +501,7 @@ export default function AttendanceReportPage() {
                   Full tracking output grid mapped with Sunday highlighting features, dynamic timeline scopes, and extended department fields.
                 </CardDescription>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 shrink-0">
                 <Button 
                   onClick={exportToExcelFormat} 
                   disabled={filteredReportDataset.length === 0}
@@ -637,7 +625,7 @@ export default function AttendanceReportPage() {
           </Card>
         </div>
 
-        <footer className="mt-auto p-8 pt-0">
+        <div className="p-8 pt-0">
           <Card className="bg-white border border-slate-200 shadow-sm rounded-xl">
             <CardHeader className="pb-1.5 pt-3 px-5">
               <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
@@ -650,7 +638,7 @@ export default function AttendanceReportPage() {
               </div>
             </CardContent>
           </Card>
-        </footer>
+        </div>
       </div>
     </div>
   );

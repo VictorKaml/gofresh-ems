@@ -4,26 +4,41 @@ import { createClient } from "@/utils/supabase/server";
 
 export async function GET(request: Request) {
   try {
-
     const { searchParams } = new URL(request.url);
     
-    // Read page indexes from frontend. Default to index chunking window if none provided
+    // 📅 Extract date filters from query string
+    const startDate = searchParams.get("startDate");
+    const endDate = searchParams.get("endDate");
+
     const page = parseInt(searchParams.get("page") || "0", 10);
-    const size = parseInt(searchParams.get("size") || "25000", 10); // Elevated to hold all 21,980 rows safely
+    const size = parseInt(searchParams.get("size") || "25000", 10); 
 
     const offsetStart = page * size;
     const offsetEnd = offsetStart + size - 1;
     const supabase = await createClient();
 
-    // Fetch absolutely all records sorted chronologically
-    const { data: records, error } = await supabase
+    // Begin query chain
+    let query = supabase
       .from("attendance_records")
       .select("*")
       .order("swipe_date", { ascending: false })
       .order("swipe_time", { ascending: false });
 
+    // Apply filters if they exist
+    if (startDate) {
+      query = query.gte("swipe_date", startDate);
+    }
+    if (endDate) {
+      query = query.lte("swipe_date", endDate);
+    }
+
+    // Apply pagination bounds safety over data chunks
+    query = query.range(offsetStart, offsetEnd);
+
+    const { data: records, error } = await query;
+
     if (error) {
-      console.error("Supabase full table scan fetch failure:", error);
+      console.error("Supabase range query failure:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
@@ -37,9 +52,13 @@ export async function GET(request: Request) {
       isManualOverride: row.is_manual_override
     }));
 
+    // Determine if more records exist in this specific range
+    const hasMore = records.length === size;
+
     return NextResponse.json({
       success: true,
       swipes: mappedSwipes,
+      hasMore,
       attendance_records: mappedSwipes
     }, { status: 200 });
 
