@@ -55,6 +55,7 @@ import {
   FileText,
   Filter,
   Loader2,
+  BarChart3,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
@@ -173,7 +174,8 @@ export default function EMSDashboard() {
   // Daily Checklist Workspace States
   const [checklistDept, setChecklistDept] = useState<string>("");
   const [checklistCostCenter, setChecklistCostCenter] = useState<string>("");
-  const [isSubmittingManualAttendance, setIsSubmittingManualAttendance] = useState<string | null>(null);
+  const [isSubmittingManualAttendance, setIsSubmittingManualAttendance] =
+    useState<string | null>(null);
 
   const addLog = (msg: string) => {
     setSystemLogs((prev) =>
@@ -526,7 +528,7 @@ export default function EMSDashboard() {
     }
   };
 
-const systemProcessedDataset = useMemo(() => {
+  const systemProcessedDataset = useMemo(() => {
     const foundDates = Array.from(new Set(rawSwipesBuffer.map((s) => s.date)));
     const uniqueDates =
       foundDates.length > 0
@@ -588,7 +590,7 @@ const systemProcessedDataset = useMemo(() => {
           regularHours = 0;
           overtimeHours = 0;
           totalShiftHours = 0;
-          
+
           // Optional: If you still consider them late if their partial checkIn is late
           if (clockIn !== "—" && clockIn > "07:30") {
             dayStatus = "LATE"; // Or keep it as "MISSED A CLOCK PUNCH" based on your preference
@@ -649,26 +651,33 @@ const systemProcessedDataset = useMemo(() => {
     });
   }, [employeeDirectory, rawSwipesBuffer, monthFilter]);
 
-   // Derive dynamic list of Cost Centers based on selected department to avoid dead-ends
+  // Derive dynamic list of Cost Centers based on selected department to avoid dead-ends
   const availableCostCenters = useMemo(() => {
     if (!checklistDept) return [];
     const uniqueCCs = new Set(
       systemProcessedDataset
         .filter((emp) => emp.department === checklistDept)
-        .map((emp) => emp.costCenter)
+        .map((emp) => emp.costCenter),
     );
     return Array.from(uniqueCCs);
   }, [checklistDept, systemProcessedDataset]);
 
-  const handleMarkManualAttendance = async (staffCode: string, fullName: string) => {
+  const handleMarkManualAttendance = async (
+    staffCode: string,
+    fullName: string,
+  ) => {
     setIsSubmittingManualAttendance(staffCode);
-    
+
     // Structure a standard manual "In" punch format
     const manualRecord = {
       id: staffCode,
       date: selectedDate, // Logs to the active date filter
-      weekDay: new Date(selectedDate).toLocaleDateString("en-US", { weekday: "long" }),
-      time: new Date().toLocaleTimeString("en-US", { hour12: false }).slice(0, 5), // "HH:MM" format
+      weekDay: new Date(selectedDate).toLocaleDateString("en-US", {
+        weekday: "long",
+      }),
+      time: new Date()
+        .toLocaleTimeString("en-US", { hour12: false })
+        .slice(0, 5), // "HH:MM" format
       type: "Manual In",
       isManualOverride: true,
       reason: "Remote Shop / Offsite Manual Checklist Synchronization",
@@ -686,7 +695,9 @@ const systemProcessedDataset = useMemo(() => {
 
       const result = await response.json();
       if (response.ok && result.success) {
-        addLog(`[MANUAL OVERRIDE] Marked ${fullName} (${staffCode}) as Present at Remote Shop.`);
+        addLog(
+          `[MANUAL OVERRIDE] Marked ${fullName} (${staffCode}) as Present at Remote Shop.`,
+        );
 
         // Update the local attendance cache when the setter is available.
         if (typeof setRawSwipesBuffer === "function") {
@@ -1026,6 +1037,164 @@ const systemProcessedDataset = useMemo(() => {
 
   const generateStaffScopeReport = (scope: string) => {
     addLog(`Preparing printing parameters for ${scope} generation profile...`);
+  };
+
+  const downloadOverallAnalyticsPDF = () => {
+    if (!checklistDept || !checklistCostCenter) {
+      alert("Please select a Department and Cost Center first.");
+      return;
+    }
+
+    try {
+      // 1. Initialize Document Context (jsPDF instance)
+      const doc = new jsPDF();
+
+      // 2. Render Corporate Branding Header
+      try {
+        doc.addImage("/gofresh_logo.jpg", "JPEG", 14, 12, 25, 25);
+      } catch (logoErr) {
+        console.warn(
+          "Logo image could not be loaded, skipping render.",
+          logoErr,
+        );
+      }
+
+      // 3. Document Title & Operational Metadata Layout
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(16);
+      doc.setTextColor(37, 99, 235); // Blue-600
+      doc.text("OVERALL OPERATIONAL ANALTICS REPORT", 44, 20);
+
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(71, 85, 105);
+      doc.text(
+        `Department: ${checklistDept}  |  Cost Center: ${checklistCostCenter}`,
+        44,
+        27,
+      );
+      doc.text(
+        `Target Date: ${selectedDate}  |  Generated: ${new Date().toLocaleTimeString()}`,
+        44,
+        33,
+      );
+
+      doc.setDrawColor(226, 232, 240);
+      doc.line(14, 42, 196, 42);
+
+      // 4. Filter Target Personnel Dataset Matrix
+      const subsetWorkers = systemProcessedDataset.filter(
+        (emp) =>
+          emp.department === checklistDept &&
+          emp.costCenter === checklistCostCenter,
+      );
+
+      // Trackers for Summary KPI Blocks
+      let onsiteCount = 0;
+      let onTimeCount = 0;
+      let lateCount = 0;
+      let absentCount = 0;
+
+      // 5. Compute Swipe Metrics & Compile Rows
+      const tableRows = subsetWorkers.map((emp) => {
+        const daySwipes = rawSwipesBuffer.filter(
+          (s) => s.id === emp.staffCode && s.date === selectedDate,
+        );
+
+        const checkIns = daySwipes
+          .filter((s) => s.type.toLowerCase().includes("in"))
+          .sort((a, b) => a.time.localeCompare(b.time));
+
+        const checkOuts = daySwipes
+          .filter((s) => s.type.toLowerCase().includes("out"))
+          .sort((a, b) => a.time.localeCompare(b.time));
+
+        const clockIn = checkIns.length > 0 ? checkIns[0].time : "—";
+        const clockOut =
+          checkOuts.length > 0 ? checkOuts[checkOuts.length - 1].time : "—";
+
+        let status = "ABSENT";
+
+        // Strict historical logic: requires both pieces of structural data
+        if (clockIn !== "—" && clockOut !== "—") {
+          onsiteCount++; // Fully clocked onsite
+
+          if (clockIn <= "07:30") {
+            onTimeCount++;
+            status = "ON TIME";
+          } else {
+            lateCount++;
+            status = "LATE";
+          }
+        } else {
+          // Encompasses "clocked in only", "clocked out only", or "no punches at all"
+          absentCount++;
+        }
+
+        return [
+          emp.staffCode,
+          emp.fullName,
+          emp.designation,
+          clockIn,
+          clockOut,
+          status,
+        ];
+      });
+
+      // 6. Draw Aggregate Summary Matrix Banner Block
+      doc.setFont("helvetica", "bold");
+      doc.setFillColor(248, 250, 252); // slate-50
+      doc.rect(14, 46, 182, 12, "F");
+      doc.setFontSize(9);
+      doc.setTextColor(51, 65, 85);
+      doc.text(
+        `Summary Matrix -> Total Headcount: ${subsetWorkers.length}  |  Fully Onsite: ${onsiteCount}  |  On Time: ${onTimeCount}  |  Late: ${lateCount}  |  Absent/Incomplete: ${absentCount}`,
+        18,
+        54,
+      );
+
+      // 7. Generate Master Data Table via autoTable Engine
+      autoTable(doc, {
+        startY: 64,
+        head: [
+          [
+            "Staff ID",
+            "Employee Full Name",
+            "Designation",
+            "Clock In",
+            "Clock Out",
+            "Status",
+          ],
+        ],
+        body: tableRows,
+        theme: "striped",
+        headStyles: { fillColor: [79, 70, 229] }, // Indigo-600
+        styles: { fontSize: 9, cellPadding: 3 },
+        didParseCell: (data) => {
+          if (data.section === "body" && data.column.index === 5) {
+            if (data.cell.raw === "ON TIME")
+              data.cell.styles.textColor = [16, 185, 129]; // Emerald-500
+            if (data.cell.raw === "LATE")
+              data.cell.styles.textColor = [245, 158, 11]; // Amber-500
+            if (data.cell.raw === "ABSENT")
+              data.cell.styles.textColor = [244, 63, 94]; // Rose-500
+          }
+        },
+      });
+
+      // 8. Trigger File Save Dialog & Write System Log
+      doc.save(
+        `Overall_Analytics_${checklistDept.replace(/\s+/g, "_")}_${selectedDate}.pdf`,
+      );
+
+      if (typeof addLog === "function") {
+        addLog(
+          `Master analytics report successfully compiled for ${checklistDept} on date ${selectedDate}.`,
+        );
+      }
+    } catch (err) {
+      console.error("Master PDF generation block failure", err);
+    }
   };
 
   return (
@@ -1544,43 +1713,62 @@ const systemProcessedDataset = useMemo(() => {
 
           {activeTab === "CHECKLIST" && (
             <div className="space-y-6">
-              
               {/* Cascade Filter Control Board */}
               <Card className="bg-white border border-slate-200 shadow-xs rounded-xl">
                 <CardHeader className="p-4 border-b border-slate-100 bg-slate-50/50">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
                       <CardTitle className="text-xs font-black text-slate-700 uppercase tracking-widest flex items-center gap-2">
-                        <Filter className="w-4 h-4 text-blue-600" /> Operational Roster Checklist Controller
+                        <Filter className="w-4 h-4 text-blue-600" /> Operational
+                        Roster Checklist Controller
                       </CardTitle>
                       <CardDescription className="text-[10px] uppercase font-semibold text-slate-400 mt-0.5">
-                        Isolate departments and cost-centers to punch remote shop workers into active tracking.
+                        Isolate departments and cost-centers to punch remote
+                        shop workers into active tracking.
                       </CardDescription>
                     </div>
-                    
-                    {/* 📅 DYNAMIC DATE SELECTOR ENGINE */}
-                    <div className="flex flex-col text-left sm:text-right shrink-0">
-                      <label htmlFor="target-shift-date" className="text-[9px] font-black uppercase text-slate-400 block mb-1">
-                        Target Shift Date
-                      </label>
-                      <input
-                        id="target-shift-date"
-                        type="date"
-                        value={selectedDate}
-                        // Change "2026-01-01" and "2026-12-31" to your exact constraint window boundaries
-                        min="2026-01-01"
-                        max="2026-12-31"
-                        onChange={(e) => setSelectedDate(e.target.value)}
-                        className="bg-white border border-slate-200 text-xs font-mono font-black text-blue-600 uppercase rounded-lg p-1 px-2 focus:ring-1 focus:ring-blue-500 outline-none cursor-pointer tracking-wider"
-                      />
+
+                    {/* Container holding both the Report Button and the Date Input side-by-side */}
+                    <div className="flex items-end gap-3 shrink-0">
+                      {/* 📊 OVERALL ANALYTICS REPORT BUTTON */}
+                      <Button
+                        variant="outline"
+                        disabled={!checklistDept || !checklistCostCenter}
+                        onClick={downloadOverallAnalyticsPDF}
+                        className="h-9 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border-blue-200 hover:border-blue-300 text-blue-700 text-xs font-black uppercase tracking-wide rounded-lg flex items-center gap-2 px-3 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <BarChart3 className="w-4 h-4 text-blue-600" />
+                        <span>Analytics Report</span>
+                      </Button>
+
+                      {/* 📅 DYNAMIC DATE SELECTOR ENGINE */}
+                      <div className="flex flex-col text-left sm:text-right">
+                        <label
+                          htmlFor="target-shift-date"
+                          className="text-[9px] font-black uppercase text-slate-400 block mb-1"
+                        >
+                          Target Shift Date
+                        </label>
+                        <input
+                          id="target-shift-date"
+                          type="date"
+                          value={selectedDate}
+                          min="2026-01-01"
+                          max="2026-12-31"
+                          onChange={(e) => setSelectedDate(e.target.value)}
+                          className="h-9 bg-white border border-slate-200 text-xs font-mono font-black text-blue-600 uppercase rounded-lg p-1 px-2 focus:ring-1 focus:ring-blue-500 outline-none cursor-pointer tracking-wider"
+                        />
+                      </div>
                     </div>
                   </div>
                 </CardHeader>
-                
+
                 <CardContent className="p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 items-end">
                   {/* Step A: Choose Department */}
                   <div>
-                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">1. Select Target Department</label>
+                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">
+                      1. Select Target Department
+                    </label>
                     <select
                       value={checklistDept}
                       onChange={(e) => {
@@ -1591,14 +1779,18 @@ const systemProcessedDataset = useMemo(() => {
                     >
                       <option value="">-- Choose Workspace --</option>
                       {departmentMetrics.map((d) => (
-                        <option key={d.name} value={d.name}>{d.name}</option>
+                        <option key={d.name} value={d.name}>
+                          {d.name}
+                        </option>
                       ))}
                     </select>
                   </div>
 
                   {/* Step B: Choose Cost Center */}
                   <div>
-                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">2. Select Cost Center Workspace</label>
+                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">
+                      2. Select Cost Center Workspace
+                    </label>
                     <select
                       value={checklistCostCenter}
                       disabled={!checklistDept}
@@ -1607,7 +1799,9 @@ const systemProcessedDataset = useMemo(() => {
                     >
                       <option value="">-- Select Cost Center --</option>
                       {availableCostCenters.map((cc) => (
-                        <option key={cc} value={cc}>{cc}</option>
+                        <option key={cc} value={cc}>
+                          {cc}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -1629,245 +1823,367 @@ const systemProcessedDataset = useMemo(() => {
               </Card>
 
               {/* 📊 CLICKABLE SUB-METRICS REPORT CARDS BLOCK */}
-              {checklistDept && checklistCostCenter && (() => {
-                const subsetWorkers = systemProcessedDataset.filter(
-                  (emp) => emp.department === checklistDept && emp.costCenter === checklistCostCenter
-                );
+              {checklistDept &&
+                checklistCostCenter &&
+                (() => {
+                  const subsetWorkers = systemProcessedDataset.filter(
+                    (emp) =>
+                      emp.department === checklistDept &&
+                      emp.costCenter === checklistCostCenter,
+                  );
 
-                const groups = {
-                  onsite: [] as typeof subsetWorkers,
-                  onTime: [] as typeof subsetWorkers,
-                  late: [] as typeof subsetWorkers,
-                  absent: [] as typeof subsetWorkers,
-                };
+                  const groups = {
+                    onsite: [] as typeof subsetWorkers,
+                    onTime: [] as typeof subsetWorkers,
+                    late: [] as typeof subsetWorkers,
+                    absent: [] as typeof subsetWorkers,
+                  };
 
-                subsetWorkers.forEach((emp) => {
-                  const daySwipes = rawSwipesBuffer.filter((s) => s.id === emp.staffCode && s.date === selectedDate);
-                  const checkIns = daySwipes.filter((s) => s.type.toLowerCase().includes("in")).sort((a, b) => a.time.localeCompare(b.time));
-                  const checkOuts = daySwipes.filter((s) => s.type.toLowerCase().includes("out")).sort((a, b) => a.time.localeCompare(b.time));
+                  subsetWorkers.forEach((emp) => {
+                    const daySwipes = rawSwipesBuffer.filter(
+                      (s) => s.id === emp.staffCode && s.date === selectedDate,
+                    );
+                    const checkIns = daySwipes
+                      .filter((s) => s.type.toLowerCase().includes("in"))
+                      .sort((a, b) => a.time.localeCompare(b.time));
+                    const checkOuts = daySwipes
+                      .filter((s) => s.type.toLowerCase().includes("out"))
+                      .sort((a, b) => a.time.localeCompare(b.time));
 
-                  const clockIn = checkIns.length > 0 ? checkIns[0].time : "—";
-                  const clockOut = checkOuts.length > 0 ? checkOuts[checkOuts.length - 1].time : "—";
+                    const clockIn =
+                      checkIns.length > 0 ? checkIns[0].time : "—";
+                    const clockOut =
+                      checkOuts.length > 0
+                        ? checkOuts[checkOuts.length - 1].time
+                        : "—";
 
-                  if (clockIn !== "—" && clockOut !== "—") {
-                    groups.onsite.push(emp);
-                    if (clockIn <= "07:30") {
-                      groups.onTime.push(emp);
+                    if (clockIn !== "—" && clockOut !== "—") {
+                      groups.onsite.push(emp);
+                      if (clockIn <= "07:30") {
+                        groups.onTime.push(emp);
+                      } else {
+                        groups.late.push(emp);
+                      }
                     } else {
-                      groups.late.push(emp);
+                      groups.absent.push(emp);
                     }
-                  } else {
-                    groups.absent.push(emp);
-                  }
-                });
+                  });
 
-                const downloadGroupPDF = (title: string, list: typeof subsetWorkers) => {
-                  try {
-                    const doc = new jsPDF();
-                    
+                  const downloadGroupPDF = (
+                    title: string,
+                    list: typeof subsetWorkers,
+                  ) => {
                     try {
-                      doc.addImage("/gofresh_logo.jpg", "JPEG", 14, 12, 25, 25);
-                    } catch (logoErr) {
-                      console.warn("Logo image could not be loaded, skipping render.", logoErr);
+                      const doc = new jsPDF();
+
+                      try {
+                        doc.addImage(
+                          "/gofresh_logo.jpg",
+                          "JPEG",
+                          14,
+                          12,
+                          25,
+                          25,
+                        );
+                      } catch (logoErr) {
+                        console.warn(
+                          "Logo image could not be loaded, skipping render.",
+                          logoErr,
+                        );
+                      }
+
+                      doc.setFont("helvetica", "bold");
+                      doc.setFontSize(16);
+                      doc.setTextColor(37, 99, 235);
+                      doc.text(
+                        `CHECKLIST EXCEPTION REPORT: ${title.toUpperCase()}`,
+                        44,
+                        20,
+                      );
+
+                      doc.setFontSize(9);
+                      doc.setFont("helvetica", "normal");
+                      doc.setTextColor(71, 85, 105);
+                      doc.text(
+                        `Department: ${checklistDept}  |  Cost Center: ${checklistCostCenter}`,
+                        44,
+                        27,
+                      );
+                      doc.text(
+                        `Target Date: ${selectedDate}  |  Generated: ${new Date().toLocaleTimeString()}`,
+                        44,
+                        33,
+                      );
+
+                      doc.setDrawColor(226, 232, 240);
+                      doc.line(14, 42, 196, 42);
+
+                      const tableRows = list.map((emp) => {
+                        const daySwipes = rawSwipesBuffer.filter(
+                          (s) =>
+                            s.id === emp.staffCode && s.date === selectedDate,
+                        );
+                        const checkIns = daySwipes
+                          .filter((s) => s.type.toLowerCase().includes("in"))
+                          .sort((a, b) => a.time.localeCompare(b.time));
+                        const checkOuts = daySwipes
+                          .filter((s) => s.type.toLowerCase().includes("out"))
+                          .sort((a, b) => a.time.localeCompare(b.time));
+                        return [
+                          emp.staffCode,
+                          emp.fullName,
+                          emp.designation,
+                          checkIns.length > 0 ? checkIns[0].time : "—",
+                          checkOuts.length > 0
+                            ? checkOuts[checkOuts.length - 1].time
+                            : "—",
+                        ];
+                      });
+
+                      autoTable(doc, {
+                        startY: 48,
+                        head: [
+                          [
+                            "Staff ID",
+                            "Employee Full Name",
+                            "Designation",
+                            "Clock In",
+                            "Clock Out",
+                          ],
+                        ],
+                        body: tableRows,
+                        theme: "striped",
+                        headStyles: { fillColor: [37, 99, 235] },
+                        styles: { fontSize: 9, cellPadding: 3 },
+                      });
+
+                      doc.save(
+                        `Checklist_${title.replace(/\s+/g, "_")}_${selectedDate}.pdf`,
+                      );
+                      addLog(
+                        `Successfully generated and downloaded ${title} metrics document context.`,
+                      );
+                    } catch (err) {
+                      console.error("PDF generation block failure", err);
                     }
+                  };
 
-                    doc.setFont("helvetica", "bold");
-                    doc.setFontSize(16);
-                    doc.setTextColor(37, 99, 235);
-                    doc.text(`CHECKLIST EXCEPTION REPORT: ${title.toUpperCase()}`, 44, 20);
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                      <Card
+                        onClick={() =>
+                          downloadGroupPDF(
+                            "Fully Clocked Onsite",
+                            groups.onsite,
+                          )
+                        }
+                        className="bg-white border border-slate-200 rounded-xl border-l-4 border-l-blue-600 shadow-xs cursor-pointer hover:bg-slate-50 hover:scale-[1.01] active:scale-95 transition-all select-none"
+                      >
+                        <CardHeader className="p-4">
+                          <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between">
+                            <span>Fully Onsite</span>
+                            <Download className="w-3.5 h-3.5 text-blue-600" />
+                          </CardDescription>
+                          <CardTitle className="text-xl font-black text-slate-900 mt-1">
+                            {groups.onsite.length} Workers
+                          </CardTitle>
+                          <span className="text-[9px] text-slate-400 font-semibold uppercase block mt-1">
+                            In & Out Punches Found (Print PDF)
+                          </span>
+                        </CardHeader>
+                      </Card>
 
-                    doc.setFontSize(9);
-                    doc.setFont("helvetica", "normal");
-                    doc.setTextColor(71, 85, 105);
-                    doc.text(`Department: ${checklistDept}  |  Cost Center: ${checklistCostCenter}`, 44, 27);
-                    doc.text(`Target Date: ${selectedDate}  |  Generated: ${new Date().toLocaleTimeString()}`, 44, 33);
+                      <Card
+                        onClick={() =>
+                          downloadGroupPDF("On Time Roster", groups.onTime)
+                        }
+                        className="bg-white border border-slate-200 rounded-xl border-l-4 border-l-emerald-500 shadow-xs cursor-pointer hover:bg-slate-50 hover:scale-[1.01] active:scale-95 transition-all select-none"
+                      >
+                        <CardHeader className="p-4">
+                          <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between">
+                            <span>On Time (&lt; 7:30)</span>
+                            <Download className="w-3.5 h-3.5 text-emerald-500" />
+                          </CardDescription>
+                          <CardTitle className="text-xl font-black text-emerald-600 mt-1">
+                            {groups.onTime.length} Workers
+                          </CardTitle>
+                          <span className="text-[9px] text-slate-400 font-semibold uppercase block mt-1">
+                            Arrived Before 7:30 AM (Print PDF)
+                          </span>
+                        </CardHeader>
+                      </Card>
 
-                    doc.setDrawColor(226, 232, 240);
-                    doc.line(14, 42, 196, 42);
+                      <Card
+                        onClick={() =>
+                          downloadGroupPDF("Late Arrivals", groups.late)
+                        }
+                        className="bg-white border border-slate-200 rounded-xl border-l-4 border-l-amber-500 shadow-xs cursor-pointer hover:bg-slate-50 hover:scale-[1.01] active:scale-95 transition-all select-none"
+                      >
+                        <CardHeader className="p-4">
+                          <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between">
+                            <span>Late Arrivals</span>
+                            <Download className="w-3.5 h-3.5 text-amber-500" />
+                          </CardDescription>
+                          <CardTitle className="text-xl font-black text-amber-600 mt-1">
+                            {groups.late.length} Workers
+                          </CardTitle>
+                          <span className="text-[9px] text-slate-400 font-semibold uppercase block mt-1">
+                            Arrived After 7:30 AM (Print PDF)
+                          </span>
+                        </CardHeader>
+                      </Card>
 
-                    const tableRows = list.map((emp) => {
-                      const daySwipes = rawSwipesBuffer.filter((s) => s.id === emp.staffCode && s.date === selectedDate);
-                      const checkIns = daySwipes.filter((s) => s.type.toLowerCase().includes("in")).sort((a, b) => a.time.localeCompare(b.time));
-                      const checkOuts = daySwipes.filter((s) => s.type.toLowerCase().includes("out")).sort((a, b) => a.time.localeCompare(b.time));
-                      return [
-                        emp.staffCode,
-                        emp.fullName,
-                        emp.designation,
-                        checkIns.length > 0 ? checkIns[0].time : "—",
-                        checkOuts.length > 0 ? checkOuts[checkOuts.length - 1].time : "—",
-                      ];
-                    });
-
-                    autoTable(doc, {
-                      startY: 48,
-                      head: [["Staff ID", "Employee Full Name", "Designation", "Clock In", "Clock Out"]],
-                      body: tableRows,
-                      theme: "striped",
-                      headStyles: { fillColor: [37, 99, 235] },
-                      styles: { fontSize: 9, cellPadding: 3 },
-                    });
-
-                    doc.save(`Checklist_${title.replace(/\s+/g, "_")}_${selectedDate}.pdf`);
-                    addLog(`Successfully generated and downloaded ${title} metrics document context.`);
-                  } catch (err) {
-                    console.error("PDF generation block failure", err);
-                  }
-                };
-
-                return (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <Card 
-                      onClick={() => downloadGroupPDF("Fully Clocked Onsite", groups.onsite)}
-                      className="bg-white border border-slate-200 rounded-xl border-l-4 border-l-blue-600 shadow-xs cursor-pointer hover:bg-slate-50 hover:scale-[1.01] active:scale-95 transition-all select-none"
-                    >
-                      <CardHeader className="p-4">
-                        <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between">
-                          <span>Fully Onsite</span>
-                          <Download className="w-3.5 h-3.5 text-blue-600" />
-                        </CardDescription>
-                        <CardTitle className="text-xl font-black text-slate-900 mt-1">
-                          {groups.onsite.length} Workers
-                        </CardTitle>
-                        <span className="text-[9px] text-slate-400 font-semibold uppercase block mt-1">In & Out Punches Found (Print PDF)</span>
-                      </CardHeader>
-                    </Card>
-
-                    <Card 
-                      onClick={() => downloadGroupPDF("On Time Roster", groups.onTime)}
-                      className="bg-white border border-slate-200 rounded-xl border-l-4 border-l-emerald-500 shadow-xs cursor-pointer hover:bg-slate-50 hover:scale-[1.01] active:scale-95 transition-all select-none"
-                    >
-                      <CardHeader className="p-4">
-                        <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between">
-                          <span>On Time (&lt; 7:30)</span>
-                          <Download className="w-3.5 h-3.5 text-emerald-500" />
-                        </CardDescription>
-                        <CardTitle className="text-xl font-black text-emerald-600 mt-1">
-                          {groups.onTime.length} Workers
-                        </CardTitle>
-                        <span className="text-[9px] text-slate-400 font-semibold uppercase block mt-1">Arrived Before 7:30 AM (Print PDF)</span>
-                      </CardHeader>
-                    </Card>
-
-                    <Card 
-                      onClick={() => downloadGroupPDF("Late Arrivals", groups.late)}
-                      className="bg-white border border-slate-200 rounded-xl border-l-4 border-l-amber-500 shadow-xs cursor-pointer hover:bg-slate-50 hover:scale-[1.01] active:scale-95 transition-all select-none"
-                    >
-                      <CardHeader className="p-4">
-                        <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between">
-                          <span>Late Arrivals</span>
-                          <Download className="w-3.5 h-3.5 text-amber-500" />
-                        </CardDescription>
-                        <CardTitle className="text-xl font-black text-amber-600 mt-1">
-                          {groups.late.length} Workers
-                        </CardTitle>
-                        <span className="text-[9px] text-slate-400 font-semibold uppercase block mt-1">Arrived After 7:30 AM (Print PDF)</span>
-                      </CardHeader>
-                    </Card>
-
-                    <Card 
-                      onClick={() => downloadGroupPDF("Absenteeism and Missed Shifts", groups.absent)}
-                      className="bg-white border border-slate-200 rounded-xl border-l-4 border-l-rose-500 shadow-xs cursor-pointer hover:bg-slate-50 hover:scale-[1.01] active:scale-95 transition-all select-none"
-                    >
-                      <CardHeader className="p-4">
-                        <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between">
-                          <span>Absent / Incomplete</span>
-                          <Download className="w-3.5 h-3.5 text-rose-500" />
-                        </CardDescription>
-                        <CardTitle className="text-xl font-black text-rose-600 mt-1">
-                          {groups.absent.length} Workers
-                        </CardTitle>
-                        <span className="text-[9px] text-slate-400 font-semibold uppercase block mt-1">Missing In/Out Punches (Print PDF)</span>
-                      </CardHeader>
-                    </Card>
-                  </div>
-                );
-              })()}
+                      <Card
+                        onClick={() =>
+                          downloadGroupPDF(
+                            "Absenteeism and Missed Shifts",
+                            groups.absent,
+                          )
+                        }
+                        className="bg-white border border-slate-200 rounded-xl border-l-4 border-l-rose-500 shadow-xs cursor-pointer hover:bg-slate-50 hover:scale-[1.01] active:scale-95 transition-all select-none"
+                      >
+                        <CardHeader className="p-4">
+                          <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between">
+                            <span>Absent / Incomplete</span>
+                            <Download className="w-3.5 h-3.5 text-rose-500" />
+                          </CardDescription>
+                          <CardTitle className="text-xl font-black text-rose-600 mt-1">
+                            {groups.absent.length} Workers
+                          </CardTitle>
+                          <span className="text-[9px] text-slate-400 font-semibold uppercase block mt-1">
+                            Missing In/Out Punches (Print PDF)
+                          </span>
+                        </CardHeader>
+                      </Card>
+                    </div>
+                  );
+                })()}
 
               {/* Attendance Checklist Grid Output */}
               <Card className="bg-white border border-slate-200 shadow-xs rounded-xl overflow-hidden">
                 <CardContent className="p-0">
                   {!checklistDept || !checklistCostCenter ? (
                     <div className="p-12 text-center text-xs font-bold uppercase tracking-wider text-slate-400">
-                      ⚠️ Please specify an operational Department and secondary Cost Center parameters to fetch roster checklist.
+                      ⚠️ Please specify an operational Department and secondary
+                      Cost Center parameters to fetch roster checklist.
                     </div>
-                  ) : (() => {
-                    const matchingEmployees = systemProcessedDataset.filter(
-                      (emp) => emp.department === checklistDept && emp.costCenter === checklistCostCenter
-                    );
-
-                    if (matchingEmployees.length === 0) {
-                      return (
-                        <div className="p-12 text-center text-xs font-bold uppercase tracking-wider text-slate-400">
-                          No personnel indices registered under this combination matrix.
-                        </div>
+                  ) : (
+                    (() => {
+                      const matchingEmployees = systemProcessedDataset.filter(
+                        (emp) =>
+                          emp.department === checklistDept &&
+                          emp.costCenter === checklistCostCenter,
                       );
-                    }
 
-                    return (
-                      <Table>
-                        <TableHeader className="bg-slate-50">
-                          <TableRow className="border-b border-slate-200">
-                            <TableHead className="text-[10px] font-black uppercase text-slate-500 w-32">Staff Code</TableHead>
-                            <TableHead className="text-[10px] font-black uppercase text-slate-500">Employee Full Name</TableHead>
-                            <TableHead className="text-[10px] font-black uppercase text-slate-500">Designation Assignment</TableHead>
-                            <TableHead className="text-[10px] font-black uppercase text-slate-500 text-center w-40">Presence Status</TableHead>
-                            <TableHead className="text-[10px] font-black uppercase text-slate-500 text-right w-44">Checklist Action</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {matchingEmployees.map((worker) => {
-                            const workerTodayRecord = rawSwipesBuffer.filter(
-                              (s) => s.id === worker.staffCode && s.date === selectedDate
-                            );
-                            const isPresent = workerTodayRecord.length > 0;
-                            const isPending = isSubmittingManualAttendance === worker.staffCode;
+                      if (matchingEmployees.length === 0) {
+                        return (
+                          <div className="p-12 text-center text-xs font-bold uppercase tracking-wider text-slate-400">
+                            No personnel indices registered under this
+                            combination matrix.
+                          </div>
+                        );
+                      }
 
-                            return (
-                              <TableRow key={worker.staffCode} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
-                                <TableCell className="font-mono text-xs font-bold text-slate-600">{worker.staffCode}</TableCell>
-                                <TableCell className="text-xs font-extrabold text-slate-900 uppercase">{worker.fullName}</TableCell>
-                                <TableCell className="text-xs font-medium text-slate-500 uppercase">{worker.designation}</TableCell>
-                                <TableCell className="text-center">
-                                  <Badge 
-                                    className="text-[9px] font-black tracking-wide"
-                                    variant={isPresent ? "secondary" : "destructive"}
-                                  >
-                                    {isPresent ? "CLOCKED / ONSITE" : "NOT CLOCKED"}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  {isPresent ? (
-                                    <div className="inline-flex items-center gap-1.5 text-emerald-600 bg-emerald-50 text-[10px] font-black uppercase px-2.5 py-1 rounded-md border border-emerald-200">
-                                      <CheckCircle2 className="w-3.5 h-3.5" /> Present Lock
-                                    </div>
-                                  ) : (
-                                    <label className="inline-flex items-center gap-2 cursor-pointer hover:bg-slate-100 p-1.5 px-3 rounded-lg border border-slate-200 select-none bg-white transition-all active:scale-95">
-                                      {isPending ? (
-                                        <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
-                                      ) : (
-                                        <input
-                                          type="checkbox"
-                                          checked={false} 
-                                          onChange={() => handleMarkManualAttendance(worker.staffCode, worker.fullName)}
-                                          className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
-                                        />
-                                      )}
-                                      <span className="text-[10px] font-black text-slate-700 uppercase tracking-wide">
-                                        {isPending ? "Syncing..." : "Mark Present"}
-                                      </span>
-                                    </label>
-                                  )}
-                                </TableCell>
-                              </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
-                    );
-                  })()}
+                      return (
+                        <Table>
+                          <TableHeader className="bg-slate-50">
+                            <TableRow className="border-b border-slate-200">
+                              <TableHead className="text-[10px] font-black uppercase text-slate-500 w-32">
+                                Staff Code
+                              </TableHead>
+                              <TableHead className="text-[10px] font-black uppercase text-slate-500">
+                                Employee Full Name
+                              </TableHead>
+                              <TableHead className="text-[10px] font-black uppercase text-slate-500">
+                                Designation Assignment
+                              </TableHead>
+                              <TableHead className="text-[10px] font-black uppercase text-slate-500 text-center w-40">
+                                Presence Status
+                              </TableHead>
+                              <TableHead className="text-[10px] font-black uppercase text-slate-500 text-right w-44">
+                                Checklist Action
+                              </TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {matchingEmployees.map((worker) => {
+                              const workerTodayRecord = rawSwipesBuffer.filter(
+                                (s) =>
+                                  s.id === worker.staffCode &&
+                                  s.date === selectedDate,
+                              );
+                              const isPresent = workerTodayRecord.length > 0;
+                              const isPending =
+                                isSubmittingManualAttendance ===
+                                worker.staffCode;
+
+                              return (
+                                <TableRow
+                                  key={worker.staffCode}
+                                  className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors"
+                                >
+                                  <TableCell className="font-mono text-xs font-bold text-slate-600">
+                                    {worker.staffCode}
+                                  </TableCell>
+                                  <TableCell className="text-xs font-extrabold text-slate-900 uppercase">
+                                    {worker.fullName}
+                                  </TableCell>
+                                  <TableCell className="text-xs font-medium text-slate-500 uppercase">
+                                    {worker.designation}
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    <Badge
+                                      className="text-[9px] font-black tracking-wide"
+                                      variant={
+                                        isPresent ? "secondary" : "destructive"
+                                      }
+                                    >
+                                      {isPresent
+                                        ? "CLOCKED / ONSITE"
+                                        : "NOT CLOCKED"}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    {isPresent ? (
+                                      <div className="inline-flex items-center gap-1.5 text-emerald-600 bg-emerald-50 text-[10px] font-black uppercase px-2.5 py-1 rounded-md border border-emerald-200">
+                                        <CheckCircle2 className="w-3.5 h-3.5" />{" "}
+                                        Present Lock
+                                      </div>
+                                    ) : (
+                                      <label className="inline-flex items-center gap-2 cursor-pointer hover:bg-slate-100 p-1.5 px-3 rounded-lg border border-slate-200 select-none bg-white transition-all active:scale-95">
+                                        {isPending ? (
+                                          <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
+                                        ) : (
+                                          <input
+                                            type="checkbox"
+                                            checked={false}
+                                            onChange={() =>
+                                              handleMarkManualAttendance(
+                                                worker.staffCode,
+                                                worker.fullName,
+                                              )
+                                            }
+                                            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                                          />
+                                        )}
+                                        <span className="text-[10px] font-black text-slate-700 uppercase tracking-wide">
+                                          {isPending
+                                            ? "Syncing..."
+                                            : "Mark Present"}
+                                        </span>
+                                      </label>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      );
+                    })()
+                  )}
                 </CardContent>
               </Card>
-
             </div>
           )}
 
