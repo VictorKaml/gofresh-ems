@@ -42,6 +42,7 @@ import {
   Loader2,
   BarChart3,
   Filter,
+  LogOut,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
@@ -145,7 +146,9 @@ export default function EMSDashboard() {
   } | null>(null);
 
   // Add these if they are missing or match them to your actual state names
-const [filteredWorkerDataset, setFilteredWorkerDataset] = useState<EmployeeProfile[]>([]);
+  const [filteredWorkerDataset, setFilteredWorkerDataset] = useState<
+    EmployeeProfile[]
+  >([]);
   const [systemLogs, setSystemLogs] = useState<string[]>([
     "System is ready and running smoothly.",
   ]);
@@ -437,84 +440,89 @@ const [filteredWorkerDataset, setFilteredWorkerDataset] = useState<EmployeeProfi
     syncAttendanceData();
   }, [user]);
 
-const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-const [workersDataset, setWorkersDataset] = useState<EmployeeProfile[]>([]);
+  const [workersDataset, setWorkersDataset] = useState<EmployeeProfile[]>([]);
 
-const handleCreateStaffSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
+  const handleCreateStaffSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-  // 1. Guard Check: Ensure all mandatory values are selected
-  if (!newStaffCode || !newStaffName || !newStaffDesignation || !newStaffDept || !newStaffCostCenter) {
-    alert("Please complete all required fields before saving.");
-    return;
-  }
-
-  if (isSubmitting) return;
-  setIsSubmitting(true);
-
-  try {
-    // 2. Assemble payload matching database column naming rules
-    const payload = {
-      staff_code: newStaffCode.trim().toUpperCase(),
-      full_name: newStaffName.trim().toUpperCase(),
-      designation: newStaffDesignation,
-      department: newStaffDept,
-      cost_center: newStaffCostCenter,
-    };
-
-    // 3. Post data to your Next.js API route handler
-    const response = await fetch('/api/employees', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
-
-    const result = await response.json();
-
-    if (!response.ok) {
-      throw new Error(result.error || 'Failed to save employee records.');
+    // 1. Guard Check: Ensure all mandatory values are selected
+    if (
+      !newStaffCode ||
+      !newStaffName ||
+      !newStaffDesignation ||
+      !newStaffDept ||
+      !newStaffCostCenter
+    ) {
+      alert("Please complete all required fields before saving.");
+      return;
     }
 
-    // 4. Extract the formatted camelCase employee returned from the API route
-    const { employee } = result;
+    if (isSubmitting) return;
+    setIsSubmitting(true);
 
-    // 5. Update the master source state (workersDataset) immediately
-    setWorkersDataset((prev) => [...prev, employee]);
+    try {
+      // 2. Assemble payload matching database column naming rules
+      const payload = {
+        staff_code: newStaffCode.trim().toUpperCase(),
+        full_name: newStaffName.trim().toUpperCase(),
+        designation: newStaffDesignation,
+        department: newStaffDept,
+        cost_center: newStaffCostCenter,
+      };
 
-    // 6. Push a status update notice to your visible system logs feed at the bottom
-    setSystemLogs((prev) => [
-      `[SUCCESS] Registered employee ${employee.staffCode} (${employee.fullName}) directly to database.`,
-      ...prev.slice(0, 19)
-    ]);
+      // 3. Post data to your Next.js API route handler
+      const response = await fetch("/api/employees", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
 
-    // 7. Reset all form fields and shut the modal overlay
-    setNewStaffCode("");
-    setNewStaffName("");
-    setNewStaffDesignation("");
-    setNewStaffDept("");
-    setNewStaffCostCenter("");
-    setIsAddModalOpen(false);
+      const result = await response.json();
 
-    setSystemLogs((prev) => [
-      `[SUCCESS] Employee successfully registered to GoFresh Database!`,
-      ...prev.slice(0, 19)
-    ]);
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to save employee records.");
+      }
 
-  } catch (error: any) {
-    console.error('Database Form Submission Failure:', error);
-    alert(`Submission Error: ${error.message}`);
-    
-    setSystemLogs((prev) => [
-      `[ERROR] Failed database write operation: ${error.message}`,
-      ...prev.slice(0, 19)
-    ]);
-  } finally {
-    setIsSubmitting(false);
-  }
-};
+      // 4. Extract the formatted camelCase employee returned from the API route
+      const { employee } = result;
+
+      // 5. Update the master source state (workersDataset) immediately
+      setWorkersDataset((prev) => [...prev, employee]);
+
+      // 6. Push a status update notice to your visible system logs feed at the bottom
+      setSystemLogs((prev) => [
+        `[SUCCESS] Registered employee ${employee.staffCode} (${employee.fullName}) directly to database.`,
+        ...prev.slice(0, 19),
+      ]);
+
+      // 7. Reset all form fields and shut the modal overlay
+      setNewStaffCode("");
+      setNewStaffName("");
+      setNewStaffDesignation("");
+      setNewStaffDept("");
+      setNewStaffCostCenter("");
+      setIsAddModalOpen(false);
+
+      setSystemLogs((prev) => [
+        `[SUCCESS] Employee successfully registered to GoFresh Database!`,
+        ...prev.slice(0, 19),
+      ]);
+    } catch (error: any) {
+      console.error("Database Form Submission Failure:", error);
+      alert(`Submission Error: ${error.message}`);
+
+      setSystemLogs((prev) => [
+        `[ERROR] Failed database write operation: ${error.message}`,
+        ...prev.slice(0, 19),
+      ]);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const toggleStaffStatus = (code: string) => {
     setEmployeeDirectory((prev) =>
@@ -665,6 +673,19 @@ const handleCreateStaffSubmit = async (e: React.FormEvent) => {
     );
     return Array.from(uniqueCCs);
   }, [checklistDept, systemProcessedDataset]);
+
+  const handleLogout = async () => {
+  try {
+    // Optional: Call your auth logout API route if you have one
+    await fetch("/api/auth/logout", { method: "POST" });
+    
+    // Clear user state and redirect
+    setUser(null);
+    router.push("/"); // or wherever your login screen is located
+  } catch (err) {
+    console.error("Failed to log out:", err);
+  }
+};
 
   const handleMarkManualAttendance = async (
     staffCode: string,
@@ -841,7 +862,6 @@ const handleCreateStaffSubmit = async (e: React.FormEvent) => {
       return textMatch;
     });
   }, [systemProcessedDataset, staffSubTab, staffSearchQuery]);
-
 
   // Derive headcount summary totals for selected operational department workspace bounds
 
@@ -1278,7 +1298,6 @@ const handleCreateStaffSubmit = async (e: React.FormEvent) => {
     }
   };
 
-
   return (
     <div className="bg-slate-50 text-slate-900 min-h-screen flex flex-col font-sans antialiased">
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-xs">
@@ -1326,7 +1345,7 @@ const handleCreateStaffSubmit = async (e: React.FormEvent) => {
               onClick={() => setActiveTab("REPORTS_HUB")}
               className={`px-4 py-2 rounded-lg flex items-center gap-1.5 transition-all ${activeTab === "REPORTS_HUB" ? "bg-white text-blue-600 shadow-xs" : "text-slate-600 hover:text-slate-900"}`}
             >
-              <CalendarDays className="w-4 h-4" /> Print Reports
+              <CalendarDays className="w-4 h-4" /> Summary
             </button>
             <button
               onClick={() => setActiveTab("SETTINGS")}
@@ -1354,6 +1373,14 @@ const handleCreateStaffSubmit = async (e: React.FormEvent) => {
                 <UploadCloud className="w-4 h-4 mr-1 shrink-0" />
                 <span>{isUploading ? "Reading..." : "Upload Timecard"}</span>
               </label>
+            </Button>
+            <Button
+              onClick={handleLogout}
+              variant="destructive"
+              className="h-9 text-xs font-bold flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white"
+            >
+              <LogOut className="w-4 h-4 shrink-0" />
+              <span>Log Out</span>
             </Button>
           </div>
         </div>
@@ -1561,7 +1588,6 @@ const handleCreateStaffSubmit = async (e: React.FormEvent) => {
                     ? targetTimelineDates[0].iso
                     : new Date().toISOString().split("T")[0];
                 const targetDateStr = selectedDate || defaultTargetDate;
-
 
                 const filteredWorkerDataset = employeeDirectory.filter(
                   (emp) => {
@@ -2838,189 +2864,243 @@ const handleCreateStaffSubmit = async (e: React.FormEvent) => {
               )}
 
               {isAddModalOpen && (
-  <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-    <Card className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-      <CardHeader className="border-b border-slate-100 p-5 flex flex-row items-center justify-between">
-        <div>
-          <CardTitle className="text-sm font-black text-slate-900 uppercase tracking-wide">
-            Add Employee
-          </CardTitle>
-          <CardDescription className="text-[11px] font-medium text-slate-400 uppercase mt-0.5">
-            Add a new team member to your database organization
-          </CardDescription>
-        </div>
-        <button
-          onClick={() => setIsAddModalOpen(false)}
-          className="text-slate-400 hover:text-slate-600 font-bold text-sm"
-        >
-          ✕
-        </button>
-      </CardHeader>
-      <CardContent className="p-6">
-        <form
-          onSubmit={handleCreateStaffSubmit}
-          className="space-y-5"
-        >
-          {/* Row 1: Full Name & Staff Code (Primary Key) */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
-                Full Name *
-              </label>
-              <Input
-                required
-                value={newStaffName} // Maps to schema: full_name
-                onChange={(e) => setNewStaffName(e.target.value)}
-                placeholder="e.g. MACKCHESTER BENFORD"
-                className="text-xs font-bold uppercase"
-              />
-            </div>
-            <div>
-              <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
-                Employee ID Code * (Primary Key)
-              </label>
-              <Input
-                required
-                value={newStaffCode} // Maps to schema: staff_code
-                onChange={(e) => setNewStaffCode(e.target.value)}
-                placeholder="e.g. BA036"
-                className="text-xs font-bold uppercase"
-              />
-            </div>
-          </div>
+                <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+                  <Card className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                    <CardHeader className="border-b border-slate-100 p-5 flex flex-row items-center justify-between">
+                      <div>
+                        <CardTitle className="text-sm font-black text-slate-900 uppercase tracking-wide">
+                          Add Employee
+                        </CardTitle>
+                        <CardDescription className="text-[11px] font-medium text-slate-400 uppercase mt-0.5">
+                          Add a new team member to your database organization
+                        </CardDescription>
+                      </div>
+                      <button
+                        onClick={() => setIsAddModalOpen(false)}
+                        className="text-slate-400 hover:text-slate-600 font-bold text-sm"
+                      >
+                        ✕
+                      </button>
+                    </CardHeader>
+                    <CardContent className="p-6">
+                      <form
+                        onSubmit={handleCreateStaffSubmit}
+                        className="space-y-5"
+                      >
+                        {/* Row 1: Full Name & Staff Code (Primary Key) */}
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
+                              Full Name *
+                            </label>
+                            <Input
+                              required
+                              value={newStaffName} // Maps to schema: full_name
+                              onChange={(e) => setNewStaffName(e.target.value)}
+                              placeholder="e.g. MACKCHESTER BENFORD"
+                              className="text-xs font-bold uppercase"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
+                              Employee ID Code * (Primary Key)
+                            </label>
+                            <Input
+                              required
+                              value={newStaffCode} // Maps to schema: staff_code
+                              onChange={(e) => setNewStaffCode(e.target.value)}
+                              placeholder="e.g. BA036"
+                              className="text-xs font-bold uppercase"
+                            />
+                          </div>
+                        </div>
 
-          {/* Row 2: Designation */}
-          <div>
-            <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
-              Job Designation *
-            </label>
-            <select
-              required
-              value={newStaffDesignation} // Maps to schema: designation
-              onChange={(e) => setNewStaffDesignation(e.target.value)}
-              className="w-full bg-white border border-slate-200 text-xs font-bold uppercase rounded-lg h-9 px-3 text-slate-700 shadow-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-            >
-              <option value="">-- SELECT DESIGNATION --</option>
-              <option value="Security Guard">Security Guard</option>
-              <option value="Supervisor">Supervisor</option>
-              <option value="Cleaner">Cleaner</option>
-              <option value="Production Assistant">Production Assistant</option>
-              <option value="General Fitter">General Fitter</option>
-              <option value="Merchandiser">Merchandiser</option>
-              <option value="Driver">Driver</option>
-            </select>
-          </div>
+                        {/* Row 2: Designation */}
+                        <div>
+                          <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
+                            Job Designation *
+                          </label>
+                          <select
+                            required
+                            value={newStaffDesignation} // Maps to schema: designation
+                            onChange={(e) =>
+                              setNewStaffDesignation(e.target.value)
+                            }
+                            className="w-full bg-white border border-slate-200 text-xs font-bold uppercase rounded-lg h-9 px-3 text-slate-700 shadow-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          >
+                            <option value="">-- SELECT DESIGNATION --</option>
+                            <option value="Security Guard">
+                              Security Guard
+                            </option>
+                            <option value="Supervisor">Supervisor</option>
+                            <option value="Cleaner">Cleaner</option>
+                            <option value="Production Assistant">
+                              Production Assistant
+                            </option>
+                            <option value="General Fitter">
+                              General Fitter
+                            </option>
+                            <option value="Merchandiser">Merchandiser</option>
+                            <option value="Driver">Driver</option>
+                          </select>
+                        </div>
 
-          {/* Row 3: Department & Conditional Cost Center */}
-          <div className="grid grid-cols-2 gap-4">
-            {/* DEPARTMENT */}
-            <div>
-              <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
-                Department *
-              </label>
-              <select
-                required
-                value={newStaffDept} // Maps to schema: department
-                onChange={(e) => {
-                  setNewStaffDept(e.target.value);
-                  setNewStaffCostCenter(""); // Reset dependent selection
-                }}
-                className="w-full bg-white border border-slate-200 text-xs font-bold uppercase rounded-lg h-9 px-3 text-slate-700 shadow-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-              >
-                <option value="">-- SELECT DEPARTMENT --</option>
-                <option value="Go Fresh Beef">Go Fresh Beef</option>
-                <option value="Go Fresh Chicken">Go Fresh Chicken</option>
-                <option value="Tray Factory">Tray Factory</option>
-                <option value="Live Sales">Live Sales</option>
-                <option value="Retail">Retail</option>
-              </select>
-            </div>
+                        {/* Row 3: Department & Conditional Cost Center */}
+                        <div className="grid grid-cols-2 gap-4">
+                          {/* DEPARTMENT */}
+                          <div>
+                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
+                              Department *
+                            </label>
+                            <select
+                              required
+                              value={newStaffDept} // Maps to schema: department
+                              onChange={(e) => {
+                                setNewStaffDept(e.target.value);
+                                setNewStaffCostCenter(""); // Reset dependent selection
+                              }}
+                              className="w-full bg-white border border-slate-200 text-xs font-bold uppercase rounded-lg h-9 px-3 text-slate-700 shadow-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            >
+                              <option value="">-- SELECT DEPARTMENT --</option>
+                              <option value="Go Fresh Beef">
+                                Go Fresh Beef
+                              </option>
+                              <option value="Go Fresh Chicken">
+                                Go Fresh Chicken
+                              </option>
+                              <option value="Tray Factory">Tray Factory</option>
+                              <option value="Live Sales">Live Sales</option>
+                              <option value="Retail">Retail</option>
+                            </select>
+                          </div>
 
-            {/* CONDITIONAL COST CENTER */}
-            <div>
-              <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
-                Cost Center *
-              </label>
-              <select
-                required
-                value={newStaffCostCenter} // Maps to schema: cost_center
-                onChange={(e) => setNewStaffCostCenter(e.target.value)}
-                disabled={!newStaffDept}
-                className="w-full bg-white border border-slate-200 text-xs font-bold uppercase rounded-lg h-9 px-3 text-slate-700 shadow-xs focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
-              >
-                <option value="">-- SELECT COST CENTRE --</option>
-                
-                {newStaffDept === "Go Fresh Beef" && (
-                  <>
-                    <option value="Ngabu General">Ngabu General</option>
-                    <option value="Lilongwe LCS">Lilongwe LCS</option>                   
-                    <option value="Lilongwe Sales">Lilongwe Sales</option>                   
-                    <option value="Lilongwe Production">Lilongwe Production</option> 
-                    <option value="Blantyre Sales">Blantyre Sales</option>                  
-                   <option value="Blantyre Production">Blantyre Production</option>
-                    <option value="Lilongwe House">Lilongwe House</option>
-                  </>
-                )}
+                          {/* CONDITIONAL COST CENTER */}
+                          <div>
+                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
+                              Cost Center *
+                            </label>
+                            <select
+                              required
+                              value={newStaffCostCenter} // Maps to schema: cost_center
+                              onChange={(e) =>
+                                setNewStaffCostCenter(e.target.value)
+                              }
+                              disabled={!newStaffDept}
+                              className="w-full bg-white border border-slate-200 text-xs font-bold uppercase rounded-lg h-9 px-3 text-slate-700 shadow-xs focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
+                            >
+                              <option value="">-- SELECT COST CENTRE --</option>
 
-                {newStaffDept === "Go Fresh Chicken" && (
-                  <>
-                  <option value="Chicken Abattoir">Kanengo Farm</option>
-                    <option value="Chicken Abattoir">Chicken Abattoir</option>
-                  <option value="Lilongwe Sales">Lilongwe Sales</option>                   
-                    <option value="Lilongwe Production">Lilongwe Production</option> 
-                    <option value="Blantyre Sales">Blantyre Sales</option>                  
-                   <option value="Live Sales Lilongwe">Live Sales Lilongwe</option>
-                    <option value="Lilongwe House">Lilongwe House</option>
-                  </>
-                )}
+                              {newStaffDept === "Go Fresh Beef" && (
+                                <>
+                                  <option value="Ngabu General">
+                                    Ngabu General
+                                  </option>
+                                  <option value="Lilongwe LCS">
+                                    Lilongwe LCS
+                                  </option>
+                                  <option value="Lilongwe Sales">
+                                    Lilongwe Sales
+                                  </option>
+                                  <option value="Lilongwe Production">
+                                    Lilongwe Production
+                                  </option>
+                                  <option value="Blantyre Sales">
+                                    Blantyre Sales
+                                  </option>
+                                  <option value="Blantyre Production">
+                                    Blantyre Production
+                                  </option>
+                                  <option value="Lilongwe House">
+                                    Lilongwe House
+                                  </option>
+                                </>
+                              )}
 
-                {newStaffDept === "Tray Factory" && (
-                  <>
-                    <option value="GF Tray Factory">GF Tray Factory</option>
-                  </>
-                )}
+                              {newStaffDept === "Go Fresh Chicken" && (
+                                <>
+                                  <option value="Chicken Abattoir">
+                                    Kanengo Farm
+                                  </option>
+                                  <option value="Chicken Abattoir">
+                                    Chicken Abattoir
+                                  </option>
+                                  <option value="Lilongwe Sales">
+                                    Lilongwe Sales
+                                  </option>
+                                  <option value="Lilongwe Production">
+                                    Lilongwe Production
+                                  </option>
+                                  <option value="Blantyre Sales">
+                                    Blantyre Sales
+                                  </option>
+                                  <option value="Live Sales Lilongwe">
+                                    Live Sales Lilongwe
+                                  </option>
+                                  <option value="Lilongwe House">
+                                    Lilongwe House
+                                  </option>
+                                </>
+                              )}
 
-                {newStaffDept === "Live Sales" && (
-                  <>
-                    <option value="Live Sales Lilongwe">Live Sales Lilongwe</option>
-                    <option value="Lilongwe Sales">Lilongwe Sales Production</option>
-                    <option value="Blantyre Production">Blantyre Production</option>
-                  </>
-                )}
+                              {newStaffDept === "Tray Factory" && (
+                                <>
+                                  <option value="GF Tray Factory">
+                                    GF Tray Factory
+                                  </option>
+                                </>
+                              )}
 
-                 {newStaffDept === "Retail" && (
-                  <>
-                    <option value="Lilongwe Sales">Lilongwe Sales</option>
-                    <option value="Blantyre Sales">Blantyre Sales</option>
-                    <option value="GF Retail">GF Retail</option>
-                  </>
-                )}
-              </select>
-            </div>
-          </div>
+                              {newStaffDept === "Live Sales" && (
+                                <>
+                                  <option value="Live Sales Lilongwe">
+                                    Live Sales Lilongwe
+                                  </option>
+                                  <option value="Lilongwe Sales">
+                                    Lilongwe Sales Production
+                                  </option>
+                                  <option value="Blantyre Production">
+                                    Blantyre Production
+                                  </option>
+                                </>
+                              )}
 
-          {/* Action Row */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setIsAddModalOpen(false)}
-              className="text-xs font-bold uppercase h-9 rounded-lg"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase h-9 px-4 rounded-lg"
-            >
-              Save to Database
-            </Button>
-          </div>
-        </form>
-      </CardContent>
-    </Card>
-  </div>
-)}
+                              {newStaffDept === "Retail" && (
+                                <>
+                                  <option value="Lilongwe Sales">
+                                    Lilongwe Sales
+                                  </option>
+                                  <option value="Blantyre Sales">
+                                    Blantyre Sales
+                                  </option>
+                                  <option value="GF Retail">GF Retail</option>
+                                </>
+                              )}
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Action Row */}
+                        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setIsAddModalOpen(false)}
+                            className="text-xs font-bold uppercase h-9 rounded-lg"
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            type="submit"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase h-9 px-4 rounded-lg"
+                          >
+                            Save to Database
+                          </Button>
+                        </div>
+                      </form>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
             </div>
           )}
 
