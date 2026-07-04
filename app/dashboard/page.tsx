@@ -730,55 +730,43 @@ export default function EMSDashboard() {
   }, [rawSwipesBuffer, startDate, endDate]);
 
   // 2️⃣ PLACE THIS SECOND (liveMetricsRollup)
-  const liveMetricsRollup = useMemo(() => {
-    const defaultTargetDate =
-      targetTimelineDates.length > 0
-        ? targetTimelineDates[0].iso
-        : new Date().toISOString().split("T")[0];
-    const targetDateStr = selectedDate || defaultTargetDate;
+ const liveMetricsRollup = useMemo(() => {
+  // Filter raw swipes that fall strictly within our start and end dates
+  const recordsInRange = rawSwipesBuffer.filter((s) => {
+    if (!s.date) return false;
+    return s.date >= startDate && s.date <= endDate;
+  });
 
-    const dayRecords = rawSwipesBuffer.filter((s) => s.date === targetDateStr);
-    const totalCountedPool = employeeDirectory.length;
+  let onsite = 0;
+  let onTime = 0;
+  let late = 0;
+  let absent = 0;
 
-    let onsite = 0;
-    let onTime = 0;
-    let late = 0;
-    let absent = 0;
-    const absentNames: string[] = [];
-
-    employeeDirectory.forEach((emp) => {
-      const personalSwipes = dayRecords.filter((s) => s.id === emp.staffCode);
-
-      if (personalSwipes.length > 0) {
-        onsite++;
-        const checkIns = personalSwipes
-          .filter((s) => s.type.toLowerCase().includes("in"))
-          .sort((a, b) => a.time.localeCompare(b.time));
-
-        const clockIn =
-          checkIns.length > 0 ? checkIns[0].time : personalSwipes[0].time;
-
-        if (clockIn <= "07:30") {
-          onTime++;
-        } else {
-          late++;
-        }
+  employeeDirectory.forEach((emp) => {
+    const employeeSwipesInRange = recordsInRange.filter((s) => s.id === emp.staffCode);
+    
+    if (employeeSwipesInRange.length > 0) {
+      onsite++; // The employee checked in at least once during this timeframe
+      
+      // Find their first absolute check-in time inside the range to flag arrival habits
+      const ins = employeeSwipesInRange
+        .filter((s) => s.type.toLowerCase().includes("in"))
+        .sort((a, b) => a.time.localeCompare(b.time));
+        
+      const firstIn = ins.length > 0 ? ins[0].time : employeeSwipesInRange[0].time;
+      
+      if (firstIn <= "07:30") {
+        onTime++;
       } else {
-        absent++;
-        absentNames.push(emp.fullName);
+        late++;
       }
-    });
+    } else {
+      absent++; // Zero records found for this employee across the whole range window
+    }
+  });
 
-    return {
-      onsite,
-      onTime,
-      late,
-      absent,
-      absentNames,
-      total: totalCountedPool,
-      currentDayLabel: formatPresentationDate(targetDateStr),
-    };
-  }, [rawSwipesBuffer, employeeDirectory, selectedDate, targetTimelineDates]);
+  return { onsite, onTime, late, absent, total: employeeDirectory.length };
+}, [rawSwipesBuffer, employeeDirectory, startDate, endDate]);
 
   const filteredViewDataset = useMemo(() => {
     return systemProcessedDataset.filter((row) => {
