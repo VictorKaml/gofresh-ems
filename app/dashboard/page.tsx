@@ -2021,223 +2021,256 @@ export default function EMSDashboard() {
                         </div>
 
                         {/* Dynamic Branded PDF Export Action Button */}
+                        {/* Dynamic Branded PDF Export Action Button */}
                         <div className="ml-auto">
                           <Button
                             onClick={() => {
-                              const doc = new jsPDF({
-                                orientation: "portrait",
-                                unit: "mm",
-                                format: "a4",
-                              });
+                              // 1. Create a virtual Image element to load the local public file
+                              const img = new Image();
+                              img.src = "/gofresh_logo.jpg"; // Path points to public/gofresh_logo.jpg
 
-                              // 1. HEADER BANNER GRAPHIC (Deep Slate Blue)
-                              doc.setFillColor(30, 41, 59); // Slate 800
-                              doc.rect(0, 0, 210, 42, "F");
+                              img.onload = () => {
+                                // Convert image to canvas to get a clean JPEG data URL string
+                                const canvas = document.createElement("canvas");
+                                canvas.width = img.width;
+                                canvas.height = img.height;
+                                const ctx = canvas.getContext("2d");
 
-                              // 2. COMPANY VISUAL LOGO BADGE EMBLEM
-                              doc.setFillColor(59, 130, 246); // Brand Accent Blue Box
-                              doc.rect(14, 11, 12, 12, "F");
-                              doc.setTextColor(255, 255, 255);
-                              doc.setFont("helvetica", "bold");
-                              doc.setFontSize(10);
-                              doc.text("HR", 17.5, 19); // Text emblem layout
+                                if (ctx) {
+                                  ctx.drawImage(img, 0, 0);
+                                  const logoDataUrl =
+                                    canvas.toDataURL("image/jpeg");
 
-                              // 3. DYNAMIC CONTENT DOCK HEADERS
-                              doc.setTextColor(255, 255, 255);
-                              doc.setFont("helvetica", "bold");
-                              doc.setFontSize(13);
+                                  // Initialize jsPDF inside the load callback
+                                  const doc = new jsPDF({
+                                    orientation: "portrait",
+                                    unit: "mm",
+                                    format: "a4",
+                                  });
 
-                              const activeDeptText =
-                                reportDept === "ALL"
-                                  ? "ALL DEPARTMENTS"
-                                  : reportDept.toUpperCase();
-                              const activeCcText =
-                                reportCC === "ALL"
-                                  ? "ALL COST CENTERS"
-                                  : reportCC.toUpperCase();
+                                  // HEADER BANNER GRAPHIC (Deep Slate Blue)
+                                  doc.setFillColor(30, 41, 59); // Slate 800
+                                  doc.rect(0, 0, 210, 42, "F");
 
-                              // Dynamically states: ATTENDANCE REPORT: CHICKEN DEPARTMENT
-                              doc.text(
-                                `ATTENDANCE REPORT: ${activeDeptText}`,
-                                32,
-                                17,
-                              );
-
-                              // Subtext Meta Parameters
-                              doc.setFont("helvetica", "normal");
-                              doc.setFontSize(9);
-                              doc.setTextColor(203, 213, 225); // Slate 300
-                              doc.text(
-                                `Cost Center Context: ${activeCcText}`,
-                                32,
-                                23,
-                              );
-                              doc.text(
-                                `Date Range Window: ${startDate} to ${endDate}   |   Export Run Time: ${new Date().toLocaleTimeString()}`,
-                                32,
-                                28,
-                              );
-
-                              // 4. METRIC STATUS CONTEXT CALLOUT BADGE
-                              doc.setFillColor(248, 250, 252); // Background Box (Slate 50)
-                              doc.setDrawColor(226, 232, 240); // Border Line (Slate 200)
-                              doc.rect(14, 48, 182, 16, "FD");
-
-                              doc.setFontSize(9);
-                              doc.setTextColor(71, 85, 105); // Slate 600
-                              doc.setFont("helvetica", "bold");
-                              doc.text(
-                                "CURRENT PARAMETER SELECTION CRITERIA:",
-                                18,
-                                54,
-                              );
-
-                              // Colored Active Metric Highlight Pill (e.g., LATE, ABSENT)
-                              doc.setFillColor(239, 246, 255); // Blue 50
-                              doc.rect(102, 50.5, 34, 5, "F");
-                              doc.setTextColor(29, 78, 216); // Blue 700
-                              doc.setFontSize(8);
-                              doc.text(
-                                `METRIC: ${selectedMetricFilter}`,
-                                104,
-                                54.2,
-                              );
-
-                              doc.setFont("helvetica", "normal");
-                              doc.setTextColor(100, 116, 139); // Slate 500
-                              doc.text(
-                                `Total Records Found Matching Active Filters: ${filteredWorkerDataset.length} Employee(s)`,
-                                18,
-                                60,
-                              );
-
-                              // 5. DATASET TABLE ROW MAPPER
-                              const tableRows = filteredWorkerDataset.map(
-                                (emp) => {
-                                  const trackingSwipes = rawSwipesBuffer
-                                    .filter(
-                                      (s) =>
-                                        s.id === emp.staffCode &&
-                                        s.date >= startDate &&
-                                        s.date <= endDate,
-                                    )
-                                    .sort(
-                                      (a, b) =>
-                                        a.date.localeCompare(b.date) ||
-                                        a.time.localeCompare(b.time),
-                                    );
-
-                                  const inPunches = trackingSwipes.filter((s) =>
-                                    s.type.toLowerCase().includes("in"),
+                                  // ======================================================================
+                                  // 2. LOGO RENDER
+                                  // ======================================================================
+                                  // Parameters: image, format, x, y, width, height
+                                  doc.addImage(
+                                    logoDataUrl,
+                                    "JPEG",
+                                    14,
+                                    11,
+                                    14,
+                                    14,
                                   );
-                                  const clockInTime =
-                                    inPunches.length > 0
-                                      ? inPunches[0].time
-                                      : trackingSwipes.length > 0
-                                        ? trackingSwipes[0].time
-                                        : null;
+                                  // ======================================================================
 
-                                  const clockInDate =
-                                    inPunches.length > 0
-                                      ? inPunches[0].date
-                                      : trackingSwipes.length > 0
-                                        ? trackingSwipes[0].date
-                                        : "";
+                                  // 3. DYNAMIC CONTENT DOCK HEADERS
+                                  doc.setTextColor(255, 255, 255);
+                                  doc.setFont("helvetica", "bold");
+                                  doc.setFontSize(13);
 
-                                  const rawSwipesString =
-                                    trackingSwipes.length > 0
-                                      ? trackingSwipes
-                                          .map(
-                                            (s) =>
-                                              `${s.type.toUpperCase()}(${s.time} - ${s.date?.substring(5)})`,
-                                          )
-                                          .join(", ")
-                                      : "No records found";
+                                  const activeDeptText =
+                                    reportDept === "ALL"
+                                      ? "ALL DEPARTMENTS"
+                                      : reportDept.toUpperCase();
+                                  const activeCcText =
+                                    reportCC === "ALL"
+                                      ? "ALL COST CENTERS"
+                                      : reportCC.toUpperCase();
 
-                                  let calculatedStatus = "ABSENT";
-                                  if (clockInTime) {
-                                    calculatedStatus =
-                                      clockInTime <= "07:30"
-                                        ? "ON TIME"
-                                        : "LATE ARRIVAL";
-                                  }
+                                  doc.text(
+                                    `ATTENDANCE REPORT: ${activeDeptText}`,
+                                    52,
+                                    16,
+                                  );
 
-                                  return [
-                                    `${emp.fullName.toUpperCase()}\n[ID: ${emp.staffCode}]`,
-                                    `${emp.department.toUpperCase()}\n[CC: ${emp.costCenter.toUpperCase()}]`,
-                                    clockInTime
-                                      ? `${clockInTime} AM (${clockInDate.substring(5)})`
-                                      : "--:--",
-                                    rawSwipesString,
-                                    calculatedStatus,
-                                  ];
-                                },
-                              );
+                                  // Subtext Meta Parameters
+                                  doc.setFont("helvetica", "normal");
+                                  doc.setFontSize(8.5);
+                                  doc.setTextColor(203, 213, 225); // Slate 300
+                                  doc.text(
+                                    `Cost Center Context: ${activeCcText}`,
+                                    52,
+                                    22,
+                                  );
+                                  doc.text(
+                                    `Date Range Window: ${startDate} to ${endDate}   |   Export Run Time: ${new Date().toLocaleTimeString()}`,
+                                    52,
+                                    27,
+                                  );
 
-                              // 6. INJECT AUTO-TABLE LAYOUT
-                           autoTable(doc, {
-                                startY: 70,
-                                head: [
-                                  [
-                                    "Staff Member Details",
-                                    "Department / Cost Center Allocation",
-                                    "First Punch-In Time",
-                                    "Raw History Timeline Actions Log",
-                                    "Status Flag",
-                                  ],
-                                ],
-                                body: tableRows,
-                                theme: "striped",
-                                headStyles: {
-                                  fillColor: [51, 65, 85],
-                                  textColor: [255, 255, 255],
-                                  fontStyle: "bold",
-                                  fontSize: 9,
-                                },
-                                bodyStyles: {
-                                  fontSize: 8,
-                                  cellPadding: 3,
-                                  textColor: [51, 65, 85],
-                                },
-                                columnStyles: {
-                                  0: { cellWidth: 42 },
-                                  1: { cellWidth: 42 },
-                                  2: { cellWidth: 26, halign: "center" },
-                                  3: { cellWidth: 46 },
-                                  4: { cellWidth: 26, fontStyle: "bold" },
-                                },
-                                didParseCell: (data: any) => {
-                                  if (
-                                    data.section === "body" &&
-                                    data.column.index === 4
-                                  ) {
-                                    const statusText = data.cell.raw;
-                                    if (statusText === "ON TIME")
-                                      data.cell.styles.textColor = [
-                                        22, 163, 74,
-                                      ]; // Green
-                                    if (statusText === "LATE ARRIVAL")
-                                      data.cell.styles.textColor = [
-                                        217, 119, 6,
-                                      ]; // Amber
-                                    if (statusText === "ABSENT")
-                                      data.cell.styles.textColor = [
-                                        220, 38, 38,
-                                      ]; // Red
-                                  }
-                                },
-                              });
+                                  // 4. METRIC STATUS CONTEXT CALLOUT BADGE
+                                  doc.setFillColor(248, 250, 252);
+                                  doc.setDrawColor(226, 232, 240);
+                                  doc.rect(14, 48, 182, 16, "FD");
 
-                              // 7. FILE SAVE INITIATOR WITH DYNAMIC SANITIZED FILENAME
-                              const fileDeptName = reportDept
-                                .replace(/\s+/g, "_")
-                                .toUpperCase();
-                              const fileCcName = reportCC
-                                .replace(/\s+/g, "_")
-                                .toUpperCase();
-                              doc.save(
-                                `ATTENDANCE_REPORT_${fileDeptName}_${fileCcName}_[${selectedMetricFilter}].pdf`,
-                              );
+                                  doc.setFontSize(9);
+                                  doc.setTextColor(71, 85, 105);
+                                  doc.setFont("helvetica", "bold");
+                                  doc.text(
+                                    "CURRENT PARAMETER SELECTION CRITERIA:",
+                                    18,
+                                    54,
+                                  );
+
+                                  // Active Metric Highlight Pill
+                                  doc.setFillColor(239, 246, 255);
+                                  doc.rect(102, 50.5, 34, 5, "F");
+                                  doc.setTextColor(29, 78, 216);
+                                  doc.setFontSize(8);
+                                  doc.text(
+                                    `METRIC: ${selectedMetricFilter}`,
+                                    104,
+                                    54.2,
+                                  );
+
+                                  doc.setFont("helvetica", "normal");
+                                  doc.setTextColor(100, 116, 139);
+                                  doc.text(
+                                    `Total Records Found Matching Active Filters: ${filteredWorkerDataset.length} Employee(s)`,
+                                    18,
+                                    60,
+                                  );
+
+                                  // 5. DATASET TABLE ROW MAPPER
+                                  const tableRows = filteredWorkerDataset.map(
+                                    (emp) => {
+                                      const trackingSwipes = rawSwipesBuffer
+                                        .filter(
+                                          (s) =>
+                                            s.id === emp.staffCode &&
+                                            s.date >= startDate &&
+                                            s.date <= endDate,
+                                        )
+                                        .sort(
+                                          (a, b) =>
+                                            a.date.localeCompare(b.date) ||
+                                            a.time.localeCompare(b.time),
+                                        );
+
+                                      const inPunches = trackingSwipes.filter(
+                                        (s) =>
+                                          s.type.toLowerCase().includes("in"),
+                                      );
+                                      const clockInTime =
+                                        inPunches.length > 0
+                                          ? inPunches[0].time
+                                          : trackingSwipes.length > 0
+                                            ? trackingSwipes[0].time
+                                            : null;
+
+                                      const clockInDate =
+                                        inPunches.length > 0
+                                          ? inPunches[0].date
+                                          : trackingSwipes.length > 0
+                                            ? trackingSwipes[0].date
+                                            : "";
+
+                                      const rawSwipesString =
+                                        trackingSwipes.length > 0
+                                          ? trackingSwipes
+                                              .map(
+                                                (s) =>
+                                                  `${s.type.toUpperCase()}(${s.time} - ${s.date?.substring(5)})`,
+                                              )
+                                              .join(", ")
+                                          : "No records found";
+
+                                      let calculatedStatus = "ABSENT";
+                                      if (clockInTime) {
+                                        calculatedStatus =
+                                          clockInTime <= "07:30"
+                                            ? "ON TIME"
+                                            : "LATE ARRIVAL";
+                                      }
+
+                                      return [
+                                        `${emp.fullName.toUpperCase()}\n[ID: ${emp.staffCode}]`,
+                                        `${emp.department.toUpperCase()}\n[CC: ${emp.costCenter.toUpperCase()}]`,
+                                        clockInTime
+                                          ? `${clockInTime} AM (${clockInDate.substring(5)})`
+                                          : "--:--",
+                                        rawSwipesString,
+                                        calculatedStatus,
+                                      ];
+                                    },
+                                  );
+
+                                  // 6. INJECT AUTO-TABLE LAYOUT
+                                  autoTable(doc, {
+                                    startY: 70,
+                                    head: [
+                                      [
+                                        "Staff Member Details",
+                                        "Department / Cost Center Allocation",
+                                        "First Punch-In Time",
+                                        "Raw History Timeline Actions Log",
+                                        "Status Flag",
+                                      ],
+                                    ],
+                                    body: tableRows,
+                                    theme: "striped",
+                                    headStyles: {
+                                      fillColor: [51, 65, 85],
+                                      textColor: [255, 255, 255],
+                                      fontStyle: "bold",
+                                      fontSize: 9,
+                                    },
+                                    bodyStyles: {
+                                      fontSize: 8,
+                                      cellPadding: 3,
+                                      textColor: [51, 65, 85],
+                                    },
+                                    columnStyles: {
+                                      0: { cellWidth: 42 },
+                                      1: { cellWidth: 42 },
+                                      2: { cellWidth: 26, halign: "center" },
+                                      3: { cellWidth: 46 },
+                                      4: { cellWidth: 26, fontStyle: "bold" },
+                                    },
+                                    didParseCell: (data: any) => {
+                                      if (
+                                        data.section === "body" &&
+                                        data.column.index === 4
+                                      ) {
+                                        const statusText = data.cell.raw;
+                                        if (statusText === "ON TIME")
+                                          data.cell.styles.textColor = [
+                                            22, 163, 74,
+                                          ];
+                                        if (statusText === "LATE ARRIVAL")
+                                          data.cell.styles.textColor = [
+                                            217, 119, 6,
+                                          ];
+                                        if (statusText === "ABSENT")
+                                          data.cell.styles.textColor = [
+                                            220, 38, 38,
+                                          ];
+                                      }
+                                    },
+                                  });
+
+                                  // 7. FILE SAVE INITIATOR
+                                  const fileDeptName = reportDept
+                                    .replace(/\s+/g, "_")
+                                    .toUpperCase();
+                                  const fileCcName = reportCC
+                                    .replace(/\s+/g, "_")
+                                    .toUpperCase();
+                                  doc.save(
+                                    `ATTENDANCE_REPORT_${fileDeptName}_${fileCcName}_[${selectedMetricFilter}].pdf`,
+                                  );
+                                }
+                              };
+
+                              // Fallback handling if image fails to load or path doesn't exist
+                              img.onerror = () => {
+                                alert(
+                                  "Could not find gofresh_logo.jpg in the public folder. Exporting without logo.",
+                                );
+                              };
                             }}
                             className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs h-9 px-4 gap-2 flex items-center rounded-lg shadow-xs transition-all"
                           >
