@@ -143,6 +143,9 @@ export default function EMSDashboard() {
     type: "success" | "error";
     message: string;
   } | null>(null);
+
+  // Add these if they are missing or match them to your actual state names
+const [filteredWorkerDataset, setFilteredWorkerDataset] = useState<EmployeeProfile[]>([]);
   const [systemLogs, setSystemLogs] = useState<string[]>([
     "System is ready and running smoothly.",
   ]);
@@ -434,34 +437,84 @@ export default function EMSDashboard() {
     syncAttendanceData();
   }, [user]);
 
-  const handleCreateStaffSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newStaffCode || !newStaffName) return;
+const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const payloadProfile: EmployeeProfile = {
-      staffCode: newStaffCode.trim().toUpperCase(),
-      fullName: newStaffName.trim().toUpperCase(),
-      email: newStaffEmail.trim() || "no-email@company.com",
-      designation: newStaffDesignation.trim() || "Worker",
+const [workersDataset, setWorkersDataset] = useState<EmployeeProfile[]>([]);
+
+const handleCreateStaffSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+
+  // 1. Guard Check: Ensure all mandatory values are selected
+  if (!newStaffCode || !newStaffName || !newStaffDesignation || !newStaffDept || !newStaffCostCenter) {
+    alert("Please complete all required fields before saving.");
+    return;
+  }
+
+  if (isSubmitting) return;
+  setIsSubmitting(true);
+
+  try {
+    // 2. Assemble payload matching database column naming rules
+    const payload = {
+      staff_code: newStaffCode.trim().toUpperCase(),
+      full_name: newStaffName.trim().toUpperCase(),
+      designation: newStaffDesignation,
       department: newStaffDept,
-      costCenter: newStaffCostCenter,
-      status: "Active",
-      workType: newStaffWorkType,
+      cost_center: newStaffCostCenter,
     };
 
-    setEmployeeDirectory((prev) => [...prev, payloadProfile]);
-    setBavStatus({
-      type: "success",
-      message: `Successfully added ${payloadProfile.fullName} to the staff list!`,
+    // 3. Post data to your Next.js API route handler
+    const response = await fetch('/api/employees', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
     });
-    addLog(`Registered brand new staff profile: ${payloadProfile.staffCode}`);
 
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Failed to save employee records.');
+    }
+
+    // 4. Extract the formatted camelCase employee returned from the API route
+    const { employee } = result;
+
+    // 5. Update the master source state (workersDataset) immediately
+    setWorkersDataset((prev) => [...prev, employee]);
+
+    // 6. Push a status update notice to your visible system logs feed at the bottom
+    setSystemLogs((prev) => [
+      `[SUCCESS] Registered employee ${employee.staffCode} (${employee.fullName}) directly to database.`,
+      ...prev.slice(0, 19)
+    ]);
+
+    // 7. Reset all form fields and shut the modal overlay
     setNewStaffCode("");
     setNewStaffName("");
-    setNewStaffEmail("");
     setNewStaffDesignation("");
+    setNewStaffDept("");
+    setNewStaffCostCenter("");
     setIsAddModalOpen(false);
-  };
+
+    setSystemLogs((prev) => [
+      `[SUCCESS] Employee successfully registered to GoFresh Database!`,
+      ...prev.slice(0, 19)
+    ]);
+
+  } catch (error: any) {
+    console.error('Database Form Submission Failure:', error);
+    alert(`Submission Error: ${error.message}`);
+    
+    setSystemLogs((prev) => [
+      `[ERROR] Failed database write operation: ${error.message}`,
+      ...prev.slice(0, 19)
+    ]);
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   const toggleStaffStatus = (code: string) => {
     setEmployeeDirectory((prev) =>
@@ -472,11 +525,6 @@ export default function EMSDashboard() {
       ),
     );
     addLog(`Toggled active status threshold for employee target: ${code}`);
-  };
-
-  const getWeekdayLabel = (dateStr: string) => {
-    const d = new Date(`${dateStr}T00:00:00`);
-    return d.toLocaleDateString("en-US", { weekday: "long" });
   };
 
   const systemProcessedDataset = useMemo(() => {
@@ -794,59 +842,6 @@ export default function EMSDashboard() {
     });
   }, [systemProcessedDataset, staffSubTab, staffSearchQuery]);
 
-  const dailyChecklistDataset = useMemo(() => {
-    return employeeDirectory
-      .filter((emp) => {
-        // Global textual matching constraint logic
-        const textMatch =
-          emp.fullName
-            .toLowerCase()
-            .includes(checklistSearchQuery.toLowerCase()) ||
-          emp.staffCode
-            .toLowerCase()
-            .includes(checklistSearchQuery.toLowerCase()) ||
-          emp.department
-            .toLowerCase()
-            .includes(checklistSearchQuery.toLowerCase());
-
-        // Context drop-down filter layers validation matching
-        const deptMatch = !checklistDept || emp.department === checklistDept;
-        const ccMatch =
-          !checklistCostCenter || emp.costCenter === checklistCostCenter;
-
-        return textMatch && deptMatch && ccMatch;
-      })
-      .map((emp) => {
-        // Evaluate raw swipes buffer for this specific staff code on the active selected target date
-        const daySwipes = rawSwipesBuffer.filter(
-          (s) => s.id === emp.staffCode && s.date === selectedDate,
-        );
-
-        const checkIns = daySwipes
-          .filter((s) => s.type.toLowerCase().includes("in"))
-          .sort((a, b) => a.time.localeCompare(b.time));
-
-        const checkOuts = daySwipes
-          .filter((s) => s.type.toLowerCase().includes("out"))
-          .sort((a, b) => a.time.localeCompare(b.time));
-
-        return {
-          ...emp,
-          // 🚀 ONSITE API DATA: Evaluated on site context based on active timecard record counts
-          isPresent: daySwipes.length > 0,
-          clockIn: checkIns.length > 0 ? checkIns[0].time : "—",
-          clockOut:
-            checkOuts.length > 0 ? checkOuts[checkOuts.length - 1].time : "—",
-        };
-      });
-  }, [
-    employeeDirectory,
-    rawSwipesBuffer,
-    selectedDate,
-    checklistSearchQuery,
-    checklistDept,
-    checklistCostCenter,
-  ]);
 
   // Derive headcount summary totals for selected operational department workspace bounds
 
@@ -1283,154 +1278,6 @@ export default function EMSDashboard() {
     }
   };
 
-  const downloadContextualPDF = (
-    targetReportFilter: "ALL" | "ON_TIME" | "LATE" | "ABSENT",
-  ) => {
-    const parseTimeToMinutes = (timeStr: string): number => {
-      if (!timeStr || timeStr === "—") return 0;
-      const [hours, minutes] = timeStr.split(":").map(Number);
-      return hours * 60 + minutes;
-    };
-
-    try {
-      const doc = new jsPDF();
-      const isWeekend =
-        new Date(selectedDate).getDay() === 0 ||
-        new Date(selectedDate).getDay() === 6;
-      const lunchDeductionMins = 60;
-      const standardShiftMins = isWeekend
-        ? 5.5 * 60 - lunchDeductionMins
-        : 9.5 * 60 - lunchDeductionMins;
-
-      // Corporate branding and headers
-      try {
-        doc.addImage("/gofresh_logo.jpg", "JPEG", 14, 12, 25, 25);
-      } catch {}
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(14);
-      doc.setTextColor(37, 99, 235);
-      doc.text(
-        `WORKFORCE ANALYTICS ROSTER REPORT (${targetReportFilter.replace("_", " ")})`,
-        44,
-        20,
-      );
-
-      doc.setFontSize(9);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(71, 85, 105);
-      doc.text(
-        `Department Workspace Filter: ${selectedDeptFilter || "GLOBAL COMPREHENSIVE enterprise"}`,
-        44,
-        26,
-      );
-      doc.text(
-        `Target Processing Date: ${selectedDate} | Extracted: ${new Date().toLocaleTimeString()}`,
-        44,
-        32,
-      );
-
-      doc.setDrawColor(226, 232, 240);
-      doc.line(14, 38, 196, 38);
-
-      const targetStaffSelection = systemProcessedDataset.filter(
-        (emp) => !selectedDeptFilter || emp.department === selectedDeptFilter,
-      );
-
-      const computedRows = targetStaffSelection
-        .map((worker) => {
-          const dayPunches = rawSwipesBuffer.filter(
-            (s) => s.id === worker.staffCode && s.date === selectedDate,
-          );
-          const checkIns = dayPunches
-            .filter((s) => s.type.toLowerCase().includes("in"))
-            .sort((a, b) => a.time.localeCompare(b.time));
-          const checkOuts = dayPunches
-            .filter((s) => s.type.toLowerCase().includes("out"))
-            .sort((a, b) => a.time.localeCompare(b.time));
-
-          const clockIn = checkIns.length > 0 ? checkIns[0].time : "—";
-          const clockOut =
-            checkOuts.length > 0 ? checkOuts[checkOuts.length - 1].time : "—";
-
-          let status = "ABSENT";
-          let regHours = "0.00";
-          let otHours = "0.00";
-
-          if (clockIn !== "—" && clockOut !== "—") {
-            status = clockIn <= "07:30" ? "ON TIME" : "LATE";
-            const totalMins = Math.max(
-              0,
-              parseTimeToMinutes(clockOut) -
-                parseTimeToMinutes(clockIn) -
-                lunchDeductionMins,
-            );
-            if (totalMins > standardShiftMins) {
-              regHours = (standardShiftMins / 60).toFixed(2);
-              otHours = ((totalMins - standardShiftMins) / 60).toFixed(2);
-            } else {
-              regHours = (totalMins / 60).toFixed(2);
-            }
-          }
-
-          return {
-            staffCode: worker.staffCode,
-            fullName: worker.fullName,
-            clockIn,
-            clockOut,
-            status,
-            regHours,
-            otHours,
-            rawStatusKey: status.replace(" ", "_"),
-          };
-        })
-        .filter(
-          (row) =>
-            targetReportFilter === "ALL" ||
-            row.rawStatusKey === targetReportFilter,
-        );
-
-      // Format structural autoTable body rows mapping array metrics array elements
-      const finalTableData = computedRows.map((r) => [
-        r.staffCode,
-        r.fullName,
-        r.clockIn,
-        r.clockOut,
-        r.status,
-        r.regHours,
-        r.otHours,
-      ]);
-
-      autoTable(doc, {
-        startY: 44,
-        head: [
-          [
-            "Staff ID",
-            "Employee Full Name",
-            "Clock In",
-            "Clock Out",
-            "Status",
-            "Reg Hours",
-            "OT Hours",
-          ],
-        ],
-        body: finalTableData,
-        theme: "striped",
-        headStyles: { fillColor: [37, 99, 235] },
-        styles: { fontSize: 8.5, cellPadding: 2.5 },
-        columnStyles: { 5: { halign: "right" }, 6: { halign: "right" } },
-      });
-
-      const fileMetaTag = selectedDeptFilter
-        ? selectedDeptFilter.replace(/\s+/g, "_")
-        : "Global";
-      doc.save(
-        `Roster_Report_${targetReportFilter}_${fileMetaTag}_${selectedDate}.pdf`,
-      );
-    } catch (err) {
-      console.error("PDF execution matrix breakdown", err);
-    }
-  };
 
   return (
     <div className="bg-slate-50 text-slate-900 min-h-screen flex flex-col font-sans antialiased">
@@ -1714,20 +1561,7 @@ export default function EMSDashboard() {
                     ? targetTimelineDates[0].iso
                     : new Date().toISOString().split("T")[0];
                 const targetDateStr = selectedDate || defaultTargetDate;
-                const dayRecords = rawSwipesBuffer.filter(
-                  (s) => s.date === targetDateStr,
-                );
 
-                const uniqueDepartments = Array.from(
-                  new Set(employeeDirectory.map((e) => e.department)),
-                )
-                  .filter(Boolean)
-                  .sort();
-                const uniqueCostCenters = Array.from(
-                  new Set(employeeDirectory.map((e) => e.costCenter)),
-                )
-                  .filter(Boolean)
-                  .sort();
 
                 const filteredWorkerDataset = employeeDirectory.filter(
                   (emp) => {
@@ -1779,163 +1613,6 @@ export default function EMSDashboard() {
                 );
 
                 // Pure JS PDF Generation Logic
-                const handleExportPDF = (
-                  scopeType: "OVERALL" | "DEPT" | "CC" | "COMBINED",
-                ) => {
-                  const doc = new jsPDF({
-                    orientation: "portrait",
-                    unit: "mm",
-                    format: "a4",
-                  });
-
-                  // Document Meta Colors & Brand Stylings
-                  doc.setFillColor(30, 41, 59); // Slate 800
-                  doc.rect(0, 0, 210, 40, "F");
-
-                  // Main Title Header Banner text
-                  doc.setTextColor(255, 255, 255);
-                  doc.setFont("helvetica", "bold");
-                  doc.setFontSize(18);
-                  doc.text("WORKFORCE ATTENDANCE REPORT", 14, 18);
-
-                  // Subtext Meta Properties
-                  doc.setFont("helvetica", "normal");
-                  doc.setFontSize(9);
-                  doc.setTextColor(203, 213, 225); // Slate 300
-                  doc.text(
-                    `Range: ${startDate} to ${endDate}   |   Generated: ${new Date().toLocaleTimeString()}`,
-                    14,
-                    25,
-                  );
-                  doc.text(
-                    `Metric Context: ${selectedMetricFilter}   |   Scope Range: ${scopeType}`,
-                    14,
-                    30,
-                  );
-
-                  // Dynamic Filtering Labels Summary Block
-                  doc.setFillColor(248, 250, 252); // Slate 50
-                  doc.setDrawColor(226, 232, 240); // Slate 200
-                  doc.rect(14, 48, 182, 18, "FD");
-
-                  doc.setFontSize(10);
-                  doc.setTextColor(71, 85, 105); // Slate 600
-                  doc.setFont("helvetica", "bold");
-                  doc.text("FILTER STATE CRITERIA:", 18, 54);
-
-                  doc.setFont("helvetica", "normal");
-                  doc.setFontSize(9);
-                  doc.text(`Department Grouping: ${reportDept}`, 18, 60);
-                  doc.text(`Cost Center Context: ${reportCC}`, 110, 60);
-
-                  // Compile clean array parameters matching auto-table structural signatures
-                  const tableRows = filteredWorkerDataset.map((emp) => {
-                    // 🚀 FIX: Reflect range logic inside the generated PDF rows too
-                    const trackingSwipes = rawSwipesBuffer
-                      .filter(
-                        (s) =>
-                          s.id === emp.staffCode &&
-                          s.date >= startDate &&
-                          s.date <= endDate,
-                      )
-                      .sort(
-                        (a, b) =>
-                          a.date.localeCompare(b.date) ||
-                          a.time.localeCompare(b.time),
-                      );
-
-                    const inPunches = trackingSwipes.filter((s) =>
-                      s.type.toLowerCase().includes("in"),
-                    );
-                    const clockInTime =
-                      inPunches.length > 0
-                        ? inPunches[0].time
-                        : trackingSwipes.length > 0
-                          ? trackingSwipes[0].time
-                          : null;
-
-                    const clockInDate =
-                      inPunches.length > 0
-                        ? inPunches[0].date
-                        : trackingSwipes.length > 0
-                          ? trackingSwipes[0].date
-                          : "";
-
-                    const rawSwipesString =
-                      trackingSwipes.length > 0
-                        ? trackingSwipes
-                            .map(
-                              (s) =>
-                                `${s.type.toUpperCase()}(${s.time} - ${s.date?.substring(5)})`,
-                            )
-                            .join(", ")
-                        : "No records found";
-
-                    let calculatedStatus = "ABSENT";
-                    if (clockInTime) {
-                      calculatedStatus =
-                        clockInTime <= "07:30" ? "ON TIME" : "LATE ARRIVAL";
-                    }
-
-                    return [
-                      `${emp.fullName.toUpperCase()}\n[ID: ${emp.staffCode}]`,
-                      `${emp.department.toUpperCase()}\n[${emp.costCenter.toUpperCase()}]`,
-                      clockInTime
-                        ? `${clockInTime} AM (${clockInDate.substring(5)})`
-                        : "--:--",
-                      rawSwipesString,
-                      calculatedStatus,
-                    ];
-                  });
-
-                  // Fire autoTable layout plugin injector
-                  autoTable(doc, {
-                    startY: 72,
-                    head: [
-                      [
-                        "Staff Member Details",
-                        "Department / Cost Center",
-                        "First Clock-In",
-                        "Raw Logs Timeline Activity",
-                        "Status Flag",
-                      ],
-                    ],
-                    body: tableRows,
-                    theme: "striped",
-                    headStyles: {
-                      fillColor: [51, 65, 85],
-                      textColor: [255, 255, 255],
-                      fontStyle: "bold",
-                      fontSize: 9,
-                    },
-                    bodyStyles: {
-                      fontSize: 8.5,
-                      cellPadding: 3.5,
-                      textColor: [51, 65, 85],
-                    },
-                    columnStyles: {
-                      0: { cellWidth: 40 },
-                      1: { cellWidth: 40 },
-                      2: { cellWidth: 24, halign: "center" },
-                      3: { cellWidth: 50 },
-                      4: { cellWidth: 28, fontStyle: "bold" },
-                    },
-                    didParseCell: (data: any) => {
-                      if (data.section === "body" && data.column.index === 4) {
-                        const statusText = data.cell.raw;
-                        if (statusText === "ON TIME")
-                          data.cell.styles.textColor = [22, 163, 74]; // Emerald 600
-                        if (statusText === "LATE ARRIVAL")
-                          data.cell.styles.textColor = [217, 119, 6]; // Amber 600
-                        if (statusText === "ABSENT")
-                          data.cell.styles.textColor = [220, 38, 38]; // Rose 600
-                      }
-                    },
-                  });
-
-                  const generatedFileName = `ATTENDANCE_${scopeType}_${selectedMetricFilter}_range.pdf`;
-                  doc.save(generatedFileName);
-                };
 
                 return (
                   <div className="space-y-4">
@@ -3161,159 +2838,189 @@ export default function EMSDashboard() {
               )}
 
               {isAddModalOpen && (
-                <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-                  <Card className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-                    <CardHeader className="border-b border-slate-100 p-5 flex flex-row items-center justify-between">
-                      <div>
-                        <CardTitle className="text-sm font-black text-slate-900 uppercase tracking-wide">
-                          Add Employee
-                        </CardTitle>
-                        <CardDescription className="text-[11px] font-medium text-slate-400 uppercase mt-0.5">
-                          Add a new team member to your organization
-                        </CardDescription>
-                      </div>
-                      <button
-                        onClick={() => setIsAddModalOpen(false)}
-                        className="text-slate-400 hover:text-slate-600 font-bold text-sm"
-                      >
-                        ✕
-                      </button>
-                    </CardHeader>
-                    <CardContent className="p-6">
-                      <form
-                        onSubmit={handleCreateStaffSubmit}
-                        className="space-y-5"
-                      >
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
-                              Employee Name *
-                            </label>
-                            <Input
-                              required
-                              value={newStaffName}
-                              onChange={(e) => setNewStaffName(e.target.value)}
-                              placeholder="Sarah Chen"
-                              className="text-xs font-bold uppercase"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
-                              Email (optional)
-                            </label>
-                            <Input
-                              type="email"
-                              value={newStaffEmail}
-                              onChange={(e) => setNewStaffEmail(e.target.value)}
-                              placeholder="sarah@company.com"
-                              className="text-xs font-bold"
-                            />
-                          </div>
-                        </div>
+  <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+    <Card className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      <CardHeader className="border-b border-slate-100 p-5 flex flex-row items-center justify-between">
+        <div>
+          <CardTitle className="text-sm font-black text-slate-900 uppercase tracking-wide">
+            Add Employee
+          </CardTitle>
+          <CardDescription className="text-[11px] font-medium text-slate-400 uppercase mt-0.5">
+            Add a new team member to your database organization
+          </CardDescription>
+        </div>
+        <button
+          onClick={() => setIsAddModalOpen(false)}
+          className="text-slate-400 hover:text-slate-600 font-bold text-sm"
+        >
+          ✕
+        </button>
+      </CardHeader>
+      <CardContent className="p-6">
+        <form
+          onSubmit={handleCreateStaffSubmit}
+          className="space-y-5"
+        >
+          {/* Row 1: Full Name & Staff Code (Primary Key) */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
+                Full Name *
+              </label>
+              <Input
+                required
+                value={newStaffName} // Maps to schema: full_name
+                onChange={(e) => setNewStaffName(e.target.value)}
+                placeholder="e.g. MACKCHESTER BENFORD"
+                className="text-xs font-bold uppercase"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
+                Employee ID Code * (Primary Key)
+              </label>
+              <Input
+                required
+                value={newStaffCode} // Maps to schema: staff_code
+                onChange={(e) => setNewStaffCode(e.target.value)}
+                placeholder="e.g. BA036"
+                className="text-xs font-bold uppercase"
+              />
+            </div>
+          </div>
 
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
-                              Employee ID Code *
-                            </label>
-                            <Input
-                              required
-                              value={newStaffCode}
-                              onChange={(e) => setNewStaffCode(e.target.value)}
-                              placeholder="e.g. GF-004"
-                              className="text-xs font-bold uppercase"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
-                              Job Designation
-                            </label>
-                            <Input
-                              value={newStaffDesignation}
-                              onChange={(e) =>
-                                setNewStaffDesignation(e.target.value)
-                              }
-                              placeholder="e.g. UX Designer"
-                              className="text-xs font-bold uppercase"
-                            />
-                          </div>
-                        </div>
+          {/* Row 2: Designation */}
+          <div>
+            <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
+              Job Designation *
+            </label>
+            <select
+              required
+              value={newStaffDesignation} // Maps to schema: designation
+              onChange={(e) => setNewStaffDesignation(e.target.value)}
+              className="w-full bg-white border border-slate-200 text-xs font-bold uppercase rounded-lg h-9 px-3 text-slate-700 shadow-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="">-- SELECT DESIGNATION --</option>
+              <option value="Security Guard">Security Guard</option>
+              <option value="Supervisor">Supervisor</option>
+              <option value="Cleaner">Cleaner</option>
+              <option value="Production Assistant">Production Assistant</option>
+              <option value="General Fitter">General Fitter</option>
+              <option value="Merchandiser">Merchandiser</option>
+              <option value="Driver">Driver</option>
+            </select>
+          </div>
 
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
-                              Department
-                            </label>
-                            <select
-                              value={newStaffDept}
-                              onChange={(e) => setNewStaffDept(e.target.value)}
-                              className="w-full bg-white border border-slate-200 text-xs font-bold uppercase rounded-lg h-9 p-2"
-                            >
-                              <option value="Operations">Operations</option>
-                              <option value="Engineering">Engineering</option>
-                              <option value="Design">Design</option>
-                              <option value="Administration">
-                                Administration
-                              </option>
-                            </select>
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
-                              Cost Center
-                            </label>
-                            <Input
-                              value={newStaffCostCenter}
-                              onChange={(e) =>
-                                setNewStaffCostCenter(e.target.value)
-                              }
-                              placeholder="HQ"
-                              className="text-xs font-bold uppercase"
-                            />
-                          </div>
-                        </div>
+          {/* Row 3: Department & Conditional Cost Center */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* DEPARTMENT */}
+            <div>
+              <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
+                Department *
+              </label>
+              <select
+                required
+                value={newStaffDept} // Maps to schema: department
+                onChange={(e) => {
+                  setNewStaffDept(e.target.value);
+                  setNewStaffCostCenter(""); // Reset dependent selection
+                }}
+                className="w-full bg-white border border-slate-200 text-xs font-bold uppercase rounded-lg h-9 px-3 text-slate-700 shadow-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                <option value="">-- SELECT DEPARTMENT --</option>
+                <option value="Go Fresh Beef">Go Fresh Beef</option>
+                <option value="Go Fresh Chicken">Go Fresh Chicken</option>
+                <option value="Tray Factory">Tray Factory</option>
+                <option value="Live Sales">Live Sales</option>
+                <option value="Retail">Retail</option>
+              </select>
+            </div>
 
-                        <div>
-                          <label className="text-[10px] font-black uppercase text-slate-500 block mb-1.5">
-                            Work Type
-                          </label>
-                          <div className="grid grid-cols-3 gap-3">
-                            {(["In Office", "Remote", "Hybrid"] as const).map(
-                              (t) => (
-                                <div
-                                  key={t}
-                                  onClick={() => setNewStaffWorkType(t)}
-                                  className={`p-3 border rounded-xl cursor-pointer text-center transition-all ${newStaffWorkType === t ? "border-emerald-600 bg-emerald-50/40 text-emerald-900 font-bold" : "border-slate-200 bg-white hover:bg-slate-50 text-slate-600"}`}
-                                >
-                                  <span className="text-[11px] uppercase block tracking-wider font-extrabold">
-                                    {t}
-                                  </span>
-                                </div>
-                              ),
-                            )}
-                          </div>
-                        </div>
+            {/* CONDITIONAL COST CENTER */}
+            <div>
+              <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
+                Cost Center *
+              </label>
+              <select
+                required
+                value={newStaffCostCenter} // Maps to schema: cost_center
+                onChange={(e) => setNewStaffCostCenter(e.target.value)}
+                disabled={!newStaffDept}
+                className="w-full bg-white border border-slate-200 text-xs font-bold uppercase rounded-lg h-9 px-3 text-slate-700 shadow-xs focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
+              >
+                <option value="">-- SELECT COST CENTRE --</option>
+                
+                {newStaffDept === "Go Fresh Beef" && (
+                  <>
+                    <option value="Ngabu General">Ngabu General</option>
+                    <option value="Lilongwe LCS">Lilongwe LCS</option>                   
+                    <option value="Lilongwe Sales">Lilongwe Sales</option>                   
+                    <option value="Lilongwe Production">Lilongwe Production</option> 
+                    <option value="Blantyre Sales">Blantyre Sales</option>                  
+                   <option value="Blantyre Production">Blantyre Production</option>
+                    <option value="Lilongwe House">Lilongwe House</option>
+                  </>
+                )}
 
-                        <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => setIsAddModalOpen(false)}
-                            className="text-xs font-bold uppercase h-9 rounded-lg"
-                          >
-                            Cancel
-                          </Button>
-                          <Button
-                            type="submit"
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase h-9 px-4 rounded-lg"
-                          >
-                            Add Employee
-                          </Button>
-                        </div>
-                      </form>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
+                {newStaffDept === "Go Fresh Chicken" && (
+                  <>
+                  <option value="Chicken Abattoir">Kanengo Farm</option>
+                    <option value="Chicken Abattoir">Chicken Abattoir</option>
+                  <option value="Lilongwe Sales">Lilongwe Sales</option>                   
+                    <option value="Lilongwe Production">Lilongwe Production</option> 
+                    <option value="Blantyre Sales">Blantyre Sales</option>                  
+                   <option value="Live Sales Lilongwe">Live Sales Lilongwe</option>
+                    <option value="Lilongwe House">Lilongwe House</option>
+                  </>
+                )}
+
+                {newStaffDept === "Tray Factory" && (
+                  <>
+                    <option value="GF Tray Factory">GF Tray Factory</option>
+                  </>
+                )}
+
+                {newStaffDept === "Live Sales" && (
+                  <>
+                    <option value="Live Sales Lilongwe">Live Sales Lilongwe</option>
+                    <option value="Lilongwe Sales">Lilongwe Sales Production</option>
+                    <option value="Blantyre Production">Blantyre Production</option>
+                  </>
+                )}
+
+                 {newStaffDept === "Retail" && (
+                  <>
+                    <option value="Lilongwe Sales">Lilongwe Sales</option>
+                    <option value="Blantyre Sales">Blantyre Sales</option>
+                    <option value="GF Retail">GF Retail</option>
+                  </>
+                )}
+              </select>
+            </div>
+          </div>
+
+          {/* Action Row */}
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsAddModalOpen(false)}
+              className="text-xs font-bold uppercase h-9 rounded-lg"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase h-9 px-4 rounded-lg"
+            >
+              Save to Database
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  </div>
+)}
             </div>
           )}
 
