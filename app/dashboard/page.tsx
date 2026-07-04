@@ -1600,7 +1600,7 @@ export default function EMSDashboard() {
                 >
                   <CardHeader className="p-4">
                     <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                      <Users className="w-4 h-4 text-blue-600" /> At Work Today
+                      <Users className="w-4 h-4 text-blue-600" /> Onsite
                     </CardDescription>
                     <CardTitle className="text-xl font-black text-slate-900 mt-1 flex justify-between items-center">
                       <span>{liveMetricsRollup.onsite} Checked In</span>
@@ -1630,7 +1630,7 @@ export default function EMSDashboard() {
                   <CardHeader className="p-4">
                     <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
                       <AlertTriangle className="w-4 h-4 text-amber-500" />{" "}
-                      Absent Today
+                      Absent
                     </CardDescription>
                     <CardTitle className="text-xl font-black text-slate-900 mt-1 flex justify-between items-center">
                       <span>{liveMetricsRollup.absent} Workers</span>
