@@ -730,43 +730,46 @@ export default function EMSDashboard() {
   }, [rawSwipesBuffer, startDate, endDate]);
 
   // 2️⃣ PLACE THIS SECOND (liveMetricsRollup)
- const liveMetricsRollup = useMemo(() => {
-  // Filter raw swipes that fall strictly within our start and end dates
-  const recordsInRange = rawSwipesBuffer.filter((s) => {
-    if (!s.date) return false;
-    return s.date >= startDate && s.date <= endDate;
-  });
+  const liveMetricsRollup = useMemo(() => {
+    // Filter raw swipes that fall strictly within our start and end dates
+    const recordsInRange = rawSwipesBuffer.filter((s) => {
+      if (!s.date) return false;
+      return s.date >= startDate && s.date <= endDate;
+    });
 
-  let onsite = 0;
-  let onTime = 0;
-  let late = 0;
-  let absent = 0;
+    let onsite = 0;
+    let onTime = 0;
+    let late = 0;
+    let absent = 0;
 
-  employeeDirectory.forEach((emp) => {
-    const employeeSwipesInRange = recordsInRange.filter((s) => s.id === emp.staffCode);
-    
-    if (employeeSwipesInRange.length > 0) {
-      onsite++; // The employee checked in at least once during this timeframe
-      
-      // Find their first absolute check-in time inside the range to flag arrival habits
-      const ins = employeeSwipesInRange
-        .filter((s) => s.type.toLowerCase().includes("in"))
-        .sort((a, b) => a.time.localeCompare(b.time));
-        
-      const firstIn = ins.length > 0 ? ins[0].time : employeeSwipesInRange[0].time;
-      
-      if (firstIn <= "07:30") {
-        onTime++;
+    employeeDirectory.forEach((emp) => {
+      const employeeSwipesInRange = recordsInRange.filter(
+        (s) => s.id === emp.staffCode,
+      );
+
+      if (employeeSwipesInRange.length > 0) {
+        onsite++; // The employee checked in at least once during this timeframe
+
+        // Find their first absolute check-in time inside the range to flag arrival habits
+        const ins = employeeSwipesInRange
+          .filter((s) => s.type.toLowerCase().includes("in"))
+          .sort((a, b) => a.time.localeCompare(b.time));
+
+        const firstIn =
+          ins.length > 0 ? ins[0].time : employeeSwipesInRange[0].time;
+
+        if (firstIn <= "07:30") {
+          onTime++;
+        } else {
+          late++;
+        }
       } else {
-        late++;
+        absent++; // Zero records found for this employee across the whole range window
       }
-    } else {
-      absent++; // Zero records found for this employee across the whole range window
-    }
-  });
+    });
 
-  return { onsite, onTime, late, absent, total: employeeDirectory.length };
-}, [rawSwipesBuffer, employeeDirectory, startDate, endDate]);
+    return { onsite, onTime, late, absent, total: employeeDirectory.length };
+  }, [rawSwipesBuffer, employeeDirectory, startDate, endDate]);
 
   const filteredViewDataset = useMemo(() => {
     return systemProcessedDataset.filter((row) => {
@@ -1728,8 +1731,12 @@ export default function EMSDashboard() {
 
                 const filteredWorkerDataset = employeeDirectory.filter(
                   (emp) => {
-                    const personalSwipes = dayRecords.filter(
-                      (s) => s.id === emp.staffCode,
+                    // 🚀 FIX: Evaluate swipes across the entire selected date range, matching liveMetricsRollup
+                    const personalSwipes = rawSwipesBuffer.filter(
+                      (s) =>
+                        s.id === emp.staffCode &&
+                        s.date >= startDate &&
+                        s.date <= endDate,
                     );
                     const checkIns = personalSwipes
                       .filter((s) => s.type.toLowerCase().includes("in"))
@@ -1796,7 +1803,7 @@ export default function EMSDashboard() {
                   doc.setFontSize(9);
                   doc.setTextColor(203, 213, 225); // Slate 300
                   doc.text(
-                    `Log Date: ${targetDateStr}   |   Generated: ${new Date().toLocaleTimeString()}`,
+                    `Range: ${startDate} to ${endDate}   |   Generated: ${new Date().toLocaleTimeString()}`,
                     14,
                     25,
                   );
@@ -1823,9 +1830,19 @@ export default function EMSDashboard() {
 
                   // Compile clean array parameters matching auto-table structural signatures
                   const tableRows = filteredWorkerDataset.map((emp) => {
-                    const trackingSwipes = dayRecords
-                      .filter((s) => s.id === emp.staffCode)
-                      .sort((a, b) => a.time.localeCompare(b.time));
+                    // 🚀 FIX: Reflect range logic inside the generated PDF rows too
+                    const trackingSwipes = rawSwipesBuffer
+                      .filter(
+                        (s) =>
+                          s.id === emp.staffCode &&
+                          s.date >= startDate &&
+                          s.date <= endDate,
+                      )
+                      .sort(
+                        (a, b) =>
+                          a.date.localeCompare(b.date) ||
+                          a.time.localeCompare(b.time),
+                      );
 
                     const inPunches = trackingSwipes.filter((s) =>
                       s.type.toLowerCase().includes("in"),
@@ -1837,11 +1854,20 @@ export default function EMSDashboard() {
                           ? trackingSwipes[0].time
                           : null;
 
-                    // Build string text representation summary for raw logs column
+                    const clockInDate =
+                      inPunches.length > 0
+                        ? inPunches[0].date
+                        : trackingSwipes.length > 0
+                          ? trackingSwipes[0].date
+                          : "";
+
                     const rawSwipesString =
                       trackingSwipes.length > 0
                         ? trackingSwipes
-                            .map((s) => `${s.type.toUpperCase()}(${s.time})`)
+                            .map(
+                              (s) =>
+                                `${s.type.toUpperCase()}(${s.time} - ${s.date?.substring(5)})`,
+                            )
                             .join(", ")
                         : "No records found";
 
@@ -1854,20 +1880,22 @@ export default function EMSDashboard() {
                     return [
                       `${emp.fullName.toUpperCase()}\n[ID: ${emp.staffCode}]`,
                       `${emp.department.toUpperCase()}\n[${emp.costCenter.toUpperCase()}]`,
-                      clockInTime ? `${clockInTime} AM` : "--:--",
+                      clockInTime
+                        ? `${clockInTime} AM (${clockInDate.substring(5)})`
+                        : "--:--",
                       rawSwipesString,
                       calculatedStatus,
                     ];
                   });
 
                   // Fire autoTable layout plugin injector
-                  (doc as any).autoTable({
+                  autoTable(doc, {
                     startY: 72,
                     head: [
                       [
                         "Staff Member Details",
                         "Department / Cost Center",
-                        "Clock-In",
+                        "First Clock-In",
                         "Raw Logs Timeline Activity",
                         "Status Flag",
                       ],
@@ -1886,9 +1914,9 @@ export default function EMSDashboard() {
                       textColor: [51, 65, 85],
                     },
                     columnStyles: {
-                      0: { cellWidth: 42 },
-                      1: { cellWidth: 42 },
-                      2: { cellWidth: 20, halign: "center" },
+                      0: { cellWidth: 40 },
+                      1: { cellWidth: 40 },
+                      2: { cellWidth: 24, halign: "center" },
                       3: { cellWidth: 50 },
                       4: { cellWidth: 28, fontStyle: "bold" },
                     },
@@ -1905,8 +1933,7 @@ export default function EMSDashboard() {
                     },
                   });
 
-                  // Trigger immediate browser dynamic prompt stream attachment save
-                  const generatedFileName = `ATTENDANCE_${scopeType}_${selectedMetricFilter}_${targetDateStr}.pdf`;
+                  const generatedFileName = `ATTENDANCE_${scopeType}_${selectedMetricFilter}_range.pdf`;
                   doc.save(generatedFileName);
                 };
 
@@ -1932,79 +1959,291 @@ export default function EMSDashboard() {
                         </p>
                       </div>
 
-                      {/* Dropdown Filters & Button Action Combinations */}
-                      <div className="flex flex-wrap items-center gap-3">
+                      {/* ==================== FILTERS & EXPORT CONTROL BAR ==================== */}
+                      <div className="flex flex-wrap gap-4 items-end bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        {/* Department Dropdown Filter */}
                         <div className="flex flex-col gap-1">
-                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider">
-                            Department
+                          <label className="text-[10px] font-black uppercase text-slate-400 pl-0.5">
+                            Department Filter:
                           </label>
                           <select
                             value={reportDept}
-                            onChange={(e) => setReportDept(e.target.value)}
-                            className="bg-white border border-slate-300 rounded-lg text-xs font-bold p-1.5 h-8 text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 uppercase min-w-[140px]"
+                            onChange={(e) => {
+                              setReportDept(e.target.value);
+                              setReportCC("ALL"); // Reset child dropdown to avoid orphans
+                            }}
+                            className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-xs focus:outline-none min-w-[170px]"
                           >
-                            <option value="ALL">All Departments</option>
-                            {uniqueDepartments.map((dept) => (
-                              <option key={dept} value={dept}>
-                                {dept}
-                              </option>
-                            ))}
+                            <option value="ALL">ALL DEPARTMENTS</option>
+                            {Array.from(
+                              new Set(
+                                employeeDirectory.map((e) => e.department),
+                              ),
+                            )
+                              .filter(Boolean)
+                              .map((dept) => (
+                                <option key={dept} value={dept}>
+                                  {dept.toUpperCase()}
+                                </option>
+                              ))}
                           </select>
                         </div>
 
+                        {/* Cost Center Dropdown Filter (Dependent) */}
                         <div className="flex flex-col gap-1">
-                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider">
-                            Cost Center
+                          <label className="text-[10px] font-black uppercase text-slate-400 pl-0.5">
+                            Cost Center Context:
                           </label>
                           <select
                             value={reportCC}
                             onChange={(e) => setReportCC(e.target.value)}
-                            className="bg-white border border-slate-300 rounded-lg text-xs font-bold p-1.5 h-8 text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 uppercase min-w-[140px]"
+                            className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-xs focus:outline-none min-w-[170px]"
                           >
-                            <option value="ALL">All Cost Centers</option>
-                            {uniqueCostCenters.map((cc) => (
-                              <option key={cc} value={cc}>
-                                {cc}
-                              </option>
-                            ))}
+                            <option value="ALL">ALL COST CENTERS</option>
+                            {Array.from(
+                              new Set(
+                                employeeDirectory
+                                  .filter(
+                                    (e) =>
+                                      reportDept === "ALL" ||
+                                      e.department === reportDept,
+                                  )
+                                  .map((e) => e.costCenter),
+                              ),
+                            )
+                              .filter(Boolean)
+                              .map((cc) => (
+                                <option key={cc} value={cc}>
+                                  {cc.toUpperCase()}
+                                </option>
+                              ))}
                           </select>
                         </div>
 
-                        {/* Dynamic PDF Export Buttons */}
-                        <div className="flex items-end h-full pt-[18px]">
-                          {reportDept !== "ALL" && reportCC !== "ALL" ? (
-                            <Button
-                              onClick={() => handleExportPDF("COMBINED")}
-                              className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold h-8 gap-1.5 shadow-xs uppercase tracking-wider text-[10px]"
-                            >
-                              <FileText className="w-3.5 h-3.5" /> PDF: Combined
-                              Group
-                            </Button>
-                          ) : reportDept !== "ALL" ? (
-                            <Button
-                              onClick={() => handleExportPDF("DEPT")}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold h-8 gap-1.5 shadow-xs uppercase tracking-wider text-[10px]"
-                            >
-                              <FileText className="w-3.5 h-3.5" /> PDF: Dept
-                              Scoped
-                            </Button>
-                          ) : reportCC !== "ALL" ? (
-                            <Button
-                              onClick={() => handleExportPDF("CC")}
-                              className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold h-8 gap-1.5 shadow-xs uppercase tracking-wider text-[10px]"
-                            >
-                              <FileText className="w-3.5 h-3.5" /> PDF: Cost
-                              Center
-                            </Button>
-                          ) : (
-                            <Button
-                              onClick={() => handleExportPDF("OVERALL")}
-                              className="bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold h-8 gap-1.5 shadow-xs uppercase tracking-wider text-[10px]"
-                            >
-                              <FileText className="w-3.5 h-3.5" /> PDF: Overall
-                              Summary
-                            </Button>
-                          )}
+                        {/* Dynamic Branded PDF Export Action Button */}
+                        <div className="ml-auto">
+                          <Button
+                            onClick={() => {
+                              const doc = new jsPDF({
+                                orientation: "portrait",
+                                unit: "mm",
+                                format: "a4",
+                              });
+
+                              // 1. HEADER BANNER GRAPHIC (Deep Slate Blue)
+                              doc.setFillColor(30, 41, 59); // Slate 800
+                              doc.rect(0, 0, 210, 42, "F");
+
+                              // 2. COMPANY VISUAL LOGO BADGE EMBLEM
+                              doc.setFillColor(59, 130, 246); // Brand Accent Blue Box
+                              doc.rect(14, 11, 12, 12, "F");
+                              doc.setTextColor(255, 255, 255);
+                              doc.setFont("helvetica", "bold");
+                              doc.setFontSize(10);
+                              doc.text("HR", 17.5, 19); // Text emblem layout
+
+                              // 3. DYNAMIC CONTENT DOCK HEADERS
+                              doc.setTextColor(255, 255, 255);
+                              doc.setFont("helvetica", "bold");
+                              doc.setFontSize(13);
+
+                              const activeDeptText =
+                                reportDept === "ALL"
+                                  ? "ALL DEPARTMENTS"
+                                  : reportDept.toUpperCase();
+                              const activeCcText =
+                                reportCC === "ALL"
+                                  ? "ALL COST CENTERS"
+                                  : reportCC.toUpperCase();
+
+                              // Dynamically states: ATTENDANCE REPORT: CHICKEN DEPARTMENT
+                              doc.text(
+                                `ATTENDANCE REPORT: ${activeDeptText}`,
+                                32,
+                                17,
+                              );
+
+                              // Subtext Meta Parameters
+                              doc.setFont("helvetica", "normal");
+                              doc.setFontSize(9);
+                              doc.setTextColor(203, 213, 225); // Slate 300
+                              doc.text(
+                                `Cost Center Context: ${activeCcText}`,
+                                32,
+                                23,
+                              );
+                              doc.text(
+                                `Date Range Window: ${startDate} to ${endDate}   |   Export Run Time: ${new Date().toLocaleTimeString()}`,
+                                32,
+                                28,
+                              );
+
+                              // 4. METRIC STATUS CONTEXT CALLOUT BADGE
+                              doc.setFillColor(248, 250, 252); // Background Box (Slate 50)
+                              doc.setDrawColor(226, 232, 240); // Border Line (Slate 200)
+                              doc.rect(14, 48, 182, 16, "FD");
+
+                              doc.setFontSize(9);
+                              doc.setTextColor(71, 85, 105); // Slate 600
+                              doc.setFont("helvetica", "bold");
+                              doc.text(
+                                "CURRENT PARAMETER SELECTION CRITERIA:",
+                                18,
+                                54,
+                              );
+
+                              // Colored Active Metric Highlight Pill (e.g., LATE, ABSENT)
+                              doc.setFillColor(239, 246, 255); // Blue 50
+                              doc.rect(102, 50.5, 34, 5, "F");
+                              doc.setTextColor(29, 78, 216); // Blue 700
+                              doc.setFontSize(8);
+                              doc.text(
+                                `METRIC: ${selectedMetricFilter}`,
+                                104,
+                                54.2,
+                              );
+
+                              doc.setFont("helvetica", "normal");
+                              doc.setTextColor(100, 116, 139); // Slate 500
+                              doc.text(
+                                `Total Records Found Matching Active Filters: ${filteredWorkerDataset.length} Employee(s)`,
+                                18,
+                                60,
+                              );
+
+                              // 5. DATASET TABLE ROW MAPPER
+                              const tableRows = filteredWorkerDataset.map(
+                                (emp) => {
+                                  const trackingSwipes = rawSwipesBuffer
+                                    .filter(
+                                      (s) =>
+                                        s.id === emp.staffCode &&
+                                        s.date >= startDate &&
+                                        s.date <= endDate,
+                                    )
+                                    .sort(
+                                      (a, b) =>
+                                        a.date.localeCompare(b.date) ||
+                                        a.time.localeCompare(b.time),
+                                    );
+
+                                  const inPunches = trackingSwipes.filter((s) =>
+                                    s.type.toLowerCase().includes("in"),
+                                  );
+                                  const clockInTime =
+                                    inPunches.length > 0
+                                      ? inPunches[0].time
+                                      : trackingSwipes.length > 0
+                                        ? trackingSwipes[0].time
+                                        : null;
+
+                                  const clockInDate =
+                                    inPunches.length > 0
+                                      ? inPunches[0].date
+                                      : trackingSwipes.length > 0
+                                        ? trackingSwipes[0].date
+                                        : "";
+
+                                  const rawSwipesString =
+                                    trackingSwipes.length > 0
+                                      ? trackingSwipes
+                                          .map(
+                                            (s) =>
+                                              `${s.type.toUpperCase()}(${s.time} - ${s.date?.substring(5)})`,
+                                          )
+                                          .join(", ")
+                                      : "No records found";
+
+                                  let calculatedStatus = "ABSENT";
+                                  if (clockInTime) {
+                                    calculatedStatus =
+                                      clockInTime <= "07:30"
+                                        ? "ON TIME"
+                                        : "LATE ARRIVAL";
+                                  }
+
+                                  return [
+                                    `${emp.fullName.toUpperCase()}\n[ID: ${emp.staffCode}]`,
+                                    `${emp.department.toUpperCase()}\n[CC: ${emp.costCenter.toUpperCase()}]`,
+                                    clockInTime
+                                      ? `${clockInTime} AM (${clockInDate.substring(5)})`
+                                      : "--:--",
+                                    rawSwipesString,
+                                    calculatedStatus,
+                                  ];
+                                },
+                              );
+
+                              // 6. INJECT AUTO-TABLE LAYOUT
+                           autoTable(doc, {
+                                startY: 70,
+                                head: [
+                                  [
+                                    "Staff Member Details",
+                                    "Department / Cost Center Allocation",
+                                    "First Punch-In Time",
+                                    "Raw History Timeline Actions Log",
+                                    "Status Flag",
+                                  ],
+                                ],
+                                body: tableRows,
+                                theme: "striped",
+                                headStyles: {
+                                  fillColor: [51, 65, 85],
+                                  textColor: [255, 255, 255],
+                                  fontStyle: "bold",
+                                  fontSize: 9,
+                                },
+                                bodyStyles: {
+                                  fontSize: 8,
+                                  cellPadding: 3,
+                                  textColor: [51, 65, 85],
+                                },
+                                columnStyles: {
+                                  0: { cellWidth: 42 },
+                                  1: { cellWidth: 42 },
+                                  2: { cellWidth: 26, halign: "center" },
+                                  3: { cellWidth: 46 },
+                                  4: { cellWidth: 26, fontStyle: "bold" },
+                                },
+                                didParseCell: (data: any) => {
+                                  if (
+                                    data.section === "body" &&
+                                    data.column.index === 4
+                                  ) {
+                                    const statusText = data.cell.raw;
+                                    if (statusText === "ON TIME")
+                                      data.cell.styles.textColor = [
+                                        22, 163, 74,
+                                      ]; // Green
+                                    if (statusText === "LATE ARRIVAL")
+                                      data.cell.styles.textColor = [
+                                        217, 119, 6,
+                                      ]; // Amber
+                                    if (statusText === "ABSENT")
+                                      data.cell.styles.textColor = [
+                                        220, 38, 38,
+                                      ]; // Red
+                                  }
+                                },
+                              });
+
+                              // 7. FILE SAVE INITIATOR WITH DYNAMIC SANITIZED FILENAME
+                              const fileDeptName = reportDept
+                                .replace(/\s+/g, "_")
+                                .toUpperCase();
+                              const fileCcName = reportCC
+                                .replace(/\s+/g, "_")
+                                .toUpperCase();
+                              doc.save(
+                                `ATTENDANCE_REPORT_${fileDeptName}_${fileCcName}_[${selectedMetricFilter}].pdf`,
+                              );
+                            }}
+                            className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs h-9 px-4 gap-2 flex items-center rounded-lg shadow-xs transition-all"
+                          >
+                            <Download className="w-4 h-4" />
+                            Export Filtered PDF Report
+                          </Button>
                         </div>
                       </div>
                     </div>
@@ -2025,18 +2264,38 @@ export default function EMSDashboard() {
                           <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
                             {filteredWorkerDataset.length > 0 ? (
                               filteredWorkerDataset.map((emp) => {
-                                const trackingSwipes = dayRecords
-                                  .filter((s) => s.id === emp.staffCode)
-                                  .sort((a, b) => a.time.localeCompare(b.time));
+                                // FIX: Filter swipes across the entire selected date range instead of a single day
+                                const trackingSwipes = rawSwipesBuffer
+                                  .filter(
+                                    (s) =>
+                                      s.id === emp.staffCode &&
+                                      s.date >= startDate &&
+                                      s.date <= endDate,
+                                  )
+                                  .sort(
+                                    (a, b) =>
+                                      a.date.localeCompare(b.date) ||
+                                      a.time.localeCompare(b.time),
+                                  );
 
                                 const inPunches = trackingSwipes.filter((s) =>
                                   s.type.toLowerCase().includes("in"),
                                 );
+
+                                // Grabs their very first clock-in time during this entire range timeframe
                                 const clockInTime =
                                   inPunches.length > 0
                                     ? inPunches[0].time
                                     : trackingSwipes.length > 0
                                       ? trackingSwipes[0].time
+                                      : null;
+
+                                // Grabs the corresponding date for that first clock-in
+                                const clockInDate =
+                                  inPunches.length > 0
+                                    ? inPunches[0].date
+                                    : trackingSwipes.length > 0
+                                      ? trackingSwipes[0].date
                                       : null;
 
                                 return (
@@ -2062,7 +2321,7 @@ export default function EMSDashboard() {
                                     </td>
                                     <td className="p-3 font-mono font-bold text-slate-800">
                                       {clockInTime
-                                        ? `${clockInTime} AM`
+                                        ? `${clockInTime} AM (${clockInDate?.substring(5)})` // Appends MM-DD for range clarity
                                         : "--:--"}
                                     </td>
                                     <td className="p-3">
@@ -2080,7 +2339,8 @@ export default function EMSDashboard() {
                                                   : "bg-rose-50 text-rose-700 border-rose-200"
                                               }`}
                                             >
-                                              {s.type.toUpperCase()} ({s.time})
+                                              {s.type.toUpperCase()} ({s.time} -{" "}
+                                              {s.date?.substring(5)})
                                             </Badge>
                                           ))}
                                         </div>
@@ -2131,7 +2391,7 @@ export default function EMSDashboard() {
             </div>
           )}
 
-           {activeTab === "CHECKLIST" && (
+          {activeTab === "CHECKLIST" && (
             <div className="space-y-6">
               {/* Cascade Filter Control Board */}
               <Card className="bg-white border border-slate-200 shadow-xs rounded-xl">
@@ -2263,14 +2523,17 @@ export default function EMSDashboard() {
                     const daySwipes = rawSwipesBuffer.filter(
                       (s) => s.id === emp.staffCode && s.date === selectedDate,
                     );
-                    
+
                     if (daySwipes.length > 0) {
                       groups.onsite.push(emp);
                       const checkIns = daySwipes
                         .filter((s) => s.type.toLowerCase().includes("in"))
                         .sort((a, b) => a.time.localeCompare(b.time));
-                        
-                      const clockIn = checkIns.length > 0 ? checkIns[0].time : daySwipes[0].time;
+
+                      const clockIn =
+                        checkIns.length > 0
+                          ? checkIns[0].time
+                          : daySwipes[0].time;
 
                       if (clockIn <= "07:30") {
                         groups.onTime.push(emp);
