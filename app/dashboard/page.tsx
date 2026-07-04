@@ -20,20 +20,10 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
-  ResponsiveContainer,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  LineChart,
-  Line,
-} from "recharts";
-import {
   Search,
   UploadCloud,
   Users,
   LayoutDashboard,
-  Download,
   Clock,
   AlertTriangle,
   Contact2,
@@ -48,21 +38,14 @@ import {
   UserX,
   History,
   FileText,
-  Filter,
+  Download,
   Loader2,
   BarChart3,
-  ChevronDown,
+  Filter,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
 import AttendanceReportPage from "../overall/page";
 
 interface EmployeeProfile {
@@ -113,6 +96,9 @@ export default function EMSDashboard() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [onsiteLiveCount, setOnsiteLiveCount] = useState<number>(0);
+
+  const [reportDept, setReportDept] = useState<string>("ALL");
+  const [reportCC, setReportCC] = useState<string>("ALL");
 
   const [selectedDeptFilter, setSelectedDeptFilter] = useState<string | null>(
     null,
@@ -195,6 +181,10 @@ export default function EMSDashboard() {
   const [isSubmittingManualAttendance, setIsSubmittingManualAttendance] =
     useState<string | null>(null);
 
+  const [selectedMetricFilter, setSelectedMetricFilter] = useState<
+    "ALL" | "ONSITE" | "ABSENT" | "ON_TIME" | "LATE"
+  >("ALL");
+
   const addLog = (msg: string) => {
     setSystemLogs((prev) =>
       [...prev, `${new Date().toLocaleTimeString()} - ${msg}`].slice(-3),
@@ -276,10 +266,11 @@ export default function EMSDashboard() {
   useEffect(() => {
     async function fetchOnsiteCount() {
       try {
-        
         // Pass the query parameter to your backend endpoint
-        const response = await fetch(`/api/attendance/onsite?date=${encodeURIComponent(targetDate)}`);
-        
+        const response = await fetch(
+          `/api/attendance/onsite?date=${encodeURIComponent(targetDate)}`,
+        );
+
         if (response.ok) {
           const data = await response.json();
           // Map safely based on your endpoint API payload schema structure
@@ -295,7 +286,7 @@ export default function EMSDashboard() {
     }
 
     fetchOnsiteCount();
-    
+
     // Auto-retrigger calculation counts every time the administrator flips dates on the dashboard
   }, [targetDate]);
 
@@ -488,101 +479,17 @@ export default function EMSDashboard() {
     return d.toLocaleDateString("en-US", { weekday: "long" });
   };
 
-  const toggleDailyPresence = async (
-    staffCode: string,
-    isCurrentlyPresent: boolean,
-  ) => {
-    const dateStr = selectedDate;
-    setSavingChecklistCode(staffCode);
-
-    if (isCurrentlyPresent) {
-      // Unchecking: remove today's punch pair for this employee
-      const previousSwipes = rawSwipesBuffer;
-      setRawSwipesBuffer((prev) =>
-        prev.filter((s) => !(s.id === staffCode && s.date === dateStr)),
-      );
-
-      try {
-        const response = await fetch(
-          `/api/attendance?staffCode=${encodeURIComponent(staffCode)}&date=${encodeURIComponent(dateStr)}`,
-          { method: "DELETE" },
-        );
-        if (!response.ok) throw new Error("Delete request failed");
-        addLog(
-          `Marked ${staffCode} absent for ${dateStr} and synced the removal to Supabase.`,
-        );
-      } catch (err) {
-        console.error(err);
-        setRawSwipesBuffer(previousSwipes);
-        addLog(
-          `Could not sync absence for ${staffCode}. Reverted the checklist locally.`,
-        );
-      } finally {
-        setSavingChecklistCode(null);
-      }
-      return;
-    }
-
-    // Checking: generate a standard 07:30 - 16:30 punch pair
-    const weekDay = getWeekdayLabel(dateStr);
-    const punchPair: RawSwipe[] = [
-      {
-        id: staffCode,
-        date: dateStr,
-        weekDay,
-        time: "07:30",
-        type: "Check In",
-      },
-      {
-        id: staffCode,
-        date: dateStr,
-        weekDay,
-        time: "16:30",
-        type: "Check Out",
-      },
-    ];
-
-    const previousSwipes = rawSwipesBuffer;
-    setRawSwipesBuffer((prev) => [
-      ...prev.filter((s) => !(s.id === staffCode && s.date === dateStr)),
-      ...punchPair,
-    ]);
-
-    try {
-      const response = await fetch("/api/attendance", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          staffCode,
-          date: dateStr,
-          weekDay,
-          punches: punchPair,
-        }),
-      });
-      if (!response.ok) throw new Error("Save request failed");
-      addLog(
-        `Marked ${staffCode} present for ${dateStr} (07:30 - 16:30) and synced to Supabase.`,
-      );
-    } catch (err) {
-      console.error(err);
-      setRawSwipesBuffer(previousSwipes);
-      addLog(
-        `Could not sync attendance for ${staffCode}. Reverted the checklist locally.`,
-      );
-    } finally {
-      setSavingChecklistCode(null);
-    }
-  };
-
- const systemProcessedDataset = useMemo(() => {
+  const systemProcessedDataset = useMemo(() => {
     // Look at dates available in the swipes buffer
     const foundDates = Array.from(new Set(rawSwipesBuffer.map((s) => s.date)));
-    
-    // 🚀 FIX HERE: If a selectedDate is active, isolate that date. 
+
+    // 🚀 FIX HERE: If a selectedDate is active, isolate that date.
     // Otherwise fallback safely to found data bounds or today's date context string.
-    const uniqueDates = selectedDate 
-      ? [selectedDate] 
-      : (foundDates.length > 0 ? foundDates.sort() : [new Date().toISOString().split("T")[0]]);
+    const uniqueDates = selectedDate
+      ? [selectedDate]
+      : foundDates.length > 0
+        ? foundDates.sort()
+        : [new Date().toISOString().split("T")[0]];
 
     return employeeDirectory.map((emp) => {
       let totalRegularHours = 0;
@@ -768,50 +675,68 @@ export default function EMSDashboard() {
     if (!isoString) return "";
     const parts = isoString.split("-");
     if (parts.length !== 3) return isoString;
-    
+
     const year = parts[0];
     const monthIndex = parseInt(parts[1], 10) - 1;
     const day = parts[2];
-    
+
     const monthNames = [
-      "Jan", "Feb", "Mar", "Apr", "May", "Jun", 
-      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
     ];
-    
+
     return `${day} - ${monthNames[monthIndex] || parts[1]} - ${year}`;
   };
 
   // 1️⃣ MOVE THIS FIRST (targetTimelineDates)
   const targetTimelineDates = useMemo(() => {
-    let uniquelyDiscoveredIsoDates = Array.from(new Set(rawSwipesBuffer.map((s) => s.date))).sort();
-    
+    let uniquelyDiscoveredIsoDates = Array.from(
+      new Set(rawSwipesBuffer.map((s) => s.date)),
+    ).sort();
+
     if (startDate) {
-      uniquelyDiscoveredIsoDates = uniquelyDiscoveredIsoDates.filter(d => d >= startDate);
+      uniquelyDiscoveredIsoDates = uniquelyDiscoveredIsoDates.filter(
+        (d) => d >= startDate,
+      );
     }
     if (endDate) {
-      uniquelyDiscoveredIsoDates = uniquelyDiscoveredIsoDates.filter(d => d <= endDate);
+      uniquelyDiscoveredIsoDates = uniquelyDiscoveredIsoDates.filter(
+        (d) => d <= endDate,
+      );
     }
 
     return uniquelyDiscoveredIsoDates.map((dateStr) => {
       const matchSample = rawSwipesBuffer.find((s) => s.date === dateStr);
       const dayOfWeekString = matchSample?.weekDay || "";
       const isSunday = dayOfWeekString.toLowerCase() === "sunday";
-      
+
       return {
         iso: dateStr,
         label: formatPresentationDate(dateStr),
         isSunday: isSunday,
-        weekDay: dayOfWeekString
+        weekDay: dayOfWeekString,
       };
     });
   }, [rawSwipesBuffer, startDate, endDate]);
 
-
   // 2️⃣ PLACE THIS SECOND (liveMetricsRollup)
   const liveMetricsRollup = useMemo(() => {
-    const defaultTargetDate = targetTimelineDates.length > 0 ? targetTimelineDates[0].iso : new Date().toISOString().split("T")[0];
+    const defaultTargetDate =
+      targetTimelineDates.length > 0
+        ? targetTimelineDates[0].iso
+        : new Date().toISOString().split("T")[0];
     const targetDateStr = selectedDate || defaultTargetDate;
-    
+
     const dayRecords = rawSwipesBuffer.filter((s) => s.date === targetDateStr);
     const totalCountedPool = employeeDirectory.length;
 
@@ -823,15 +748,16 @@ export default function EMSDashboard() {
 
     employeeDirectory.forEach((emp) => {
       const personalSwipes = dayRecords.filter((s) => s.id === emp.staffCode);
-      
+
       if (personalSwipes.length > 0) {
         onsite++;
         const checkIns = personalSwipes
           .filter((s) => s.type.toLowerCase().includes("in"))
           .sort((a, b) => a.time.localeCompare(b.time));
-          
-        const clockIn = checkIns.length > 0 ? checkIns[0].time : personalSwipes[0].time;
-        
+
+        const clockIn =
+          checkIns.length > 0 ? checkIns[0].time : personalSwipes[0].time;
+
         if (clockIn <= "07:30") {
           onTime++;
         } else {
@@ -850,7 +776,7 @@ export default function EMSDashboard() {
       absent,
       absentNames,
       total: totalCountedPool,
-      currentDayLabel: formatPresentationDate(targetDateStr)
+      currentDayLabel: formatPresentationDate(targetDateStr),
     };
   }, [rawSwipesBuffer, employeeDirectory, selectedDate, targetTimelineDates]);
 
@@ -877,18 +803,25 @@ export default function EMSDashboard() {
     });
   }, [systemProcessedDataset, staffSubTab, staffSearchQuery]);
 
-const dailyChecklistDataset = useMemo(() => {
+  const dailyChecklistDataset = useMemo(() => {
     return employeeDirectory
       .filter((emp) => {
         // Global textual matching constraint logic
         const textMatch =
-          emp.fullName.toLowerCase().includes(checklistSearchQuery.toLowerCase()) ||
-          emp.staffCode.toLowerCase().includes(checklistSearchQuery.toLowerCase()) ||
-          emp.department.toLowerCase().includes(checklistSearchQuery.toLowerCase());
+          emp.fullName
+            .toLowerCase()
+            .includes(checklistSearchQuery.toLowerCase()) ||
+          emp.staffCode
+            .toLowerCase()
+            .includes(checklistSearchQuery.toLowerCase()) ||
+          emp.department
+            .toLowerCase()
+            .includes(checklistSearchQuery.toLowerCase());
 
         // Context drop-down filter layers validation matching
         const deptMatch = !checklistDept || emp.department === checklistDept;
-        const ccMatch = !checklistCostCenter || emp.costCenter === checklistCostCenter;
+        const ccMatch =
+          !checklistCostCenter || emp.costCenter === checklistCostCenter;
 
         return textMatch && deptMatch && ccMatch;
       })
@@ -911,15 +844,20 @@ const dailyChecklistDataset = useMemo(() => {
           // 🚀 ONSITE API DATA: Evaluated on site context based on active timecard record counts
           isPresent: daySwipes.length > 0,
           clockIn: checkIns.length > 0 ? checkIns[0].time : "—",
-          clockOut: checkOuts.length > 0 ? checkOuts[checkOuts.length - 1].time : "—",
+          clockOut:
+            checkOuts.length > 0 ? checkOuts[checkOuts.length - 1].time : "—",
         };
       });
-  }, [employeeDirectory, rawSwipesBuffer, selectedDate, checklistSearchQuery, checklistDept, checklistCostCenter]);
+  }, [
+    employeeDirectory,
+    rawSwipesBuffer,
+    selectedDate,
+    checklistSearchQuery,
+    checklistDept,
+    checklistCostCenter,
+  ]);
 
   // Derive headcount summary totals for selected operational department workspace bounds
-  const checklistOnsiteCount = useMemo(() => {
-    return dailyChecklistDataset.filter(emp => emp.isPresent).length;
-  }, [dailyChecklistDataset]);
 
   const departmentMetrics = useMemo(() => {
     const counts: Record<string, { total: number; active: number }> = {};
@@ -1133,10 +1071,6 @@ const dailyChecklistDataset = useMemo(() => {
     } catch (e) {
       console.error("PDF engine failure", e);
     }
-  };
-
-  const generateStaffScopeReport = (scope: string) => {
-    addLog(`Preparing printing parameters for ${scope} generation profile...`);
   };
 
   const downloadOverallAnalyticsPDF = () => {
@@ -1607,8 +1541,9 @@ const dailyChecklistDataset = useMemo(() => {
             </div>
           )}
 
+          {/* ========================================== OVERVIEW TAB CONTENT ========================================== */}
           {activeTab === "OVERVIEW" && (
-            <>
+            <div className="space-y-6">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-2">
                 <div>
                   <h2 className="text-base font-extrabold text-slate-800 uppercase tracking-wide">
@@ -1659,472 +1594,556 @@ const dailyChecklistDataset = useMemo(() => {
                 </div>
               </div>
 
+              {/* 1. Metric Breakdown Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <Card className="bg-white border border-slate-200 rounded-xl border-l-4 border-l-blue-600 shadow-xs">
+                <Card
+                  onClick={() => {
+                    setSelectedMetricFilter(
+                      selectedMetricFilter === "ONSITE" ? "ALL" : "ONSITE",
+                    );
+                    setReportDept("ALL");
+                    setReportCC("ALL");
+                  }}
+                  className={`bg-white border border-slate-200 rounded-xl border-l-4 border-l-blue-600 shadow-xs cursor-pointer transition-all hover:scale-[1.01] ${
+                    selectedMetricFilter === "ONSITE"
+                      ? "ring-2 ring-blue-500 ring-offset-2 bg-blue-50/10"
+                      : ""
+                  }`}
+                >
                   <CardHeader className="p-4">
                     <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
                       <Users className="w-4 h-4 text-blue-600" /> At Work Today
                     </CardDescription>
-                    <CardTitle className="text-xl font-black text-slate-900 mt-1">
-                      {liveMetricsRollup.onsite} Checked In
+                    <CardTitle className="text-xl font-black text-slate-900 mt-1 flex justify-between items-center">
+                      <span>{liveMetricsRollup.onsite} Checked In</span>
+                      {selectedMetricFilter === "ONSITE" && (
+                        <Badge className="bg-blue-600 text-[9px] tracking-wider">
+                          FILTER ACTIVE
+                        </Badge>
+                      )}
                     </CardTitle>
                   </CardHeader>
                 </Card>
 
-                <Card className="bg-white border border-slate-200 rounded-xl border-l-4 border-l-amber-500 shadow-xs">
+                <Card
+                  onClick={() => {
+                    setSelectedMetricFilter(
+                      selectedMetricFilter === "ABSENT" ? "ALL" : "ABSENT",
+                    );
+                    setReportDept("ALL");
+                    setReportCC("ALL");
+                  }}
+                  className={`bg-white border border-slate-200 rounded-xl border-l-4 border-l-amber-500 shadow-xs cursor-pointer transition-all hover:scale-[1.01] ${
+                    selectedMetricFilter === "ABSENT"
+                      ? "ring-2 ring-amber-500 ring-offset-2 bg-amber-50/10"
+                      : ""
+                  }`}
+                >
                   <CardHeader className="p-4">
                     <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                      <AlertTriangle className="w-4 h-4 text-amber-500" /> Absent Today
+                      <AlertTriangle className="w-4 h-4 text-amber-500" />{" "}
+                      Absent Today
                     </CardDescription>
-                    <CardTitle className="text-xl font-black text-slate-900 mt-1">
-                      {liveMetricsRollup.absent} Workers
+                    <CardTitle className="text-xl font-black text-slate-900 mt-1 flex justify-between items-center">
+                      <span>{liveMetricsRollup.absent} Workers</span>
+                      {selectedMetricFilter === "ABSENT" && (
+                        <Badge className="bg-amber-500 text-[9px] tracking-wider">
+                          FILTER ACTIVE
+                        </Badge>
+                      )}
                     </CardTitle>
                   </CardHeader>
                 </Card>
 
-                <Card className="bg-white border border-slate-200 rounded-xl border-l-4 border-l-emerald-500 shadow-xs">
+                <Card
+                  onClick={() => {
+                    setSelectedMetricFilter(
+                      selectedMetricFilter === "ON_TIME" ? "ALL" : "ON_TIME",
+                    );
+                    setReportDept("ALL");
+                    setReportCC("ALL");
+                  }}
+                  className={`bg-white border border-slate-200 rounded-xl border-l-4 border-l-emerald-500 shadow-xs cursor-pointer transition-all hover:scale-[1.01] ${
+                    selectedMetricFilter === "ON_TIME"
+                      ? "ring-2 ring-emerald-500 ring-offset-2 bg-emerald-50/10"
+                      : ""
+                  }`}
+                >
                   <CardHeader className="p-4">
                     <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500" /> On Time (&le; 07:30 AM)
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500" /> On
+                      Time (&le; 07:30 AM)
                     </CardDescription>
-                    <CardTitle className="text-xl font-black text-emerald-600 mt-1">
-                      {liveMetricsRollup.onTime} Workers
+                    <CardTitle className="text-xl font-black text-emerald-600 mt-1 flex justify-between items-center">
+                      <span>{liveMetricsRollup.onTime} Workers</span>
+                      {selectedMetricFilter === "ON_TIME" && (
+                        <Badge className="bg-emerald-600 text-[9px] tracking-wider">
+                          FILTER ACTIVE
+                        </Badge>
+                      )}
                     </CardTitle>
                   </CardHeader>
                 </Card>
 
-                <Card className="bg-white border border-slate-200 rounded-xl border-l-4 border-l-rose-500 shadow-xs">
+                <Card
+                  onClick={() => {
+                    setSelectedMetricFilter(
+                      selectedMetricFilter === "LATE" ? "ALL" : "LATE",
+                    );
+                    setReportDept("ALL");
+                    setReportCC("ALL");
+                  }}
+                  className={`bg-white border border-slate-200 rounded-xl border-l-4 border-l-rose-500 shadow-xs cursor-pointer transition-all hover:scale-[1.01] ${
+                    selectedMetricFilter === "LATE"
+                      ? "ring-2 ring-rose-500 ring-offset-2 bg-rose-50/10"
+                      : ""
+                  }`}
+                >
                   <CardHeader className="p-4">
                     <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                      <Clock className="w-4 h-4 text-rose-500" /> Late Arrivals (&gt; 07:30 AM)
+                      <Clock className="w-4 h-4 text-rose-500" /> Late Arrivals
+                      (&gt; 07:30 AM)
                     </CardDescription>
-                    <CardTitle className="text-xl font-black text-rose-600 mt-1">
-                      {liveMetricsRollup.late} Workers
+                    <CardTitle className="text-xl font-black text-rose-600 mt-1 flex justify-between items-center">
+                      <span>{liveMetricsRollup.late} Workers</span>
+                      {selectedMetricFilter === "LATE" && (
+                        <Badge className="bg-rose-600 text-[9px] tracking-wider">
+                          FILTER ACTIVE
+                        </Badge>
+                      )}
                     </CardTitle>
                   </CardHeader>
                 </Card>
               </div>
 
-              {/* 🌟 CLICKABLE DEPARTMENT AND DRILLDOWN ENGINE */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Clickable Department List */}
-                <Card className="bg-white border border-slate-200 rounded-xl shadow-xs">
-                  <CardHeader className="p-4 border-b border-slate-100 flex flex-row items-center justify-between">
-                    <div>
-                      <CardTitle className="text-xs font-black text-slate-700 uppercase tracking-widest flex items-center gap-1.5">
-                        <Building2 className="w-4 h-4 text-slate-500" />{" "}
-                        Clickable Workspaces
-                      </CardTitle>
-                    </div>
-                    {selectedDeptFilter && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setSelectedDeptFilter(null)}
-                        className="h-6 text-[10px] uppercase font-bold text-rose-600 px-2 bg-rose-50 hover:bg-rose-100"
-                      >
-                        Clear Filter
-                      </Button>
-                    )}
-                  </CardHeader>
-                  <CardContent className="p-2 divide-y divide-slate-100">
-                    {departmentMetrics.map((dept) => {
-                      const isSelected = selectedDeptFilter === dept.name;
-                      return (
-                        <div
-                          key={dept.name}
-                          onClick={() => setSelectedDeptFilter(dept.name)}
-                          className={`p-3 rounded-xl cursor-pointer flex items-center justify-between transition-all ${
-                            isSelected
-                              ? "bg-blue-600 text-white font-black"
-                              : "hover:bg-slate-50 text-slate-700"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2.5">
-                            <div
-                              className={`w-2 h-2 rounded-full ${isSelected ? "bg-white" : "bg-blue-500"}`}
-                            />
-                            <span className="text-xs font-bold uppercase tracking-wide">
-                              {dept.name}
-                            </span>
-                          </div>
+              {/* 2. Dynamic Filter View & Functional PDF Report Engine Section */}
+              {(() => {
+                const defaultTargetDate =
+                  targetTimelineDates.length > 0
+                    ? targetTimelineDates[0].iso
+                    : new Date().toISOString().split("T")[0];
+                const targetDateStr = selectedDate || defaultTargetDate;
+                const dayRecords = rawSwipesBuffer.filter(
+                  (s) => s.date === targetDateStr,
+                );
+
+                const uniqueDepartments = Array.from(
+                  new Set(employeeDirectory.map((e) => e.department)),
+                )
+                  .filter(Boolean)
+                  .sort();
+                const uniqueCostCenters = Array.from(
+                  new Set(employeeDirectory.map((e) => e.costCenter)),
+                )
+                  .filter(Boolean)
+                  .sort();
+
+                const filteredWorkerDataset = employeeDirectory.filter(
+                  (emp) => {
+                    const personalSwipes = dayRecords.filter(
+                      (s) => s.id === emp.staffCode,
+                    );
+                    const checkIns = personalSwipes
+                      .filter((s) => s.type.toLowerCase().includes("in"))
+                      .sort((a, b) => a.time.localeCompare(b.time));
+                    const clockIn =
+                      checkIns.length > 0
+                        ? checkIns[0].time
+                        : personalSwipes.length > 0
+                          ? personalSwipes[0].time
+                          : null;
+
+                    if (
+                      selectedMetricFilter === "ONSITE" &&
+                      personalSwipes.length === 0
+                    )
+                      return false;
+                    if (
+                      selectedMetricFilter === "ABSENT" &&
+                      personalSwipes.length > 0
+                    )
+                      return false;
+                    if (
+                      selectedMetricFilter === "ON_TIME" &&
+                      (!clockIn || clockIn > "07:30")
+                    )
+                      return false;
+                    if (
+                      selectedMetricFilter === "LATE" &&
+                      (!clockIn || clockIn <= "07:30")
+                    )
+                      return false;
+
+                    if (reportDept !== "ALL" && emp.department !== reportDept)
+                      return false;
+                    if (reportCC !== "ALL" && emp.costCenter !== reportCC)
+                      return false;
+
+                    return true;
+                  },
+                );
+
+                // Pure JS PDF Generation Logic
+                const handleExportPDF = (
+                  scopeType: "OVERALL" | "DEPT" | "CC" | "COMBINED",
+                ) => {
+                  const doc = new jsPDF({
+                    orientation: "portrait",
+                    unit: "mm",
+                    format: "a4",
+                  });
+
+                  // Document Meta Colors & Brand Stylings
+                  doc.setFillColor(30, 41, 59); // Slate 800
+                  doc.rect(0, 0, 210, 40, "F");
+
+                  // Main Title Header Banner text
+                  doc.setTextColor(255, 255, 255);
+                  doc.setFont("helvetica", "bold");
+                  doc.setFontSize(18);
+                  doc.text("WORKFORCE ATTENDANCE REPORT", 14, 18);
+
+                  // Subtext Meta Properties
+                  doc.setFont("helvetica", "normal");
+                  doc.setFontSize(9);
+                  doc.setTextColor(203, 213, 225); // Slate 300
+                  doc.text(
+                    `Log Date: ${targetDateStr}   |   Generated: ${new Date().toLocaleTimeString()}`,
+                    14,
+                    25,
+                  );
+                  doc.text(
+                    `Metric Context: ${selectedMetricFilter}   |   Scope Range: ${scopeType}`,
+                    14,
+                    30,
+                  );
+
+                  // Dynamic Filtering Labels Summary Block
+                  doc.setFillColor(248, 250, 252); // Slate 50
+                  doc.setDrawColor(226, 232, 240); // Slate 200
+                  doc.rect(14, 48, 182, 18, "FD");
+
+                  doc.setFontSize(10);
+                  doc.setTextColor(71, 85, 105); // Slate 600
+                  doc.setFont("helvetica", "bold");
+                  doc.text("FILTER STATE CRITERIA:", 18, 54);
+
+                  doc.setFont("helvetica", "normal");
+                  doc.setFontSize(9);
+                  doc.text(`Department Grouping: ${reportDept}`, 18, 60);
+                  doc.text(`Cost Center Context: ${reportCC}`, 110, 60);
+
+                  // Compile clean array parameters matching auto-table structural signatures
+                  const tableRows = filteredWorkerDataset.map((emp) => {
+                    const trackingSwipes = dayRecords
+                      .filter((s) => s.id === emp.staffCode)
+                      .sort((a, b) => a.time.localeCompare(b.time));
+
+                    const inPunches = trackingSwipes.filter((s) =>
+                      s.type.toLowerCase().includes("in"),
+                    );
+                    const clockInTime =
+                      inPunches.length > 0
+                        ? inPunches[0].time
+                        : trackingSwipes.length > 0
+                          ? trackingSwipes[0].time
+                          : null;
+
+                    // Build string text representation summary for raw logs column
+                    const rawSwipesString =
+                      trackingSwipes.length > 0
+                        ? trackingSwipes
+                            .map((s) => `${s.type.toUpperCase()}(${s.time})`)
+                            .join(", ")
+                        : "No records found";
+
+                    let calculatedStatus = "ABSENT";
+                    if (clockInTime) {
+                      calculatedStatus =
+                        clockInTime <= "07:30" ? "ON TIME" : "LATE ARRIVAL";
+                    }
+
+                    return [
+                      `${emp.fullName.toUpperCase()}\n[ID: ${emp.staffCode}]`,
+                      `${emp.department.toUpperCase()}\n[${emp.costCenter.toUpperCase()}]`,
+                      clockInTime ? `${clockInTime} AM` : "--:--",
+                      rawSwipesString,
+                      calculatedStatus,
+                    ];
+                  });
+
+                  // Fire autoTable layout plugin injector
+                  (doc as any).autoTable({
+                    startY: 72,
+                    head: [
+                      [
+                        "Staff Member Details",
+                        "Department / Cost Center",
+                        "Clock-In",
+                        "Raw Logs Timeline Activity",
+                        "Status Flag",
+                      ],
+                    ],
+                    body: tableRows,
+                    theme: "striped",
+                    headStyles: {
+                      fillColor: [51, 65, 85],
+                      textColor: [255, 255, 255],
+                      fontStyle: "bold",
+                      fontSize: 9,
+                    },
+                    bodyStyles: {
+                      fontSize: 8.5,
+                      cellPadding: 3.5,
+                      textColor: [51, 65, 85],
+                    },
+                    columnStyles: {
+                      0: { cellWidth: 42 },
+                      1: { cellWidth: 42 },
+                      2: { cellWidth: 20, halign: "center" },
+                      3: { cellWidth: 50 },
+                      4: { cellWidth: 28, fontStyle: "bold" },
+                    },
+                    didParseCell: (data: any) => {
+                      if (data.section === "body" && data.column.index === 4) {
+                        const statusText = data.cell.raw;
+                        if (statusText === "ON TIME")
+                          data.cell.styles.textColor = [22, 163, 74]; // Emerald 600
+                        if (statusText === "LATE ARRIVAL")
+                          data.cell.styles.textColor = [217, 119, 6]; // Amber 600
+                        if (statusText === "ABSENT")
+                          data.cell.styles.textColor = [220, 38, 38]; // Rose 600
+                      }
+                    },
+                  });
+
+                  // Trigger immediate browser dynamic prompt stream attachment save
+                  const generatedFileName = `ATTENDANCE_${scopeType}_${selectedMetricFilter}_${targetDateStr}.pdf`;
+                  doc.save(generatedFileName);
+                };
+
+                return (
+                  <div className="space-y-4">
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                      <div>
+                        <h3 className="text-sm font-black text-slate-800 uppercase tracking-wide flex items-center gap-2">
+                          Live Report Matrix
                           <Badge
-                            variant={isSelected ? "secondary" : "outline"}
-                            className="text-[10px] font-bold"
-                          >
-                            {dept.total} Employees
-                          </Badge>
-                        </div>
-                      );
-                    })}
-                  </CardContent>
-                </Card>
-
-                {/* 🗂️ WORKSPACE ROSTER MATRIX DRILLDOWN ENGINE */}
-                <Card className="lg:col-span-2 bg-white border border-slate-200 rounded-xl shadow-xs flex flex-col">
-                  <CardHeader className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <div>
-                      <CardTitle className="text-xs font-black text-slate-800 uppercase tracking-widest">
-                        {selectedDeptFilter
-                          ? `${selectedDeptFilter} Workspace Roster`
-                          : "Global Roster View"}
-                      </CardTitle>
-                    </div>
-
-                    <div className="flex items-center gap-2 self-end sm:self-auto">
-                      {/* 📥 CONTEXTUAL DOWNLOAD DROPDOWN MATRIX ACTIONS */}
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            size="sm"
                             variant="outline"
-                            className="h-8 text-[10px] font-black uppercase tracking-wide border-slate-200 shadow-2xs flex items-center gap-1.5 px-3 bg-white text-slate-700 hover:bg-slate-50 active:scale-95"
+                            className="bg-slate-200 text-slate-800 border-slate-300 font-mono text-[10px] px-2 font-bold"
                           >
-                            <Download className="w-3.5 h-3.5 text-blue-600" />
-                            <span>Download Report</span>
-                            <ChevronDown className="w-3 h-3 text-slate-400" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent
-                          align="end"
-                          className="w-48 text-xs font-bold uppercase tracking-wide text-slate-700"
-                        >
-                          <DropdownMenuItem
-                            onClick={() => downloadContextualPDF("ALL")}
-                            className="cursor-pointer py-2"
-                          >
-                            Full Roster Report
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() => downloadContextualPDF("ON_TIME")}
-                            className="cursor-pointer text-emerald-600 py-2"
-                          >
-                            On Time Roster Only
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => downloadContextualPDF("LATE")}
-                            className="cursor-pointer text-amber-600 py-2"
-                          >
-                            Late Roster Only
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => downloadContextualPDF("ABSENT")}
-                            className="cursor-pointer text-rose-600 py-2"
-                          >
-                            Absent Roster Only
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                            {selectedMetricFilter.replace("_", " ")}
+                          </Badge>
+                        </h3>
+                        <p className="text-xs text-slate-500 font-medium mt-0.5">
+                          Showing{" "}
+                          <span className="font-bold text-slate-900">
+                            {filteredWorkerDataset.length}
+                          </span>{" "}
+                          records on this display grid interface.
+                        </p>
+                      </div>
 
-                      {/* 📑 INTERNAL TAB NAVIGATOR FOR DEPARTMENTS ROSTERS */}
-                      <div className="flex bg-slate-200/80 p-0.5 rounded-lg text-[10px] font-black uppercase">
-                        {(["ALL", "ON_TIME", "LATE", "ABSENT"] as const).map(
-                          (tab) => (
-                            <button
-                              key={tab}
-                              onClick={() => setRosterStatusTab(tab)}
-                              className={`px-2.5 py-1.5 rounded-md transition-all ${
-                                rosterStatusTab === tab
-                                  ? "bg-white text-blue-600 shadow-2xs"
-                                  : "text-slate-600 hover:text-slate-900"
-                              }`}
+                      {/* Dropdown Filters & Button Action Combinations */}
+                      <div className="flex flex-wrap items-center gap-3">
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider">
+                            Department
+                          </label>
+                          <select
+                            value={reportDept}
+                            onChange={(e) => setReportDept(e.target.value)}
+                            className="bg-white border border-slate-300 rounded-lg text-xs font-bold p-1.5 h-8 text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 uppercase min-w-[140px]"
+                          >
+                            <option value="ALL">All Departments</option>
+                            {uniqueDepartments.map((dept) => (
+                              <option key={dept} value={dept}>
+                                {dept}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider">
+                            Cost Center
+                          </label>
+                          <select
+                            value={reportCC}
+                            onChange={(e) => setReportCC(e.target.value)}
+                            className="bg-white border border-slate-300 rounded-lg text-xs font-bold p-1.5 h-8 text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 uppercase min-w-[140px]"
+                          >
+                            <option value="ALL">All Cost Centers</option>
+                            {uniqueCostCenters.map((cc) => (
+                              <option key={cc} value={cc}>
+                                {cc}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Dynamic PDF Export Buttons */}
+                        <div className="flex items-end h-full pt-[18px]">
+                          {reportDept !== "ALL" && reportCC !== "ALL" ? (
+                            <Button
+                              onClick={() => handleExportPDF("COMBINED")}
+                              className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold h-8 gap-1.5 shadow-xs uppercase tracking-wider text-[10px]"
                             >
-                              {tab.replace("_", " ")}
-                            </button>
-                          ),
-                        )}
+                              <FileText className="w-3.5 h-3.5" /> PDF: Combined
+                              Group
+                            </Button>
+                          ) : reportDept !== "ALL" ? (
+                            <Button
+                              onClick={() => handleExportPDF("DEPT")}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold h-8 gap-1.5 shadow-xs uppercase tracking-wider text-[10px]"
+                            >
+                              <FileText className="w-3.5 h-3.5" /> PDF: Dept
+                              Scoped
+                            </Button>
+                          ) : reportCC !== "ALL" ? (
+                            <Button
+                              onClick={() => handleExportPDF("CC")}
+                              className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold h-8 gap-1.5 shadow-xs uppercase tracking-wider text-[10px]"
+                            >
+                              <FileText className="w-3.5 h-3.5" /> PDF: Cost
+                              Center
+                            </Button>
+                          ) : (
+                            <Button
+                              onClick={() => handleExportPDF("OVERALL")}
+                              className="bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold h-8 gap-1.5 shadow-xs uppercase tracking-wider text-[10px]"
+                            >
+                              <FileText className="w-3.5 h-3.5" /> PDF: Overall
+                              Summary
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </CardHeader>
 
-                  <CardContent className="p-4 flex-1 overflow-y-auto max-h-[500px] space-y-6">
-                    {(() => {
-                      // 1. Time parsing core utility engine
-                      const parseTimeToMinutes = (timeStr: string): number => {
-                        if (!timeStr || timeStr === "—") return 0;
-                        const [hours, minutes] = timeStr.split(":").map(Number);
-                        return hours * 60 + minutes;
-                      };
+                    {/* 3. Live Data Table Grid View */}
+                    <Card className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+                      <div className="overflow-x-auto max-h-[400px]">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-400 tracking-wider uppercase">
+                              <th className="p-3">Staff Member</th>
+                              <th className="p-3">Department / Cost Center</th>
+                              <th className="p-3">First Clock In</th>
+                              <th className="p-3">Punches / Activities</th>
+                              <th className="p-3 text-right">Status Flag</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
+                            {filteredWorkerDataset.length > 0 ? (
+                              filteredWorkerDataset.map((emp) => {
+                                const trackingSwipes = dayRecords
+                                  .filter((s) => s.id === emp.staffCode)
+                                  .sort((a, b) => a.time.localeCompare(b.time));
 
-                      // 2. Resolve operational shift rules based on current date structure
-                      const isWeekend =
-                        new Date(selectedDate).getDay() === 0 ||
-                        new Date(selectedDate).getDay() === 6;
-                      const lunchDeductionMins = 60;
-                      const standardShiftMins = isWeekend
-                        ? 5.5 * 60 - lunchDeductionMins
-                        : 9.5 * 60 - lunchDeductionMins;
+                                const inPunches = trackingSwipes.filter((s) =>
+                                  s.type.toLowerCase().includes("in"),
+                                );
+                                const clockInTime =
+                                  inPunches.length > 0
+                                    ? inPunches[0].time
+                                    : trackingSwipes.length > 0
+                                      ? trackingSwipes[0].time
+                                      : null;
 
-                      // 3. Filter target dataset by active workspace department parameters
-                      const activeDepartmentStaff =
-                        systemProcessedDataset.filter(
-                          (emp) =>
-                            !selectedDeptFilter ||
-                            emp.department === selectedDeptFilter,
-                        );
-
-                      // 4. Transform and map structural metrics arrays across parameters
-                      const evaluatedRoster = activeDepartmentStaff.map(
-                        (worker) => {
-                          const dayPunches = rawSwipesBuffer.filter(
-                            (s) =>
-                              s.id === worker.staffCode &&
-                              s.date === selectedDate,
-                          );
-                          const checkIns = dayPunches
-                            .filter((s) => s.type.toLowerCase().includes("in"))
-                            .sort((a, b) => a.time.localeCompare(b.time));
-                          const checkOuts = dayPunches
-                            .filter((s) => s.type.toLowerCase().includes("out"))
-                            .sort((a, b) => a.time.localeCompare(b.time));
-
-                          const clockIn =
-                            checkIns.length > 0 ? checkIns[0].time : "—";
-                          const clockOut =
-                            checkOuts.length > 0
-                              ? checkOuts[checkOuts.length - 1].time
-                              : "—";
-
-                          let calculatedStatus: "ON_TIME" | "LATE" | "ABSENT" =
-                            "ABSENT";
-                          let regHours = "0.00";
-                          let otHours = "0.00";
-
-                          if (clockIn !== "—" && clockOut !== "—") {
-                            calculatedStatus =
-                              clockIn <= "07:30" ? "ON_TIME" : "LATE";
-
-                            const totalMins = Math.max(
-                              0,
-                              parseTimeToMinutes(clockOut) -
-                                parseTimeToMinutes(clockIn) -
-                                lunchDeductionMins,
-                            );
-                            if (totalMins > standardShiftMins) {
-                              regHours = (standardShiftMins / 60).toFixed(2);
-                              otHours = (
-                                (totalMins - standardShiftMins) /
-                                60
-                              ).toFixed(2);
-                            } else {
-                              regHours = (totalMins / 60).toFixed(2);
-                            }
-                          }
-
-                          return {
-                            ...worker,
-                            clockIn,
-                            clockOut,
-                            calculatedStatus,
-                            regHours,
-                            otHours,
-                          };
-                        },
-                      );
-
-                      // 5. Apply active roster segmentation filter constraints
-                      const filteredRoster = evaluatedRoster.filter(
-                        (w) =>
-                          rosterStatusTab === "ALL" ||
-                          w.calculatedStatus === rosterStatusTab,
-                      );
-
-                      // 6. Split bucket layouts vertically descending
-                      const buckets = [
-                        {
-                          title: "On Time Personnel",
-                          list: filteredRoster.filter(
-                            (w) => w.calculatedStatus === "ON_TIME",
-                          ),
-                          themeColor: "border-l-emerald-500",
-                          textColor: "text-emerald-600",
-                        },
-                        {
-                          title: "Late Arrivals",
-                          list: filteredRoster.filter(
-                            (w) => w.calculatedStatus === "LATE",
-                          ),
-                          themeColor: "border-l-amber-500",
-                          textColor: "text-amber-600",
-                        },
-                        {
-                          title: "Absent / Incomplete Records",
-                          list: filteredRoster.filter(
-                            (w) => w.calculatedStatus === "ABSENT",
-                          ),
-                          themeColor: "border-l-rose-500",
-                          textColor: "text-rose-600",
-                        },
-                      ];
-
-                      const visibleBuckets = buckets.filter(
-                        (b) => b.list.length > 0,
-                      );
-
-                      if (visibleBuckets.length === 0) {
-                        return (
-                          <div className="text-center py-16 text-xs font-semibold text-slate-400 uppercase tracking-widest">
-                            No active metrics found matching tab constraints.
-                          </div>
-                        );
-                      }
-
-                      return (
-                        <div className="space-y-6">
-                          {visibleBuckets.map((bucket) => (
-                            <div
-                              key={bucket.title}
-                              className={`border border-slate-200 border-l-4 ${bucket.themeColor} rounded-xl overflow-hidden shadow-2xs bg-white`}
-                            >
-                              <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-100 flex items-center justify-between">
-                                <span
-                                  className={`text-[10px] font-black uppercase tracking-wider ${bucket.textColor}`}
+                                return (
+                                  <tr
+                                    key={emp.staffCode}
+                                    className="hover:bg-slate-50/70 transition-colors"
+                                  >
+                                    <td className="p-3">
+                                      <div className="font-bold text-slate-900 uppercase">
+                                        {emp.fullName}
+                                      </div>
+                                      <div className="text-[10px] font-mono text-slate-400">
+                                        {emp.staffCode}
+                                      </div>
+                                    </td>
+                                    <td className="p-3">
+                                      <div className="font-semibold text-slate-700 uppercase text-[11px]">
+                                        {emp.department}
+                                      </div>
+                                      <div className="text-[10px] text-slate-400 uppercase font-bold tracking-tight">
+                                        {emp.costCenter}
+                                      </div>
+                                    </td>
+                                    <td className="p-3 font-mono font-bold text-slate-800">
+                                      {clockInTime
+                                        ? `${clockInTime} AM`
+                                        : "--:--"}
+                                    </td>
+                                    <td className="p-3">
+                                      {trackingSwipes.length > 0 ? (
+                                        <div className="flex flex-wrap gap-1 max-w-sm">
+                                          {trackingSwipes.map((s, idx) => (
+                                            <Badge
+                                              key={idx}
+                                              variant="outline"
+                                              className={`text-[9px] font-mono font-bold px-1.5 py-0 rounded ${
+                                                s.type
+                                                  .toLowerCase()
+                                                  .includes("in")
+                                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                                  : "bg-rose-50 text-rose-700 border-rose-200"
+                                              }`}
+                                            >
+                                              {s.type.toUpperCase()} ({s.time})
+                                            </Badge>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <span className="text-[11px] italic text-slate-400 font-normal">
+                                          No activity logs recorded
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="p-3 text-right">
+                                      {!clockInTime ? (
+                                        <Badge
+                                          variant="destructive"
+                                          className="text-[9px] font-black tracking-widest bg-rose-600"
+                                        >
+                                          ABSENT
+                                        </Badge>
+                                      ) : clockInTime <= "07:30" ? (
+                                        <Badge className="text-[9px] font-black tracking-widest bg-emerald-600 text-white">
+                                          ON TIME
+                                        </Badge>
+                                      ) : (
+                                        <Badge className="text-[9px] font-black tracking-widest bg-amber-500 text-white">
+                                          LATE
+                                        </Badge>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            ) : (
+                              <tr>
+                                <td
+                                  colSpan={5}
+                                  className="text-center p-8 text-slate-400 font-semibold italic uppercase"
                                 >
-                                  {bucket.title}
-                                </span>
-                                <Badge
-                                  variant="outline"
-                                  className="text-[9px] font-bold bg-white px-2"
-                                >
-                                  {bucket.list.length} Workers
-                                </Badge>
-                              </div>
-
-                              <Table>
-                                <TableHeader className="bg-slate-50/50">
-                                  <TableRow>
-                                    <TableHead className="text-[9px] font-black uppercase w-20">
-                                      Staff ID
-                                    </TableHead>
-                                    <TableHead className="text-[9px] font-black uppercase">
-                                      Employee Full Name
-                                    </TableHead>
-                                    <TableHead className="text-[9px] font-black uppercase text-center">
-                                      In
-                                    </TableHead>
-                                    <TableHead className="text-[9px] font-black uppercase text-center">
-                                      Out
-                                    </TableHead>
-                                    <TableHead className="text-[9px] font-black uppercase text-right">
-                                      Reg Hrs
-                                    </TableHead>
-                                    <TableHead className="text-[9px] font-black uppercase text-right">
-                                      OT Hrs
-                                    </TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  {bucket.list.map((worker) => (
-                                    <TableRow
-                                      key={worker.staffCode}
-                                      className="hover:bg-slate-50/30"
-                                    >
-                                      <TableCell className="font-mono text-xs text-slate-500">
-                                        {worker.staffCode}
-                                      </TableCell>
-                                      <TableCell className="text-xs font-bold text-slate-800 uppercase">
-                                        {worker.fullName}
-                                      </TableCell>
-                                      <TableCell className="text-xs text-center font-semibold text-slate-600">
-                                        {worker.clockIn}
-                                      </TableCell>
-                                      <TableCell className="text-xs text-center font-semibold text-slate-600">
-                                        {worker.clockOut}
-                                      </TableCell>
-                                      <TableCell className="text-xs text-right font-medium text-slate-700">
-                                        {worker.regHours}
-                                      </TableCell>
-                                      <TableCell
-                                        className={`text-xs text-right font-black ${worker.otHours !== "0.00" ? "text-blue-600" : "text-slate-400"}`}
-                                      >
-                                        {worker.otHours}
-                                      </TableCell>
-                                    </TableRow>
-                                  ))}
-                                </TableBody>
-                              </Table>
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    })()}
-                  </CardContent>
-                </Card>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <Card className="lg:col-span-2 bg-white border border-slate-200 rounded-xl shadow-xs">
-                  <CardHeader className="p-4">
-                    <CardTitle className="text-xs font-black text-slate-400 uppercase tracking-widest">
-                      Total Hours Worked Graph
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="h-60 p-2">
-                    <ResponsiveContainer width="100%" height="100%">
-                      {/* 🚀 Changed from BarChart to LineChart */}
-                      <LineChart
-                        data={systemProcessedDataset}
-                        margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                        <XAxis
-                          dataKey="fullName"
-                          stroke="#94a3b8"
-                          fontSize={9}
-                          tickLine={false}
-                        />
-                        <YAxis
-                          stroke="#94a3b8"
-                          fontSize={9}
-                          tickLine={false}
-                          axisLine={false}
-                        />
-                        <Tooltip />
-
-                        {/* 🚀 Changed from Bar to Line with smooth monotone curve typing and node active dots */}
-                        <Line
-                          type="monotone"
-                          dataKey="metrics.totalHoursSum"
-                          name="Hours Accumulation"
-                          stroke="#2563eb"
-                          strokeWidth={2.5}
-                          dot={{ r: 3, fill: "#2563eb", strokeWidth: 0 }}
-                          activeDot={{
-                            r: 5,
-                            stroke: "#ffffff",
-                            strokeWidth: 2,
-                          }}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </CardContent>
-                </Card>
-
-                <CardContent className="space-y-2 max-h-60 overflow-y-auto p-4 pt-0">
-                    {liveMetricsRollup.absentNames.length > 0 ? (
-                      liveMetricsRollup.absentNames.map((name: string, idx: number) => (
-                        <div
-                          key={idx}
-                          className="p-2.5 bg-rose-50 rounded-lg border border-rose-100 text-xs font-bold text-rose-800 flex justify-between items-center"
-                        >
-                          <span className="uppercase">{name}</span>
-                          <Badge variant="destructive" className="text-[9px]">
-                            ABSENT
-                          </Badge>
-                        </div>
-                      ))
-                    ) : (
-                      <span className="text-xs text-slate-400 font-medium uppercase block py-2">
-                        All employees have logged card entries safely.
-                      </span>
-                    )}
-                  </CardContent>
-              </div>
-            </>
+                                  No employees match the requested parameters.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </Card>
+                  </div>
+                );
+              })()}
+            </div>
           )}
 
-          {activeTab === "CHECKLIST" && (
+           {activeTab === "CHECKLIST" && (
             <div className="space-y-6">
               {/* Cascade Filter Control Board */}
               <Card className="bg-white border border-slate-200 shadow-xs rounded-xl">
@@ -3097,9 +3116,7 @@ const dailyChecklistDataset = useMemo(() => {
             </Card>
           )}
 
-          {activeTab === "REPORTS_HUB" && (
-            <AttendanceReportPage/>
-          )}
+          {activeTab === "REPORTS_HUB" && <AttendanceReportPage />}
 
           {activeTab === "SETTINGS" && (
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
