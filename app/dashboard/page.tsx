@@ -1360,12 +1360,6 @@ export default function EMSDashboard() {
               <Users className="w-4 h-4" /> Staff Management
             </button>
             <button
-              onClick={() => setActiveTab("EMPLOYEES")}
-              className={`px-4 py-2 rounded-lg flex items-center gap-1.5 transition-all ${activeTab === "EMPLOYEES" ? "bg-white text-blue-600 shadow-xs" : "text-slate-600 hover:text-slate-900"}`}
-            >
-              <Contact2 className="w-4 h-4" /> Work Hours Sheet
-            </button>
-            <button
               onClick={() => setActiveTab("REPORTS_HUB")}
               className={`px-4 py-2 rounded-lg flex items-center gap-1.5 transition-all ${activeTab === "REPORTS_HUB" ? "bg-white text-blue-600 shadow-xs" : "text-slate-600 hover:text-slate-900"}`}
             >
@@ -3142,89 +3136,6 @@ export default function EMSDashboard() {
                 </div>
               )}
             </div>
-          )}
-
-          {activeTab === "EMPLOYEES" && (
-            <Card className="bg-white border border-slate-200 rounded-xl shadow-xs">
-              <CardHeader className="p-4 bg-slate-50/60 border-b border-slate-100 flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="text-xs font-black text-slate-500 uppercase tracking-widest">
-                    Staff Members Work Hours Ledger
-                  </CardTitle>
-                  <div className="text-[10px] text-amber-700 font-bold uppercase mt-1">
-                    Rule: If a worker checks in, they are given standard hours
-                    for that day regardless of missing check-out.
-                  </div>
-                </div>
-                <div>
-                  <select
-                    value={monthFilter}
-                    onChange={(e) => setMonthFilter(e.target.value)}
-                    className="bg-white border border-slate-200 text-[10px] font-bold uppercase rounded p-1"
-                  >
-                    <option value="ALL">Show All Months</option>
-                    {dynamicFilterMenus.map((m) => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </CardHeader>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-slate-50 border-b border-slate-200">
-                      <TableHead className="text-[10px] font-black uppercase text-slate-500">
-                        ID Code
-                      </TableHead>
-                      <TableHead className="text-[10px] font-black uppercase text-slate-500">
-                        Full Name
-                      </TableHead>
-                      <TableHead className="text-[10px] font-black uppercase text-slate-500">
-                        Department
-                      </TableHead>
-                      <TableHead className="text-[10px] font-black uppercase text-slate-500 text-right">
-                        Regular Work Hours
-                      </TableHead>
-                      <TableHead className="text-[10px] font-black uppercase text-slate-500 text-right">
-                        Overtime Hours
-                      </TableHead>
-                      <TableHead className="text-[10px] font-black uppercase text-slate-500 text-right">
-                        Total Hours Combined
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredViewDataset.map((emp) => (
-                      <TableRow
-                        key={emp.staffCode}
-                        className="border-b border-slate-100 hover:bg-slate-50/50"
-                      >
-                        <TableCell className="font-mono text-xs font-bold text-slate-600">
-                          {emp.staffCode}
-                        </TableCell>
-                        <TableCell className="text-xs font-bold text-slate-900">
-                          {emp.fullName}
-                        </TableCell>
-                        <TableCell className="text-xs text-slate-500 uppercase">
-                          {emp.department}
-                        </TableCell>
-                        <TableCell className="text-xs text-right font-medium">
-                          {emp.metrics.totalRegularHours} hours
-                        </TableCell>
-                        <TableCell className="text-xs text-right font-bold text-blue-600">
-                          +{emp.metrics.totalOvertimeHours} hours
-                        </TableCell>
-                        <TableCell className="text-xs text-right font-black text-slate-900">
-                          {emp.metrics.totalHoursSum} hours
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
           )}
 
           {activeTab === "REPORTS_HUB" && <AttendanceReportPage />}
