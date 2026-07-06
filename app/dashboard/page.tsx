@@ -48,6 +48,7 @@ import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import AttendanceReportPage from "../overall/page";
+import AttendanceDashboard from "../reports/page";
 
 interface EmployeeProfile {
   staffCode: string;
@@ -116,6 +117,12 @@ export default function EMSDashboard() {
   );
   const [rawSwipesBuffer, setRawSwipesBuffer] = useState<RawSwipe[]>([]);
 
+  // Place this inside your main EMSDashboard component function:
+  const excelBulkInputRef = useRef<HTMLInputElement>(null);
+
+  // Place this inside your main EMSDashboard component function:
+  const [isBulkEmployeeUploading, setIsBulkEmployeeUploading] = useState(false);
+
   const [activeTab, setActiveTab] = useState("OVERVIEW");
   const [staffSubTab, setStaffSubTab] = useState("REGISTER");
 
@@ -145,10 +152,6 @@ export default function EMSDashboard() {
     message: string;
   } | null>(null);
 
-  // Add these if they are missing or match them to your actual state names
-  const [filteredWorkerDataset, setFilteredWorkerDataset] = useState<
-    EmployeeProfile[]
-  >([]);
   const [systemLogs, setSystemLogs] = useState<string[]>([
     "System is ready and running smoothly.",
   ]);
@@ -165,10 +168,6 @@ export default function EMSDashboard() {
   const [selectedDate, setSelectedDate] = useState<string>(
     () => new Date().toISOString().split("T")[0],
   );
-
-  const [drilldownTab, setDrilldownTab] = useState<
-    "DESIGNATIONS" | "COST_CENTERS"
-  >("DESIGNATIONS");
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newStaffCode, setNewStaffCode] = useState("");
@@ -524,6 +523,100 @@ export default function EMSDashboard() {
     }
   };
 
+ const handleBulkEmployeeExcelUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsBulkEmployeeUploading(true);
+    addLog(`Reading your uploaded roster excel file: ${file.name}`);
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const arrayBuffer = evt.target?.result as ArrayBuffer;
+        
+        // 1. Matches your exact ArrayBuffer timecard ingestion logic
+        const workbook = XLSX.read(arrayBuffer, { type: "array" });
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rawRows = XLSX.utils.sheet_to_json(worksheet, {
+          header: 1,
+        }) as any[];
+
+        // 2. Scan the rows to find the index where the Employee headers begin
+        const headerIdx = rawRows.findIndex(
+          (row) =>
+            Array.isArray(row) &&
+            row.some((c) => String(c).trim() === "Staff Code") &&
+            row.some((c) => String(c).trim() === "Full Name"),
+        );
+
+        if (headerIdx !== -1) {
+          const headers = rawRows[headerIdx].map((h: any) => String(h).trim());
+
+          // 3. Track the precise index offsets for your GoFresh employee list template
+          const staffCodeIdx = headers.indexOf("Staff Code");
+          const fullNameIdx = headers.indexOf("Full Name");
+          const designationIdx = headers.indexOf("Designation");
+          const departmentIdx = headers.indexOf("Department Name");
+          const costCenterIdx = headers.indexOf("Cost Centre");
+
+          const cleanEmployees: any[] = [];
+          
+          // Slice down past the titles/metadata to start mapping rows
+          rawRows.slice(headerIdx + 1).forEach((row) => {
+            if (!row || !row[staffCodeIdx] || !row[fullNameIdx]) return;
+
+            // Map keys cleanly to align with the parameter signatures your backend route needs
+            cleanEmployees.push({
+              staffCode: String(row[staffCodeIdx]).trim().toUpperCase(),
+              fullName: String(row[fullNameIdx]).trim().toUpperCase(),
+              designation: designationIdx !== -1 && row[designationIdx] ? String(row[designationIdx]).trim() : "Operator",
+              department: departmentIdx !== -1 && row[departmentIdx] ? String(row[departmentIdx]).trim() : "Operations",
+              costCenter: costCenterIdx !== -1 && row[costCenterIdx] ? String(row[costCenterIdx]).trim() : "Main Barn",
+            });
+          });
+
+          if (cleanEmployees.length === 0) {
+            throw new Error("No valid personnel metadata lines could be matched.");
+          }
+
+          addLog(`Uploading ${cleanEmployees.length} clean employee registry records to database transaction...`);
+
+          // 4. Fire payload array to your dedicated database API route
+          const response = await fetch("/api/employees/batch", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ employees: cleanEmployees }),
+          });
+
+          const result = await response.json();
+
+          if (response.ok) {
+            addLog(`Successfully synchronized ${cleanEmployees.length} employee profiles to backend records.`);
+          
+          } else {
+            alert(`Roster Sync Failed: ${result.error || "Server transaction rejected."}`);
+            addLog(`[ROSTER API ERROR]: ${result.error || "Batch payload rejected."}`);
+          }
+        } else {
+          alert("Invalid roster format. Could not locate required columns: 'Staff Code' and 'Full Name'.");
+          addLog("Spreadsheet validation failed: Target anchors missing.");
+        }
+      } catch (err: any) {
+        console.error("Bulk Roster Upload Error Context:", err);
+        alert(`Process Error: ${err.message || "Failed reading sheet rows safely."}`);
+      } finally {
+        setIsBulkEmployeeUploading(false);
+        // Clear value pointer so the same file name can be uploaded repeatedly
+        if (excelBulkInputRef.current) excelBulkInputRef.current.value = "";
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
   const toggleStaffStatus = (code: string) => {
     setEmployeeDirectory((prev) =>
       prev.map((emp) =>
@@ -674,19 +767,6 @@ export default function EMSDashboard() {
     return Array.from(uniqueCCs);
   }, [checklistDept, systemProcessedDataset]);
 
-  const handleLogout = async () => {
-  try {
-    // Optional: Call your auth logout API route if you have one
-    await fetch("/api/auth/logout", { method: "POST" });
-    
-    // Clear user state and redirect
-    setUser(null);
-    router.push("/"); // or wherever your login screen is located
-  } catch (err) {
-    console.error("Failed to log out:", err);
-  }
-};
-
   const handleMarkManualAttendance = async (
     staffCode: string,
     fullName: string,
@@ -740,63 +820,7 @@ export default function EMSDashboard() {
     }
   };
 
-  const formatPresentationDate = (isoString: string): string => {
-    if (!isoString) return "";
-    const parts = isoString.split("-");
-    if (parts.length !== 3) return isoString;
-
-    const year = parts[0];
-    const monthIndex = parseInt(parts[1], 10) - 1;
-    const day = parts[2];
-
-    const monthNames = [
-      "Jan",
-      "Feb",
-      "Mar",
-      "Apr",
-      "May",
-      "Jun",
-      "Jul",
-      "Aug",
-      "Sep",
-      "Oct",
-      "Nov",
-      "Dec",
-    ];
-
-    return `${day} - ${monthNames[monthIndex] || parts[1]} - ${year}`;
-  };
-
   // 1️⃣ MOVE THIS FIRST (targetTimelineDates)
-  const targetTimelineDates = useMemo(() => {
-    let uniquelyDiscoveredIsoDates = Array.from(
-      new Set(rawSwipesBuffer.map((s) => s.date)),
-    ).sort();
-
-    if (startDate) {
-      uniquelyDiscoveredIsoDates = uniquelyDiscoveredIsoDates.filter(
-        (d) => d >= startDate,
-      );
-    }
-    if (endDate) {
-      uniquelyDiscoveredIsoDates = uniquelyDiscoveredIsoDates.filter(
-        (d) => d <= endDate,
-      );
-    }
-
-    return uniquelyDiscoveredIsoDates.map((dateStr) => {
-      const matchSample = rawSwipesBuffer.find((s) => s.date === dateStr);
-      const dayOfWeekString = matchSample?.weekDay || "";
-      const isSunday = dayOfWeekString.toLowerCase() === "sunday";
-
-      return {
-        iso: dateStr,
-        label: formatPresentationDate(dateStr),
-        isSunday: isSunday,
-        weekDay: dayOfWeekString,
-      };
-    });
-  }, [rawSwipesBuffer, startDate, endDate]);
 
   // 2️⃣ PLACE THIS SECOND (liveMetricsRollup)
   const liveMetricsRollup = useMemo(() => {
@@ -1345,6 +1369,12 @@ export default function EMSDashboard() {
               onClick={() => setActiveTab("REPORTS_HUB")}
               className={`px-4 py-2 rounded-lg flex items-center gap-1.5 transition-all ${activeTab === "REPORTS_HUB" ? "bg-white text-blue-600 shadow-xs" : "text-slate-600 hover:text-slate-900"}`}
             >
+              <CalendarDays className="w-4 h-4" /> DETAILED LOGS
+            </button>
+            <button
+              onClick={() => setActiveTab("SUMMARY")}
+              className={`px-4 py-2 rounded-lg flex items-center gap-1.5 transition-all ${activeTab === "SUMMARY" ? "bg-white text-blue-600 shadow-xs" : "text-slate-600 hover:text-slate-900"}`}
+            >
               <CalendarDays className="w-4 h-4" /> Summary
             </button>
             <button
@@ -1374,14 +1404,30 @@ export default function EMSDashboard() {
                 <span>{isUploading ? "Reading..." : "Upload Timecard"}</span>
               </label>
             </Button>
-            <Button
-              onClick={handleLogout}
-              variant="destructive"
-              className="h-9 text-xs font-bold flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white"
-            >
-              <LogOut className="w-4 h-4 shrink-0" />
-              <span>Log Out</span>
-            </Button>
+            <div className="flex items-center gap-3">
+              <input
+                type="file"
+                ref={excelBulkInputRef}
+                onChange={handleBulkEmployeeExcelUpload}
+                accept=".xlsx, .xls, .csv"
+                className="hidden"
+               id="excel-bulk-file-uploader"
+              />
+              <Button
+                asChild
+                variant="outline"
+                className="h-9 border-blue-200 text-blue-600 text-xs font-bold cursor-pointer"
+              >
+                <label htmlFor="excel-bulk-file-uploader">
+                  <UploadCloud className="w-4 h-4 mr-1 shrink-0" />
+                  <span>
+                    {isBulkEmployeeUploading
+                      ? "Processing Batch..."
+                      : "Upload Employees"}
+                  </span>
+                </label>
+              </Button>
+            </div>
           </div>
         </div>
       </header>
@@ -1583,12 +1629,6 @@ export default function EMSDashboard() {
 
               {/* 2. Dynamic Filter View & Functional PDF Report Engine Section */}
               {(() => {
-                const defaultTargetDate =
-                  targetTimelineDates.length > 0
-                    ? targetTimelineDates[0].iso
-                    : new Date().toISOString().split("T")[0];
-                const targetDateStr = selectedDate || defaultTargetDate;
-
                 const filteredWorkerDataset = employeeDirectory.filter(
                   (emp) => {
                     // 🚀 FIX: Evaluate swipes across the entire selected date range, matching liveMetricsRollup
@@ -3188,6 +3228,8 @@ export default function EMSDashboard() {
           )}
 
           {activeTab === "REPORTS_HUB" && <AttendanceReportPage />}
+
+          {activeTab === "SUMMARY" && <AttendanceDashboard />}
 
           {activeTab === "SETTINGS" && (
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">

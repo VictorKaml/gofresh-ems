@@ -1,38 +1,54 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { createClient } from "@/utils/supabase/server";
+
+export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { employees } = body;
+    // Support parsing both direct arrays or wrapped { employees: [...] } structures
+    const employees = Array.isArray(body) ? body : body.employees;
 
     if (!Array.isArray(employees) || employees.length === 0) {
       return NextResponse.json({ error: "Invalid layout data format." }, { status: 400 });
     }
 
-    // Use Prisma v7 native createMany with upsert handling features
-    // or direct native query to execute everything in exactly ONE database roundtrip
-    await prisma.$executeRawUnsafe(`
-      INSERT INTO employees (staff_code, full_name, designation, department, cost_center, updated_at)
-      VALUES ${employees.map((_, i) => `($${i * 5 + 1}, $${i * 5 + 2}, $${i * 5 + 3}, $${i * 5 + 4}, $${i * 5 + 5}, NOW())`).join(", ")}
-      ON CONFLICT (staff_code) 
-      DO UPDATE SET 
-        full_name = EXCLUDED.full_name,
-        designation = EXCLUDED.designation,
-        department = EXCLUDED.department,
-        cost_center = EXCLUDED.cost_center,
-        updated_at = NOW();
-    `, ...employees.flatMap(emp => [
-      emp.staffCode,
-      emp.fullName,
-      emp.designation || "Operator",
-      emp.department || "Operations",
-      emp.costCenter || "CC-LOCAL"
-    ]));
+    const supabase = await createClient();
 
-    return NextResponse.json({ success: true, count: employees.length });
+    // Explicitly format keys down to snake_case properties mapping to the Postgres table
+    const recordsToUpsert = employees.map((emp: any) => ({
+      staff_code: String(emp.staffCode || emp.staff_code || "").trim().toUpperCase(),
+      full_name: String(emp.fullName || emp.full_name || "").trim().toUpperCase(),
+      designation: String(emp.designation || "Operator").trim(),
+      department: String(emp.department || emp.department_name || "Go Fresh Chicken").trim(),
+      cost_center: String(emp.costCenter || emp.cost_center || "Chicken Abattoir").trim(),
+      sub_center: String(emp.subCenter || emp.sub_center || "Evaluation").trim(), // Added field support
+      updated_at: new Date().toISOString(),
+    })).filter(emp => emp.staff_code && emp.full_name);
+
+    if (recordsToUpsert.length === 0) {
+      return NextResponse.json({ error: "No valid records parsed." }, { status: 400 });
+    }
+
+    // Perform massive single-roundtrip upsert bypassing duplication crashes
+    const { data, error } = await supabase
+      .from("employees")
+      .upsert(recordsToUpsert, { onConflict: "staff_code" })
+      .select();
+
+    if (error) {
+      console.error("Supabase bulk insert failure:", error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `Successfully synchronized ${data.length} profiles inside the database matrix.`,
+      count: data.length
+    }, { status: 201 });
+
   } catch (error: any) {
-    console.error("Batch processing error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("Internal Server Error during bulk seed:", error);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
