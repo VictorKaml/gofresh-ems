@@ -40,7 +40,7 @@ export default function EMSTimesheetDashboard() {
       "Chicken Value Add",
       "Blantyre Sales",
       "Lilongwe Sales",
-      "Muzuzu Sales",
+      "Mzuzu Sales",
       "Zomba Sales",
     ],
     "Go Fresh Beef": [
@@ -52,7 +52,7 @@ export default function EMSTimesheetDashboard() {
     ],
     "Tray Factory": ["GF Tray Factory"],
     "Live Sales": ["Blantyre Production", "Lilongwe Production"],
-    Administration: [
+    Retail: [
       "HQ Management",
       "Finance and Accounts",
       "Human Resources",
@@ -100,7 +100,7 @@ export default function EMSTimesheetDashboard() {
 
   const [isDownloadingPdf, setIsDownloadingPdf] = useState<boolean>(false);
 
- const handleDownloadReport = async () => {
+  const handleDownloadReport = async () => {
     if (!processedTimesheetData || processedTimesheetData.length === 0) {
       alert("No active timesheet data available to export. Adjust filters.");
       return;
@@ -108,12 +108,10 @@ export default function EMSTimesheetDashboard() {
 
     setIsDownloadingPdf(true);
 
-    // Helper function to dynamically convert your public folder JPG into a Base64 URI at runtime
     const getLogoBase64 = (): Promise<string> => {
       return new Promise((resolve, reject) => {
         const img = new Image();
-        // Points directly to /public/gofresh_logo.jpg via the Next.js asset pipeline
-        img.src = "/gofresh_logo.jpg"; 
+        img.src = "/gofresh_logo.jpg";
         img.crossOrigin = "anonymous";
         img.onload = () => {
           const canvas = document.createElement("canvas");
@@ -132,7 +130,6 @@ export default function EMSTimesheetDashboard() {
     };
 
     try {
-      // 1. Initialize Landscape A4 Document Layout Framework
       const doc = new jsPDF({
         orientation: "landscape",
         unit: "mm",
@@ -140,13 +137,13 @@ export default function EMSTimesheetDashboard() {
       });
 
       try {
-        // 2. Fetch and render your custom image file from the public folder
         const logoBase64 = await getLogoBase64();
-        // Adjust the width (45) and height (15) numbers to comfortably suit your image aspect ratio
         doc.addImage(logoBase64, "JPEG", 12, 12, 14, 14);
       } catch (imgError) {
-        console.warn("Public image failed to load, applying graceful text branding fallback:", imgError);
-        // Clean fallback branding if asset path is missing or misspelled
+        console.warn(
+          "Public image failed to load, applying graceful text branding fallback:",
+          imgError,
+        );
         doc.setTextColor(30, 41, 59);
         doc.setFont("helvetica", "bold");
         doc.setFontSize(22);
@@ -155,31 +152,31 @@ export default function EMSTimesheetDashboard() {
         doc.text("Fresh", 23, 22);
       }
 
-      // Metadata Tagline positioned neatly below your logo alignment line
-      doc.setTextColor(148, 163, 184); // Slate-400
+      doc.setTextColor(148, 163, 184);
       doc.setFontSize(7.5);
       doc.setFont("helvetica", "bold");
       doc.text("OPERATIONAL TIMESHEET ARCHIVE", 12, 31);
 
-      // 3. Render Filtering Context Metadata (Right-Aligned)
-      doc.setTextColor(21, 128, 61); // GoFresh Green
+      doc.setTextColor(21, 128, 61);
       doc.setFontSize(11);
       doc.setFont("helvetica", "bold");
       doc.text("TIMESHEET SUMMARY", 285, 15, { align: "right" });
 
-      doc.setTextColor(71, 85, 105); // Slate-600
+      doc.setTextColor(71, 85, 105);
       doc.setFontSize(9);
       doc.setFont("helvetica", "normal");
       doc.text(`Department: ${selectedDept}`, 285, 20, { align: "right" });
-      doc.text(`Cost Centre: ${selectedCC} (${selectedSubCenter})`, 285, 24, { align: "right" });
-      doc.text(`Period Frame: ${startDate} to ${endDate}`, 285, 28, { align: "right" });
+      doc.text(`Cost Centre: ${selectedCC} (${selectedSubCenter})`, 285, 24, {
+        align: "right",
+      });
+      doc.text(`Period Frame: ${startDate} to ${endDate}`, 285, 28, {
+        align: "right",
+      });
 
-      // Clean boundary separation bar
-      doc.setDrawColor(226, 232, 240); // Slate-200
+      doc.setDrawColor(226, 232, 240);
       doc.setLineWidth(0.5);
       doc.line(12, 34, 285, 34);
 
-      // 4. Transform weekDatesArray to dynamic readable column headers
       const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
       const tableHeaders = ["Staff Code", "Full Name"];
 
@@ -195,7 +192,6 @@ export default function EMSTimesheetDashboard() {
 
       tableHeaders.push("Total (Reg/OT)");
 
-      // 5. Parse state rows from processedTimesheetData
       const tableBody = processedTimesheetData.map((row) => {
         const dataCells = [
           row.staffCode.toUpperCase(),
@@ -210,7 +206,6 @@ export default function EMSTimesheetDashboard() {
         return dataCells;
       });
 
-      // 6. Build autoTable layout matrix
       autoTable(doc, {
         startY: 38,
         margin: { left: 12, right: 12 },
@@ -218,43 +213,65 @@ export default function EMSTimesheetDashboard() {
         body: tableBody,
         theme: "striped",
         headStyles: {
-          fillColor: [20, 83, 45], // Deep Forest Green (#14532d)
+          fillColor: [20, 83, 45],
           textColor: [255, 255, 255],
           fontSize: 8,
           fontStyle: "bold",
           halign: "center",
-        },
+         },
         columnStyles: {
-          0: { fontStyle: "bold", halign: "left" }, 
-          1: { fontStyle: "bold", halign: "left" }, 
+          0: { fontStyle: "bold", halign: "left" },
+          1: { fontStyle: "bold", halign: "left" },
         },
         styles: {
           fontSize: 8,
           cellPadding: 2.5,
-          halign: "center", 
+          halign: "center",
           valign: "middle",
         },
+        // --- EMERALD HIGHLIGHTING IN ENGINE ---
         didParseCell: (data) => {
-          // Keep calculated totals column visually separated
-          if (data.section === "body" && data.column.index === tableHeaders.length - 1) {
-            data.cell.styles.fillColor = [240, 253, 244]; // Emerald-50 tint
-            data.cell.styles.textColor = [22, 101, 52];   // Deep Emerald-800 text
-            data.cell.styles.fontStyle = "bold";
+          if (data.section !== "body") return;
+
+          const cellValue = String(data.cell.raw || "").trim();
+          const isTotalColumn = data.column.index === tableHeaders.length - 1;
+
+          if (isTotalColumn) {
+            // Accent highlight style for the terminal grand totals column
+            if (cellValue !== "0.0 / 0.0" && cellValue !== "") {
+              data.cell.styles.fillColor = [209, 250, 229]; // bg-emerald-100 tint
+              data.cell.styles.textColor = [6, 78, 59];    // Deep emerald text
+              data.cell.styles.fontStyle = "bold";
+            } else {
+              data.cell.styles.fillColor = [248, 250, 252]; // bg-slate-50
+              data.cell.styles.textColor = [148, 163, 184]; // text-slate-400
+            }
+          } else if (data.column.index >= 2) {
+            // Style breakdown dates
+            if (cellValue !== "0.0 / 0.0" && cellValue !== "") {
+              data.cell.styles.textColor = [5, 150, 105];   // text-emerald-600
+              data.cell.styles.fontStyle = "bold";
+              data.cell.styles.fillColor = [240, 253, 250]; // bg-emerald-50/40 background tint
+            } else {
+              data.cell.styles.textColor = [148, 163, 184]; // Muted grey for empty logs
+            }
           }
         },
         didDrawPage: (data) => {
           doc.setFontSize(8);
-          doc.setTextColor(148, 163, 184); // Slate-400
+          doc.setTextColor(148, 163, 184);
           doc.setFont("helvetica", "normal");
           doc.text(`Page ${data.pageNumber}`, 285, 203, { align: "right" });
-          doc.text("GoFresh Automation System • Secure Client Ledger Matrix", 12, 203);
+          doc.text(
+            "GoFresh Automation System • Secure Client Ledger Matrix",
+            12,
+            203,
+          );
         },
       });
 
-      // 7. Output PDF document trigger down into user browser context thread
       const safeFileName = `GoFresh_Timesheet_${selectedDept.replace(/\s+/g, "_")}_${startDate}.pdf`;
       doc.save(safeFileName);
-
     } catch (err) {
       console.error("Local Client-side PDF Generation Error Context:", err);
       alert("Could not compile layout matrix PDF locally.");
@@ -316,7 +333,7 @@ export default function EMSTimesheetDashboard() {
     return dates;
   }, [startDate]);
 
- // --- REAL BIOMETRIC HOURS CALCULATION ENGINE ---
+  // --- REAL BIOMETRIC HOURS CALCULATION ENGINE ---
   const processedTimesheetData = useMemo(() => {
     return employeeDirectory
       .filter(
@@ -330,23 +347,23 @@ export default function EMSTimesheetDashboard() {
         let cumulativeOvertime = 0;
 
         const dailyBreakdown = weekDatesArray.map((dateStr) => {
-          // 1. Isolate swipe entries for this specific user and date
           const daySwipes = rawSwipesBuffer.filter((s) => {
-            const matchId = String(s.id).trim().toLowerCase() === String(emp.staffCode).trim().toLowerCase();
+            const matchId =
+              String(s.id).trim().toLowerCase() ===
+              String(emp.staffCode).trim().toLowerCase();
             const matchDate = String(s.date).trim() === String(dateStr).trim();
             return matchId && matchDate;
           });
 
           if (daySwipes.length === 0) return { label: "0.0 / 0.0" };
 
-          // 2. Isolate IN/OUT entries matching your real data values ("Check In" / "Check Out")
           const ins = daySwipes
             .filter((s) => {
               const t = String(s.type).toUpperCase();
               return t === "CHECK IN" || t === "IN";
             })
             .sort((a, b) => String(a.time).localeCompare(String(b.time)));
-            
+
           const outs = daySwipes
             .filter((s) => {
               const t = String(s.type).toUpperCase();
@@ -354,9 +371,9 @@ export default function EMSTimesheetDashboard() {
             })
             .sort((a, b) => String(a.time).localeCompare(String(b.time)));
 
-          if (ins.length === 0 || outs.length === 0) return { label: "0.0 / 0.0" };
+          if (ins.length === 0 || outs.length === 0)
+            return { label: "0.0 / 0.0" };
 
-          // 3. Compute true total elapsed time between earliest entry and latest exit
           const firstInTime = ins[0].time;
           const lastOutTime = outs[outs.length - 1].time;
 
@@ -366,10 +383,9 @@ export default function EMSTimesheetDashboard() {
           if (isNaN(inH) || isNaN(outH)) return { label: "0.0 / 0.0" };
 
           const totalHours = (outH * 60 + outM - (inH * 60 + inM)) / 60;
-          
+
           if (totalHours <= 0) return { label: "0.0 / 0.0" };
 
-          // 4. Apply GoFresh Standard Shift Cap Rules (8.5 standard regular hours)
           const standardCap = 8.5;
           let worked = totalHours > standardCap ? standardCap : totalHours;
           let ot = totalHours > standardCap ? totalHours - standardCap : 0;
@@ -405,11 +421,10 @@ export default function EMSTimesheetDashboard() {
           <CardHeader className="p-4 border-b bg-slate-50/50">
             <CardTitle className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
               <Building2 className="w-4 h-4 text-green-700" /> GoFresh
-              Department Structure Cascade
+              Department Cascade
             </CardTitle>
           </CardHeader>
           <CardContent className="p-4 grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* 1. Department List Toggle buttons */}
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
                 1. Select Active Department
@@ -431,7 +446,6 @@ export default function EMSTimesheetDashboard() {
               </div>
             </div>
 
-            {/* 2. Dynamically Rendered Cost Centers Dropdown */}
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
                 2. Filter By Cost Center
@@ -449,7 +463,6 @@ export default function EMSTimesheetDashboard() {
               </select>
             </div>
 
-            {/* 3. Sub-Center Target */}
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
                 3. Sub Center
@@ -544,7 +557,7 @@ export default function EMSTimesheetDashboard() {
                       <TableHead className="text-center p-3">Fri</TableHead>
                       <TableHead className="text-center p-3">Sat</TableHead>
                       <TableHead className="text-center p-3">Sun</TableHead>
-                      <TableHead className="text-center p-3 font-extrabold bg-green-50 text-green-800 border-l">
+                      <TableHead className="text-center p-3 font-extrabold bg-emerald-50 text-emerald-900 border-l">
                         Total
                       </TableHead>
                     </TableRow>
@@ -562,16 +575,24 @@ export default function EMSTimesheetDashboard() {
                           {row.fullName}
                         </TableCell>
 
-                        {row.dailyBreakdown.map((day, dayIdx) => (
-                          <TableCell
-                            key={dayIdx}
-                            className="p-3 text-center font-mono text-xs text-slate-600"
-                          >
-                            {day.label}
-                          </TableCell>
-                        ))}
+                        {row.dailyBreakdown.map((day, dayIdx) => {
+                          const hasHours = day.label !== "0.0 / 0.0";
 
-                        <TableCell className="p-3 text-center font-mono font-bold text-xs bg-green-50 text-green-900 border-l">
+                          return (
+                            <TableCell
+                              key={dayIdx}
+                              className={`p-3 text-center font-mono text-xs transition-all ${
+                                hasHours
+                                  ? "text-emerald-600 font-bold drop-shadow-[0_0_6px_rgba(5,150,105,0.2)] bg-emerald-50/30"
+                                  : "text-slate-400 font-normal"
+                              }`}
+                            >
+                              {day.label}
+                            </TableCell>
+                          );
+                        })}
+
+                        <TableCell className="p-3 text-center font-mono font-black text-xs bg-emerald-50 text-emerald-900 border-l drop-shadow-[0_0_8px_rgba(4,120,87,0.1)]">
                           {row.grandTotalLabel}
                         </TableCell>
                       </TableRow>
