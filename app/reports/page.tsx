@@ -563,7 +563,7 @@ export default function EMSTimesheetDashboard() {
                 <option value="Evulation">Evulation</option>
                 <option value="Processing">Processing</option>
                 <option value="Evisceration">Evisceration</option>
-                <option value="Plucking And Scolding">Live Sales</option>
+                <option value="Plucking And Scolding">Plucking And Scolding</option>
               </select>
             </div>
           </CardContent>
