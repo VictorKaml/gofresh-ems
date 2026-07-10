@@ -559,11 +559,15 @@ export default function EMSTimesheetDashboard() {
                 onChange={(e) => setSelectedSubCenter(e.target.value)}
                 className="w-full bg-white border h-10 text-xs font-bold rounded-lg px-3 uppercase text-slate-800 focus:outline-green-700 shadow-xs"
               >
-                <option value="Fillet">Fillet</option>
+                <option value="Receiving">Receiving</option>
+                <option value="Bleeding">Bleeding</option>
+                <option value="Defeathering">Defeathering</option>
                 <option value="Evulation">Evulation</option>
-                <option value="Processing">Processing</option>
                 <option value="Evisceration">Evisceration</option>
+                <option value="Processing">Processing</option>
                 <option value="Plucking And Scolding">Plucking And Scolding</option>
+                <option value="Bailing Out">Bailing Out</option>
+                <option value="Dispatch">Dispatch</option>
               </select>
             </div>
           </CardContent>
