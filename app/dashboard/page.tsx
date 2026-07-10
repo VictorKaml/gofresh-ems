@@ -1395,7 +1395,7 @@ export default function EMSDashboard() {
             >
               <label htmlFor="header-file-uploader">
                 <UploadCloud className="w-4 h-4 mr-1 shrink-0" />
-                <span>{isUploading ? "Reading..." : "Upload Timecard"}</span>
+                <span>{isUploading ? "Reading..." : "Timecard"}</span>
               </label>
             </Button>
             <div className="flex items-center gap-3">
@@ -1416,8 +1416,8 @@ export default function EMSDashboard() {
                   <UploadCloud className="w-4 h-4 mr-1 shrink-0" />
                   <span>
                     {isBulkEmployeeUploading
-                      ? "Processing Batch..."
-                      : "Upload Employees"}
+                      ? "Reading..."
+                      : "Employees"}
                   </span>
                 </label>
               </Button>
