@@ -20,7 +20,8 @@ import {
   Clock, 
   Users,
   MapPin,
-  AlertCircle
+  AlertCircle,
+  Layers
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -30,7 +31,8 @@ interface EmployeeProfile {
   fullName: string;
   department: string;
   costCenter: string;
-  subCenter: string;
+  subCenter: string; // e.g., 'Evulation'
+  subItem: string;    // e.g., 'Wholebirds'
 }
 
 interface RawSwipe {
@@ -76,6 +78,28 @@ export default function EMSTimesheetDashboard() {
     ],
   };
 
+  // Direct lists mapping exactly to your database columns
+  const subCentersList = [
+    "Receiving",
+    "Bleeding",
+    "Defeathering",
+    "Evulation",
+    "Evisceration",
+    "Plucking And Scolding",
+    "Bailing Out",
+    "Dispatch"
+  ];
+
+  const subItemsList = [
+    "Wholebirds",
+    "Leg portion / Thigh",
+    "Mixed portion",
+    "Wings",
+    "Drumstick",
+    "Fillet",
+    "Cutlets"
+  ];
+
   const departmentsList = Object.keys(departmentStructure);
   const [selectedDept, setSelectedDept] = useState<string>("Go Fresh Chicken");
 
@@ -91,9 +115,10 @@ export default function EMSTimesheetDashboard() {
     }
   }, [activeCostCenters, selectedCC]);
 
-  const [selectedSubCenter, setSelectedSubCenter] = useState<string>("Fillet");
+  // Direct selection states matching table column string fields
+  const [selectedSubCenter, setSelectedSubCenter] = useState<string>("Evulation");
+  const [selectedSubItem, setSelectedSubItem] = useState<string>("Wholebirds");
 
-  // Default to single-day layout viewing (Today)
   const [startDate, setStartDate] = useState<string>(() => new Date().toISOString().split("T")[0]);
   const [endDate, setEndDate] = useState<string>(() => new Date().toISOString().split("T")[0]);
 
@@ -108,12 +133,10 @@ export default function EMSTimesheetDashboard() {
   const [isLoadingOnsite, setIsLoadingOnsite] = useState<boolean>(true);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState<boolean>(false);
 
-  // Computes exact array of dates from user input range bounds
   const customRangeDatesArray = useMemo(() => {
     const dates: string[] = [];
     const start = new Date(startDate);
     const end = new Date(endDate);
-    
     if (isNaN(start.getTime()) || isNaN(end.getTime())) return dates;
 
     const loop = new Date(start);
@@ -187,7 +210,8 @@ export default function EMSTimesheetDashboard() {
         (emp) =>
           emp.department === selectedDept &&
           emp.costCenter === selectedCC &&
-          emp.subCenter === selectedSubCenter,
+          String(emp.subCenter).trim().toLowerCase() === String(selectedSubCenter).trim().toLowerCase() &&
+          String(emp.subItem).trim().toLowerCase() === String(selectedSubItem).trim().toLowerCase()
       )
       .map((emp) => {
         let cumulativeRegular = 0;
@@ -215,9 +239,7 @@ export default function EMSTimesheetDashboard() {
           if (daySwipes.length === 0) {
             const isFuture = dateStr > todayStr;
             const isAbsentMark = !isWeekend && !isFuture;
-            
             if (isAbsentMark) dynamicAbsentCount++;
-
             return { label: "0.0 / 0.0", isAbsent: isAbsentMark, isLate: false, isOnTime: false, isMissedPunch: false };
           }
 
@@ -242,7 +264,7 @@ export default function EMSTimesheetDashboard() {
               outs.push(sortedFallback[sortedFallback.length - 1]);
             } else {
               dynamicMissedPunchCount++;
-              dynamicOnsiteCount++; // Physically onsite since logs exist
+              dynamicOnsiteCount++; 
               return { label: "MISSED", isAbsent: false, isLate: false, isOnTime: false, isMissedPunch: true };
             }
           }
@@ -272,7 +294,6 @@ export default function EMSTimesheetDashboard() {
 
           cumulativeRegular += worked;
           cumulativeOvertime += ot;
-
           dynamicOnsiteCount++;
 
           const isLateShift = (inH > 7 || (inH === 7 && inM > 30));
@@ -309,9 +330,9 @@ export default function EMSTimesheetDashboard() {
     selectedDept,
     selectedCC,
     selectedSubCenter,
+    selectedSubItem,
   ]);
 
-  // FIXED: Metric logic modified to prevent double counting across date windows
   const aggregateMetrics = useMemo(() => {
     let totalWorkforce = fullyCalculatedDataset.length;
     let onsiteTotal = 0;
@@ -325,17 +346,12 @@ export default function EMSTimesheetDashboard() {
       if (row.dynamicOnTimeCount > 0) onTimeTotal++;
       if (row.dynamicLateCount > 0) lateTotal++;
       if (row.dynamicMissedPunchCount > 0) missedPunchTotal++;
-      
-      // An employee is exclusively absent if they have no onsite presence records during this period frame
-      if (row.dynamicOnsiteCount === 0 && row.dynamicAbsentCount > 0) {
-        absentTotal++;
-      }
+      if (row.dynamicOnsiteCount === 0 && row.dynamicAbsentCount > 0) absentTotal++;
     });
 
     return { totalWorkforce, onTimeTotal, absentTotal, lateTotal, onsiteTotal, missedPunchTotal };
   }, [fullyCalculatedDataset]);
 
-  // FIXED: Added identical contextual filtering constraint for the data grid row render mapping
   const processedTimesheetData = useMemo(() => {
     return fullyCalculatedDataset.filter(row => {
       if (complianceFilter === "ONSITE") return row.dynamicOnsiteCount > 0;
@@ -347,80 +363,38 @@ export default function EMSTimesheetDashboard() {
     });
   }, [fullyCalculatedDataset, complianceFilter]);
 
-  const isDataSyncing = isLoadingEmployees || isLoadingAttendance || isLoadingOnsite;
-
   const handleDownloadReport = async () => {
     if (!processedTimesheetData || processedTimesheetData.length === 0) {
-      alert("No active timesheet data available to export. Adjust filters.");
+      alert("No active timesheet data available to export.");
       return;
     }
-
     setIsDownloadingPdf(true);
-
     try {
-      const doc = new jsPDF({
-        orientation: "landscape",
-        unit: "mm",
-        format: "a4",
-      });
+      const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+      doc.setTextColor(30, 41, 59).setFont("helvetica", "bold").setFontSize(22).text("Go", 12, 22);
+      doc.setTextColor(21, 128, 61).text("Fresh", 23, 22);
+      doc.setTextColor(148, 163, 184).setFontSize(7.5).text("OPERATIONAL TIMESHEET ARCHIVE", 12, 31);
+      doc.setTextColor(21, 128, 61).setFontSize(11).text("TIMESHEET SUMMARY", 285, 15, { align: "right" });
 
-      doc.setTextColor(30, 41, 59);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(22);
-      doc.text("Go", 12, 22);
-      doc.setTextColor(21, 128, 61);
-      doc.text("Fresh", 23, 22);
-
-      doc.setTextColor(148, 163, 184);
-      doc.setFontSize(7.5);
-      doc.setFont("helvetica", "bold");
-      doc.text("OPERATIONAL TIMESHEET ARCHIVE", 12, 31);
-
-      doc.setTextColor(21, 128, 61);
-      doc.setFontSize(11);
-      doc.setFont("helvetica", "bold");
-      doc.text("TIMESHEET SUMMARY", 285, 15, { align: "right" });
-
-      doc.setTextColor(71, 85, 105);
-      doc.setFontSize(9);
-      doc.setFont("helvetica", "normal");
+      doc.setTextColor(71, 85, 105).setFontSize(9).setFont("helvetica", "normal");
       doc.text(`Department: ${selectedDept}`, 285, 20, { align: "right" });
-      doc.text(`Cost Centre: ${selectedCC} (${selectedSubCenter})`, 285, 24, {
-        align: "right",
-      });
-      doc.text(`Period Frame: ${startDate} to ${endDate}`, 285, 28, {
-        align: "right",
-      });
+      doc.text(`Cost Centre: ${selectedCC} (${selectedSubCenter} - ${selectedSubItem})`, 285, 24, { align: "right" });
+      doc.text(`Period Frame: ${startDate} to ${endDate}`, 285, 28, { align: "right" });
 
-      doc.setDrawColor(226, 232, 240);
-      doc.setLineWidth(0.5);
-      doc.line(12, 34, 285, 34);
+      doc.setDrawColor(226, 232, 240).setLineWidth(0.5).line(12, 34, 285, 34);
 
       const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
       const tableHeaders = ["Staff Code", "Full Name"];
 
       customRangeDatesArray.forEach((dateStr) => {
         const d = new Date(dateStr);
-        const dayName = weekdays[d.getDay()];
-        const formattedShortDate = d.toLocaleDateString("en-GB", {
-          day: "2-digit",
-          month: "2-digit",
-        });
-        tableHeaders.push(`${dayName} ${formattedShortDate}`);
+        tableHeaders.push(`${weekdays[d.getDay()]} ${d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit" })}`);
       });
-
       tableHeaders.push("Total (Reg/OT)");
 
       const tableBody = processedTimesheetData.map((row) => {
-        const dataCells = [
-          row.staffCode.toUpperCase(),
-          row.fullName.toUpperCase(),
-        ];
-
-        row.dailyBreakdown.forEach((day) => {
-          dataCells.push(day.label);
-        });
-
+        const dataCells = [row.staffCode.toUpperCase(), row.fullName.toUpperCase()];
+        row.dailyBreakdown.forEach((day) => dataCells.push(day.label));
         dataCells.push(row.grandTotalLabel);
         return dataCells;
       });
@@ -431,70 +405,32 @@ export default function EMSTimesheetDashboard() {
         head: [tableHeaders],
         body: tableBody,
         theme: "striped",
-        headStyles: {
-          fillColor: [20, 83, 45],
-          textColor: [255, 255, 255],
-          fontSize: 8,
-          fontStyle: "bold",
-          halign: "center",
-         },
-        columnStyles: {
-          0: { fontStyle: "bold", halign: "left" },
-          1: { fontStyle: "bold", halign: "left" },
-        },
-        styles: {
-          fontSize: 8,
-          cellPadding: 2.5,
-          halign: "center",
-          valign: "middle",
-        },
+        headStyles: { fillColor: [20, 83, 45], textColor: [255, 255, 255], fontSize: 8, fontStyle: "bold", halign: "center" },
+        styles: { fontSize: 8, cellPadding: 2.5, halign: "center", valign: "middle" },
         didParseCell: (data) => {
           if (data.section !== "body") return;
-
           const cellValue = String(data.cell.raw || "").trim();
-          const isTotalColumn = data.column.index === tableHeaders.length - 1;
-
-          if (isTotalColumn) {
+          if (data.column.index === tableHeaders.length - 1) {
             if (cellValue !== "0.0 / 0.0" && cellValue !== "") {
-              data.cell.styles.fillColor = [209, 250, 229]; 
-              data.cell.styles.textColor = [6, 78, 59];    
+              data.cell.styles.fillColor = [209, 250, 229];
+              data.cell.styles.textColor = [6, 78, 59];
               data.cell.styles.fontStyle = "bold";
-            } else {
-              data.cell.styles.fillColor = [248, 250, 252]; 
-              data.cell.styles.textColor = [148, 163, 184]; 
             }
           } else if (data.column.index >= 2) {
             if (cellValue === "MISSED") {
               data.cell.styles.textColor = [220, 38, 38];
-              data.cell.styles.fontStyle = "bold";
               data.cell.styles.fillColor = [254, 242, 242];
             } else if (cellValue !== "0.0 / 0.0" && cellValue !== "") {
-              data.cell.styles.textColor = [5, 150, 105];   
-              data.cell.styles.fontStyle = "bold";
-              data.cell.styles.fillColor = [240, 253, 250]; 
-            } else {
-              data.cell.styles.textColor = [148, 163, 184]; 
+              data.cell.styles.textColor = [5, 150, 105];
+              data.cell.styles.fillColor = [240, 253, 250];
             }
           }
         },
-        didDrawPage: (data) => {
-          doc.setFontSize(8);
-          doc.setTextColor(148, 163, 184);
-          doc.setFont("helvetica", "normal");
-          doc.text(`Page ${data.pageNumber}`, 285, 203, { align: "right" });
-          doc.text(
-            "GoFresh Automation System • Secure Client Ledger Matrix",
-            12,
-            203,
-          );
-        },
       });
 
-      const safeFileName = `GoFresh_Timesheet_${selectedDept.replace(/\s+/g, "_")}_${startDate}.pdf`;
-      doc.save(safeFileName);
+      doc.save(`GoFresh_Timesheet_${selectedDept.replace(/\s+/g, "_")}_${startDate}.pdf`);
     } catch (err) {
-      console.error("PDF Export Error context:", err);
-      alert("Could not compile layout matrix PDF locally.");
+      console.error(err);
     } finally {
       setIsDownloadingPdf(false);
     }
@@ -508,10 +444,12 @@ export default function EMSTimesheetDashboard() {
         <Card className="bg-white border border-slate-200 shadow-sm rounded-xl">
           <CardHeader className="p-4 border-b bg-slate-50/50">
             <CardTitle className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-              <Building2 className="w-4 h-4 text-green-700" /> GoFresh Department Cascade
+              <Building2 className="w-4 h-4 text-green-700" /> GoFresh Department Cascade Selector
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-4 grid grid-cols-1 md:grid-cols-3 gap-6">
+          <CardContent className="p-4 grid grid-cols-1 md:grid-cols-4 gap-4">
+            
+            {/* 1. DEPARTMENT */}
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
                 1. Select Active Department
@@ -521,7 +459,7 @@ export default function EMSTimesheetDashboard() {
                   <button
                     key={dept}
                     onClick={() => setSelectedDept(dept)}
-                    className={`w-full text-left px-3 py-2.5 text-xs font-bold uppercase transition-colors ${
+                    className={`w-full text-left px-3 py-2 text-xs font-bold uppercase transition-colors ${
                       selectedDept === dept
                         ? "bg-green-700 text-white"
                         : "bg-white hover:bg-slate-50 text-slate-700"
@@ -533,6 +471,7 @@ export default function EMSTimesheetDashboard() {
               </div>
             </div>
 
+            {/* 2. COST CENTER */}
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
                 2. Filter By Cost Center
@@ -550,258 +489,160 @@ export default function EMSTimesheetDashboard() {
               </select>
             </div>
 
+            {/* 3. SUB CENTER */}
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
-                3. Sub Center
+                3. Sub Center Classification
               </label>
               <select
                 value={selectedSubCenter}
                 onChange={(e) => setSelectedSubCenter(e.target.value)}
                 className="w-full bg-white border h-10 text-xs font-bold rounded-lg px-3 uppercase text-slate-800 focus:outline-green-700 shadow-xs"
               >
-                <option value="Receiving">Receiving</option>
-                <option value="Bleeding">Bleeding</option>
-                <option value="Defeathering">Defeathering</option>
-                <option value="Evulation">Evulation</option>
-                <option value="Evisceration">Evisceration</option>
-                <option value="Processing">Processing</option>
-                <option value="Plucking And Scolding">Plucking And Scolding</option>
-                <option value="Bailing Out">Bailing Out</option>
-                <option value="Dispatch">Dispatch</option>
+                {subCentersList.map((sc) => (
+                  <option key={sc} value={sc}>
+                    {sc}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* 4. SUB ITEM */}
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block flex items-center gap-1">
+                <Layers className="w-3 h-3 text-green-700" /> 4. Targeted Sub-Item Line
+              </label>
+              <select
+                value={selectedSubItem}
+                onChange={(e) => setSelectedSubItem(e.target.value)}
+                className="w-full bg-white border h-10 text-xs font-bold rounded-lg px-3 uppercase text-slate-800 focus:outline-green-700 shadow-xs"
+              >
+                {subItemsList.map((si) => (
+                  <option key={si} value={si}>
+                    {si}
+                  </option>
+                ))}
               </select>
             </div>
           </CardContent>
         </Card>
 
-        {/* --- DYNAMIC INTERACTIVE COMPLIANCE METRICS ROW --- */}
+        {/* --- COMPLIANCE METRICS ROW --- */}
         <div className="grid grid-cols-2 sm:grid-cols-6 gap-4 w-full">
-          <button
-            onClick={() => setComplianceFilter("ALL")}
-            className={`p-4 text-left border rounded-xl transition-all shadow-xs flex items-center justify-between ${
-              complianceFilter === "ALL"
-                ? "bg-slate-900 border-slate-900 text-white"
-                : "bg-white border-slate-200 hover:bg-slate-50 text-slate-700"
-            }`}
-          >
+          <button onClick={() => setComplianceFilter("ALL")} className={`p-4 text-left border rounded-xl transition-all flex items-center justify-between ${complianceFilter === "ALL" ? "bg-slate-900 border-slate-900 text-white" : "bg-white text-slate-700"}`}>
             <div>
-              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Selected Workforce</p>
+              <p className="text-[10px] font-black uppercase text-slate-400">Workforce</p>
               <p className="text-xl font-extrabold mt-0.5">{aggregateMetrics.totalWorkforce}</p>
             </div>
-            <Users className={`w-5 h-5 ${complianceFilter === "ALL" ? "text-green-400" : "text-slate-400"}`} />
+            <Users className="w-5 h-5" />
           </button>
 
-          <button
-            onClick={() => setComplianceFilter("ONSITE")}
-            className={`p-4 text-left border rounded-xl transition-all shadow-xs flex items-center justify-between ${
-              complianceFilter === "ONSITE"
-                ? "bg-blue-900 border-blue-800 text-blue-50"
-                : "bg-white border-slate-200 hover:bg-blue-50/40 text-slate-700"
-            }`}
-          >
+          <button onClick={() => setComplianceFilter("ONSITE")} className={`p-4 text-left border rounded-xl transition-all flex items-center justify-between ${complianceFilter === "ONSITE" ? "bg-blue-900 text-blue-50" : "bg-white text-slate-700"}`}>
             <div>
-              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Workforce Onsite</p>
+              <p className="text-[10px] font-black uppercase text-slate-400">Onsite</p>
               <p className="text-xl font-extrabold text-blue-600 mt-0.5">{aggregateMetrics.onsiteTotal}</p>
             </div>
             <MapPin className="w-5 h-5 text-blue-500" />
           </button>
 
-          <button
-            onClick={() => setComplianceFilter("ON_TIME")}
-            className={`p-4 text-left border rounded-xl transition-all shadow-xs flex items-center justify-between ${
-              complianceFilter === "ON_TIME"
-                ? "bg-emerald-900 border-emerald-800 text-emerald-50"
-                : "bg-white border-slate-200 hover:bg-emerald-50/40 text-slate-700"
-            }`}
-          >
+          <button onClick={() => setComplianceFilter("ON_TIME")} className={`p-4 text-left border rounded-xl transition-all flex items-center justify-between ${complianceFilter === "ON_TIME" ? "bg-emerald-900 text-emerald-50" : "bg-white text-slate-700"}`}>
             <div>
-              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Workforce On Time</p>
+              <p className="text-[10px] font-black uppercase text-slate-400">On Time</p>
               <p className="text-xl font-extrabold text-emerald-600 mt-0.5">{aggregateMetrics.onTimeTotal}</p>
             </div>
             <CheckCircle2 className="w-5 h-5 text-emerald-500" />
           </button>
 
-          <button
-            onClick={() => setComplianceFilter("LATE")}
-            className={`p-4 text-left border rounded-xl transition-all shadow-xs flex items-center justify-between ${
-              complianceFilter === "LATE"
-                ? "bg-amber-900 border-amber-800 text-amber-50"
-                : "bg-white border-slate-200 hover:bg-amber-50/40 text-slate-700"
-            }`}
-          >
+          <button onClick={() => setComplianceFilter("LATE")} className={`p-4 text-left border rounded-xl transition-all flex items-center justify-between ${complianceFilter === "LATE" ? "bg-amber-900 text-amber-50" : "bg-white text-slate-700"}`}>
             <div>
-              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Workforce Late</p>
+              <p className="text-[10px] font-black uppercase text-slate-400">Late</p>
               <p className="text-xl font-extrabold text-amber-600 mt-0.5">{aggregateMetrics.lateTotal}</p>
             </div>
             <Clock className="w-5 h-5 text-amber-500" />
           </button>
 
-          <button
-            onClick={() => setComplianceFilter("MISSED_PUNCH")}
-            className={`p-4 text-left border rounded-xl transition-all shadow-xs flex items-center justify-between ${
-              complianceFilter === "MISSED_PUNCH"
-                ? "bg-purple-900 border-purple-800 text-purple-50"
-                : "bg-white border-slate-200 hover:bg-purple-50/40 text-slate-700"
-            }`}
-          >
+          <button onClick={() => setComplianceFilter("MISSED_PUNCH")} className={`p-4 text-left border rounded-xl transition-all flex items-center justify-between ${complianceFilter === "MISSED_PUNCH" ? "bg-purple-900 text-purple-50" : "bg-white text-slate-700"}`}>
             <div>
-              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Missed Punches</p>
+              <p className="text-[10px] font-black uppercase text-slate-400">Missed</p>
               <p className="text-xl font-extrabold text-purple-600 mt-0.5">{aggregateMetrics.missedPunchTotal}</p>
             </div>
             <AlertCircle className="w-5 h-5 text-purple-500" />
           </button>
 
-          <button
-            onClick={() => setComplianceFilter("ABSENT")}
-            className={`p-4 text-left border rounded-xl transition-all shadow-xs flex items-center justify-between ${
-              complianceFilter === "ABSENT"
-                ? "bg-rose-900 border-rose-800 text-rose-50"
-                : "bg-white border-slate-200 hover:bg-rose-50/40 text-slate-700"
-            }`}
-          >
+          <button onClick={() => setComplianceFilter("ABSENT")} className={`p-4 text-left border rounded-xl transition-all flex items-center justify-between ${complianceFilter === "ABSENT" ? "bg-rose-900 text-rose-50" : "bg-white text-slate-700"}`}>
             <div>
-              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Workforce Absent</p>
+              <p className="text-[10px] font-black uppercase text-slate-400">Absent</p>
               <p className="text-xl font-extrabold text-rose-600 mt-0.5">{aggregateMetrics.absentTotal}</p>
             </div>
             <XCircle className="w-5 h-5 text-rose-500" />
           </button>
         </div>
 
-        {/* --- MAIN ROSTER DATA SUMMARY --- */}
+        {/* --- ROSTER DATA SUMMARY --- */}
         <Card className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden">
           <CardHeader className="p-4 bg-slate-50/50 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="text-xs font-extrabold uppercase tracking-wide text-slate-700 flex items-center gap-2 flex-wrap">
-              <span>Timesheet Overview:</span> 
+            <div className="text-xs font-extrabold uppercase tracking-wide text-slate-700 flex items-center gap-1.5 flex-wrap">
+              <span>Roster Grid:</span> 
               <span className="text-green-700">{selectedDept}</span> &rarr;{" "}
               <span className="text-green-700">{selectedCC}</span> &rarr;{" "}
-              <span className="text-green-700">{selectedSubCenter}</span>
-              {complianceFilter !== "ALL" && (
-                <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-[10px] font-black border border-blue-200 uppercase">
-                  Active Filter: {complianceFilter.replace("_", " ")}
-                </span>
-              )}
-              {isDataSyncing && (
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
-              )}
+              <span className="text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">{selectedSubCenter}</span> &rarr;{" "}
+              <span className="text-green-700 font-black">{selectedSubItem}</span>
             </div>
 
             <div className="flex flex-wrap items-center gap-3 bg-white p-2 border rounded-xl shadow-xs">
               <div className="flex items-center gap-1">
-                <span className="text-[10px] font-black text-slate-400 uppercase px-1">
-                  From:
-                </span>
-                <Input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="h-8 text-xs font-mono font-bold border-none bg-transparent p-1 focus-visible:ring-0"
-                />
+                <span className="text-[10px] font-black text-slate-400 uppercase px-1">From:</span>
+                <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-8 text-xs font-mono font-bold border-none bg-transparent p-1 focus-visible:ring-0" />
               </div>
               <div className="flex items-center gap-1">
-                <span className="text-[10px] font-black text-slate-400 uppercase px-1">
-                  To:
-                </span>
-                <Input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="h-8 text-xs font-mono font-bold border-none bg-transparent p-1 focus-visible:ring-0"
-                />
+                <span className="text-[10px] font-black text-slate-400 uppercase px-1">To:</span>
+                <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-8 text-xs font-mono font-bold border-none bg-transparent p-1 focus-visible:ring-0" />
               </div>
-              <Button
-                size="sm"
-                onClick={handleDownloadReport}
-                disabled={
-                  isDownloadingPdf || processedTimesheetData.length === 0
-                }
-                className="h-8 text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-1.5"
-              >
-                {isDownloadingPdf ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Download className="w-3.5 h-3.5" />
-                )}
-                <span>
-                  {isDownloadingPdf ? "Compiling PDF..." : "Download Report"}
-                </span>
+              <Button size="sm" onClick={handleDownloadReport} disabled={isDownloadingPdf || processedTimesheetData.length === 0} className="h-8 text-xs font-bold bg-blue-600 text-white hover:bg-blue-700">
+                {isDownloadingPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5 mr-1" />}
+                <span>Report</span>
               </Button>
             </div>
           </CardHeader>
 
           <CardContent className="p-0">
             {processedTimesheetData.length === 0 ? (
-              <div className="p-12 text-center text-xs font-bold uppercase tracking-wider text-slate-400 bg-slate-50/30">
-                {isDataSyncing
-                  ? "Syncing database data shards..."
-                  : "No workers match the chosen compliance status selection criteria."}
+              <div className="p-12 text-center text-xs font-bold uppercase text-slate-400 bg-slate-50/30">
+                No workers match selection criteria.
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <Table>
-                  <TableHeader className="bg-slate-50 border-b text-slate-400 text-[10px] font-black uppercase tracking-wider">
+                  <TableHeader className="bg-slate-50 border-b text-slate-400 text-[10px] font-black uppercase">
                     <TableRow>
-                      <TableHead className="w-[100px] p-3">
-                        Staff Code
-                      </TableHead>
+                      <TableHead className="w-[100px] p-3">Staff Code</TableHead>
                       <TableHead className="w-[160px] p-3">Full Name</TableHead>
                       {customRangeDatesArray.map((dateStr) => {
                         const d = new Date(dateStr);
-                        const dayName = d.toLocaleDateString("en-US", { weekday: "short" });
-                        const formattedShortDate = d.toLocaleDateString("en-GB", {
-                          day: "2-digit",
-                          month: "2-digit",
-                        });
                         return (
                           <TableHead key={dateStr} className="text-center p-3 font-bold">
-                            {dayName} {formattedShortDate}
+                            {d.toLocaleDateString("en-US", { weekday: "short" })} {d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit" })}
                           </TableHead>
                         );
                       })}
-                      <TableHead className="text-center p-3 font-extrabold bg-emerald-50 text-emerald-900 border-l">
-                        Total
-                      </TableHead>
+                      <TableHead className="text-center p-3 font-extrabold bg-emerald-50 text-emerald-900 border-l">Total</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {processedTimesheetData.map((row) => (
-                      <TableRow
-                        key={row.staffCode}
-                        className="hover:bg-slate-50/50"
-                      >
-                        <TableCell className="p-3 font-mono font-bold text-xs text-slate-900">
-                          {row.staffCode}
-                        </TableCell>
-                        <TableCell className="p-3 text-xs font-extrabold text-slate-700 uppercase truncate max-w-[160px]">
-                          {row.fullName}
-                        </TableCell>
-
+                      <TableRow key={row.staffCode} className="hover:bg-slate-50/50">
+                        <TableCell className="p-3 font-mono font-bold text-xs text-slate-900">{row.staffCode}</TableCell>
+                        <TableCell className="p-3 text-xs font-extrabold text-slate-700 uppercase truncate max-w-[160px]">{row.fullName}</TableCell>
                         {row.dailyBreakdown.map((day, dayIdx) => {
-                          let displayStyle = "text-slate-400 font-normal";
-                          
-                          if (day.isMissedPunch) {
-                            displayStyle = "text-purple-600 font-bold bg-purple-50/40 drop-shadow-[0_0_6px_rgba(147,51,234,0.1)]";
-                          } else if (!day.isAbsent) {
-                            if (day.isLate) {
-                              displayStyle = "text-amber-600 font-bold bg-amber-50/40 drop-shadow-[0_0_6px_rgba(217,119,6,0.1)]";
-                            } else {
-                              displayStyle = "text-emerald-600 font-bold bg-emerald-50/30 drop-shadow-[0_0_6px_rgba(5,150,105,0.2)]";
-                            }
-                          } else {
-                            displayStyle = "text-rose-400/80 font-normal bg-rose-50/20";
-                          }
-
+                          let displayStyle = "text-slate-400";
+                          if (day.isMissedPunch) displayStyle = "text-purple-600 font-bold bg-purple-50/40";
+                          else if (!day.isAbsent) displayStyle = day.isLate ? "text-amber-600 font-bold bg-amber-50/40" : "text-emerald-600 font-bold bg-emerald-50/30";
+                          else displayStyle = "text-rose-400 bg-rose-50/20";
                           return (
-                            <TableCell
-                              key={dayIdx}
-                              className={`p-3 text-center font-mono text-xs transition-all ${displayStyle}`}
-                            >
-                              {day.label}
-                            </TableCell>
+                            <TableCell key={dayIdx} className={`p-3 text-center font-mono text-xs ${displayStyle}`}>{day.label}</TableCell>
                           );
                         })}
-
-                        <TableCell className="p-3 text-center font-mono font-black text-xs bg-emerald-50 text-emerald-900 border-l drop-shadow-[0_0_8px_rgba(4,120,87,0.1)]">
-                          {row.grandTotalLabel}
-                        </TableCell>
+                        <TableCell className="p-3 text-center font-mono font-black text-xs bg-emerald-50 text-emerald-900 border-l">{row.grandTotalLabel}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

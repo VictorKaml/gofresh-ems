@@ -11,10 +11,10 @@ export async function GET() {
   try {
     const supabase = await createClient();
 
-    // Query your employee table from Supabase including the new sub_center column
+    // Query your employee table from Supabase including the sub_center and sub_item columns
     const { data: employees, error } = await supabase
       .from("employees")
-      .select("staff_code, full_name, designation, department, cost_center, sub_center")
+      .select("staff_code, full_name, designation, department, cost_center, sub_center, sub_item")
       .order("staff_code", { ascending: true });
 
     if (error) {
@@ -29,7 +29,8 @@ export async function GET() {
       designation: emp.designation || "",
       department: emp.department || "",
       costCenter: emp.cost_center || "",
-      subCenter: emp.sub_center || "", // Added subCenter mapping
+      subCenter: emp.sub_center || "", 
+      subItem: emp.sub_item || "Wholebirds", // Added subItem mapping fallback
     }));
 
     return NextResponse.json(formattedEmployees, { status: 200 });
@@ -49,12 +50,20 @@ export async function POST(request: Request) {
   try {
     const supabase = await createClient();
     const body = await request.json();
-    const { staff_code, full_name, designation, department, cost_center, sub_center } = body;
+    
+    // Support picking up both camelCase or snake_case parameters dynamically from the request body
+    const staff_code = body.staff_code || body.staffCode;
+    const full_name = body.full_name || body.fullName;
+    const designation = body.designation;
+    const department = body.department;
+    const cost_center = body.cost_center || body.costCenter;
+    const sub_center = body.sub_center || body.subCenter;
+    const sub_item = body.sub_item || body.subItem;
 
-    // 1. Precise Server-Side Input Validation (Now checking for sub_center field)
-    if (!staff_code || !full_name || !designation || !department || !cost_center || !sub_center) {
+    // 1. Precise Server-Side Input Validation (Now ensuring both sub_center and sub_item fields exist)
+    if (!staff_code || !full_name || !designation || !department || !cost_center || !sub_center || !sub_item) {
       return NextResponse.json(
-        { error: "Missing required employee schema fields." },
+        { error: "Missing required employee schema fields including sub_center or sub_item." },
         { status: 400 }
       );
     }
@@ -69,7 +78,8 @@ export async function POST(request: Request) {
           designation: designation.trim(),
           department: department.trim(),
           cost_center: cost_center.trim(),
-          sub_center: sub_center.trim(), // Insert sub_center to DB
+          sub_center: sub_center.trim(), 
+          sub_item: sub_item.trim(), // Insert sub_item into DB
           updated_at: new Date().toISOString(), // Required column constraint
         },
       ])
@@ -95,7 +105,8 @@ export async function POST(request: Request) {
       designation: data.designation,
       department: data.department,
       costCenter: data.cost_center,
-      subCenter: data.sub_center, // Return subCenter to client state
+      subCenter: data.sub_center, 
+      subItem: data.sub_item, // Return subItem back to client state
     };
 
     return NextResponse.json(
