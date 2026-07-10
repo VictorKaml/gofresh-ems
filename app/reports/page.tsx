@@ -363,22 +363,40 @@ export default function EMSTimesheetDashboard() {
     });
   }, [fullyCalculatedDataset, complianceFilter]);
 
-  const handleDownloadReport = async () => {
+ const handleDownloadReport = async () => {
     if (!processedTimesheetData || processedTimesheetData.length === 0) {
       alert("No active timesheet data available to export.");
       return;
     }
     setIsDownloadingPdf(true);
+    
     try {
       const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
-      doc.setTextColor(30, 41, 59).setFont("helvetica", "bold").setFontSize(22).text("Go", 12, 22);
-      doc.setTextColor(21, 128, 61).text("Fresh", 23, 22);
-      doc.setTextColor(148, 163, 184).setFontSize(7.5).text("OPERATIONAL TIMESHEET ARCHIVE", 12, 31);
+
+      // 🔥 LOGO ASYNC PROMISE BINDING: Safely render gofresh_logo.jpg before injecting table rows
+      await new Promise<void>((resolve) => {
+        const img = new Image();
+        img.src = "/gofresh_logo.jpg";
+        img.onload = () => {
+          // Adjust position and dimension (x, y, width, height) to frame perfectly
+          doc.addImage(img, "JPEG", 12, 12, 14, 14);
+          resolve();
+        };
+        img.onerror = () => {
+          console.warn("Logo asset missing from /public/gofresh_logo.jpg. Falling back to corporate typography text.");
+          // Fallback text context alignment if image is unpopulated or missing
+          doc.setTextColor(30, 41, 59).setFont("helvetica", "bold").setFontSize(22).text("Go", 12, 22);
+          doc.setTextColor(21, 128, 61).text("Fresh", 23, 22);
+          resolve();
+        };
+      });
+
+      doc.setTextColor(148, 163, 184).setFontSize(7.5).setFont("helvetica", "bold").text("OPERATIONAL TIMESHEET ARCHIVE", 12, 31);
       doc.setTextColor(21, 128, 61).setFontSize(11).text("TIMESHEET SUMMARY", 285, 15, { align: "right" });
 
       doc.setTextColor(71, 85, 105).setFontSize(9).setFont("helvetica", "normal");
       doc.text(`Department: ${selectedDept}`, 285, 20, { align: "right" });
-      doc.text(`Cost Centre: ${selectedCC} (${selectedSubCenter} - ${selectedSubItem})`, 285, 24, { align: "right" });
+      doc.text(`Cost Centre: ${selectedCC} (${selectedSubCenter})`, 285, 24, { align: "right" });
       doc.text(`Period Frame: ${startDate} to ${endDate}`, 285, 28, { align: "right" });
 
       doc.setDrawColor(226, 232, 240).setLineWidth(0.5).line(12, 34, 285, 34);
