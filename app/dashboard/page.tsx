@@ -823,7 +823,7 @@ export default function EMSDashboard() {
   const handleSignOut = async () => {
     try {
       addLog("[AUTH] Terminating secure user session...");
-      const response = await fetch("/api/auth/signout", { method: "POST" });
+      const response = await fetch("/api/auth/logout", { method: "POST" });
       if (response.ok) {
         router.push("/");
       } else {

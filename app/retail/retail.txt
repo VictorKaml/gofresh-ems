@@ -1,0 +1,57 @@
+look at the sheets in this file I want to be able to show all this data in the dashboard we  just created after uploading this execl file we save this data in  supabase and populate it my mapping it/fetching it in the dashboard we just created currently my reatil_sales schems is like this create table public.retail_sales (
+
+  id bigint generated always as identity not null,
+
+  invoice_no text null,
+
+  invoice_date timestamp with time zone null,
+
+  invoice_time text null,
+
+  sale_date date null,
+
+  customer_code text null,
+
+  location_code text null,
+
+  shop_name text null,
+
+  shop_category text null,
+
+  region text null,
+
+  net_sale numeric(15, 2) null,
+
+  product_code text null,
+
+  product_name text null,
+
+  segment text null,
+
+  category text null,
+
+  qty numeric(12, 3) null,
+
+  weight numeric(12, 3) null,
+
+  volume numeric(12, 3) null,
+
+  unit_price numeric(15, 2) null,
+
+  amount numeric(15, 2) null,
+
+  tax_rate numeric(5, 2) null,
+
+  tax_amount numeric(15, 2) null,
+
+  created_at timestamp with time zone not null default timezone ('utc'::text, now()),
+
+  constraint retail_sales_pkey primary key (id)
+
+) TABLESPACE pg_default;
+
+create index IF not exists idx_retail_sales_date on public.retail_sales using btree (sale_date) TABLESPACE pg_default;
+
+create index IF not exists idx_retail_sales_shop_segment on public.retail_sales using btree (shop_name, segment) TABLESPACE pg_default;
+
+create index IF not exists idx_retail_sales_product on public.retail_sales using btree (product_name) TABLESPACE pg_default;

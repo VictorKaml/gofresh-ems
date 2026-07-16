@@ -38,6 +38,7 @@ export default function IntegratedPortal() {
 
   // Administrative login overlay states
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [loginType, setLoginType] = useState<"ems" | "retail" | null>(null); // Track selected login target
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState<string | null>(null);
@@ -73,8 +74,6 @@ export default function IntegratedPortal() {
     return () => clearTimeout(delayDebounce);
   }, [searchQuery, selectedEmp]);
 
-  // Handle choice selection from list suggestions
-  // Inside app/page.tsx -> Update handleSelectEmployee
   const handleSelectEmployee = async (emp: any) => {
     setSelectedEmp(emp);
     setSuggestions([]);
@@ -82,7 +81,6 @@ export default function IntegratedPortal() {
     setIsTableLoading(true);
 
     try {
-      // Hits the direct database-driven filter endpoint we built in Step 1
       const res = await fetch(
         `/api/public-search/records?staffCode=${emp.staffCode}`,
       );
@@ -108,7 +106,6 @@ export default function IntegratedPortal() {
       format: "a4",
     });
 
-    // 1️⃣ SORT CHRONOLOGICALLY
     const sortedRecords = [...attendanceTable].sort((a, b) =>
       a.date.localeCompare(b.date),
     );
@@ -136,12 +133,10 @@ export default function IntegratedPortal() {
       "Sunday",
     ];
 
-    // 2️⃣ PROCESSING MATRIX WITH CLIENT-SIDE RE-CALCULATION OVERRIDE
     sortedRecords.forEach((row) => {
       const recordDate = new Date(row.date);
       if (isNaN(recordDate.getTime())) return;
 
-      // ISO-8601 Week Calculation Logic
       const target = new Date(recordDate.valueOf());
       const dayNum = (recordDate.getDay() + 6) % 7;
       target.setDate(target.getDate() - dayNum + 3);
@@ -153,24 +148,16 @@ export default function IntegratedPortal() {
       const isoWeek =
         1 + Math.ceil((firstThursday - target.valueOf()) / 604800000);
 
-      // Normalize day name casing safely to ensure clean array/object lookups
       const rawDay = String(row.weekDay || row.weekday || "").trim();
       const formattedDay =
         rawDay.charAt(0).toUpperCase() + rawDay.slice(1).toLowerCase();
-      // Capitalize first letter to match array mapping perfectly (e.g. "monday" -> "Monday")
-      const currentDay =
-        rawDay.charAt(0).toUpperCase() + rawDay.slice(1).toLowerCase();
 
-      // Read values directly from the row payload object safely
       const ot = Number(row.overtimeHours ?? 0);
       const totalShift = Number(row.totalShiftHours ?? 0);
 
-      // FIX: Instead of relying on subtraction math (which hits floating point flaws),
-      // we determine the explicit ceiling limit based on the work day type.
       const dayLimit =
         formattedDay === "Saturday" || formattedDay === "Sunday" ? 5.5 : 8.5;
 
-      // If overtime exists, regular hours must be the max cap. Otherwise, it's just the total shift hours.
       const reg = ot > 0 ? dayLimit : Math.min(dayLimit, totalShift);
 
       totalRegularHrs += reg;
@@ -192,7 +179,6 @@ export default function IntegratedPortal() {
 
       const cleanFormat = (num: number) => {
         if (num === 0) return "0";
-        // Format to 2 decimal points, then drop a trailing zero if it exists, keeping single fractions intact
         return Number(num.toFixed(2)).toString();
       };
 
@@ -205,7 +191,6 @@ export default function IntegratedPortal() {
       }
     });
 
-    // 3️⃣ DRAW ACCENT HEADER BANNER BACKGROUND
     doc.setFillColor(15, 23, 42);
     doc.rect(0, 0, 210, 42, "F");
 
@@ -219,7 +204,6 @@ export default function IntegratedPortal() {
     doc.setFont("helvetica", "italic");
     doc.text("ONLY THE BEST IS FRESH", 15, 29);
 
-    // 4️⃣ LOGO INJECTION IMAGE
     const img = typeof window !== "undefined" ? new window.Image() : null;
     if (!img) {
       finalizeAndSave();
@@ -241,7 +225,6 @@ export default function IntegratedPortal() {
     };
 
     function finalizeAndSave() {
-      // 5️⃣ PROFILE METADATA SECTION
       doc.setTextColor(15, 23, 42);
       doc.setFont("helvetica", "bold");
       doc.setFontSize(15);
@@ -261,10 +244,8 @@ export default function IntegratedPortal() {
         71,
       );
 
-      // 6️⃣ RE-ALIGNED STATISTICAL METRIC DISPLAY CARDS
       doc.setDrawColor(226, 232, 240);
 
-      // Card A: Regular Total hours
       doc.setFillColor(248, 250, 252);
       doc.rect(118, 48, 26, 24, "FD");
       doc.setFont("helvetica", "bold");
@@ -273,7 +254,6 @@ export default function IntegratedPortal() {
       doc.setFontSize(9.5);
       doc.text(`${totalRegularHrs.toFixed(2)} Hours`, 119.5, 67);
 
-      // Card B: Premium Overtime
       doc.setFillColor(239, 246, 255);
       doc.rect(146, 48, 26, 24, "FD");
       doc.setFont("helvetica", "bold");
@@ -282,7 +262,6 @@ export default function IntegratedPortal() {
       doc.setFontSize(9.5);
       doc.text(`+${totalOvertimeHrs} Hours`, 147.5, 67);
 
-      // Card C: Gross Run Total
       doc.setFillColor(239, 246, 255);
       doc.rect(174, 48, 24, 24, "FD");
       doc.setFont("helvetica", "bold");
@@ -298,7 +277,6 @@ export default function IntegratedPortal() {
       doc.setDrawColor(203, 213, 225);
       doc.line(15, 78, 198, 78);
 
-      // 7️⃣ MATRIX GRID ROWS MAPPER
       const matrixRows = Object.values(weeksGrid).map((w) => [
         w.label,
         w.days["Monday"].regular === "-"
@@ -324,7 +302,6 @@ export default function IntegratedPortal() {
           : `${w.days["Sunday"].regular}/${w.days["Sunday"].overtime}`,
       ]);
 
-      // 8️⃣ GENERATE AUTOTABLE GRID BLOCK
       autoTable(doc, {
         startY: 84,
         margin: { left: 15, right: 15 },
@@ -378,7 +355,6 @@ export default function IntegratedPortal() {
     }
   };
 
-  // Reset the portal state to global search layout
   const resetSearchState = () => {
     setSelectedEmp(null);
     setSearchQuery("");
@@ -386,7 +362,7 @@ export default function IntegratedPortal() {
     setDayFilter("ALL");
   };
 
-  // Administrator authenticating endpoint handler
+  // Authenticate & redirect based on the targeted portal type
   const executeSystemEntry = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -404,7 +380,14 @@ export default function IntegratedPortal() {
         throw new Error(data.error || "Incorrect email or password.");
 
       setShowLoginModal(false);
-      router.push("/dashboard");
+
+      // Dynamically route based on whether EMS or Retail login was requested
+      if (loginType === "retail") {
+        router.push("/retail");
+      } else {
+        router.push("/dashboard");
+      }
+      
       router.refresh();
     } catch (err: any) {
       setLoginError(err.message);
@@ -413,7 +396,6 @@ export default function IntegratedPortal() {
     }
   };
 
-  // Client-side conditional display filtering computation
   const filteredRecords = attendanceTable.filter((row: any) => {
     if (dayFilter === "ALL") return true;
     return row.weekDay.toLowerCase() === dayFilter.toLowerCase();
@@ -421,7 +403,6 @@ export default function IntegratedPortal() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 flex flex-col justify-between text-slate-900 font-sans relative selection:bg-blue-600 selection:text-white antialiased">
-      {/* Dynamic Navigation Header Banner */}
       <header className="w-full max-w-7xl mx-auto px-6 py-4 flex justify-between items-center bg-white/60 backdrop-blur-md sticky top-0 z-40 border-b border-slate-200/50 rounded-b-xl shadow-sm">
         <div className="flex items-center gap-3">
           <div className="relative w-9 h-9 rounded-xl overflow-hidden shadow-sm bg-white border border-slate-200 p-1 flex items-center justify-center">
@@ -440,22 +421,36 @@ export default function IntegratedPortal() {
             </span>
           </div>
         </div>
-        <Button
-          onClick={() => {
-            setLoginError(null);
-            setShowLoginModal(true);
-          }}
-          className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs uppercase tracking-wider px-4 py-2.5 rounded-xl shadow-sm border border-slate-800 transition-all flex items-center gap-2 active:scale-95"
-        >
-          <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
-          Manager Login
-        </Button>
+        <div className="flex gap-2">
+          {/* Retail Portal Access Button */}
+          <Button
+            onClick={() => {
+              setLoginError(null);
+              setLoginType("retail");
+              setShowLoginModal(true);
+            }}
+            className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs uppercase tracking-wider px-4 py-2.5 rounded-xl shadow-sm border border-slate-800 transition-all flex items-center gap-2 active:scale-95"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-green-400" />
+            Retail Login
+          </Button>
+          {/* EMS Portal Access Button */}
+          <Button
+            onClick={() => {
+              setLoginError(null);
+              setLoginType("ems");
+              setShowLoginModal(true);
+            }}
+            className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs uppercase tracking-wider px-4 py-2.5 rounded-xl shadow-sm border border-slate-800 transition-all flex items-center gap-2 active:scale-95"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
+            EMS Login
+          </Button>
+        </div>
       </header>
 
-      {/* Main Framework Processing Core Layout */}
       <main className="flex-1 flex flex-col items-center justify-center px-4 max-w-7xl w-full mx-auto py-16">
         {!selectedEmp ? (
-          /* GOOGLE INSPIRED SEARCH MODULE SPLASH SCREEN */
           <div className="w-full max-w-xl text-center flex flex-col items-center animate-in fade-in slide-in-from-bottom-6 duration-500">
             <div className="relative w-24 h-24 mb-6 rounded-3xl overflow-hidden shadow-xl border-2 border-white bg-white p-2 animate-bounce [animation-duration:3s]">
               <img
@@ -473,11 +468,9 @@ export default function IntegratedPortal() {
               overtime, and shifts.
             </p>
 
-            {/* Standard Search Box Wrapper */}
             <div className="w-full relative shadow-xl rounded-2xl bg-white border border-slate-200/80 focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-100 transition-all duration-300 group">
               <div className="flex items-center px-5 py-4.5">
                 {isSearching ? (
-                  /* Custom Animated Bubble Load Sequence Loop */
                   <div className="flex items-center gap-1 mr-3 w-5 h-5 justify-center">
                     <span className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
                     <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
@@ -495,7 +488,6 @@ export default function IntegratedPortal() {
                 />
               </div>
 
-              {/* Real-time Result List Overlays */}
               {suggestions.length > 0 && (
                 <div className="absolute left-0 right-0 top-full mt-3 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden z-50 text-left divide-y divide-slate-100 animate-in fade-in slide-in-from-top-2 duration-200">
                   {suggestions.map((emp) => (
@@ -518,7 +510,6 @@ export default function IntegratedPortal() {
             </div>
           </div>
         ) : isTableLoading ? (
-          /* SHIMMERING STRUCTURAL SKELETON DISPLAY WHILE ACCRUES MATRIX TRANSFERS */
           <div className="w-full flex flex-col bg-white rounded-2xl shadow-xl border border-slate-200/60 overflow-hidden max-w-5xl">
             <div className="px-6 py-6 bg-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-pulse">
               <div className="space-y-3">
@@ -543,9 +534,7 @@ export default function IntegratedPortal() {
             </div>
           </div>
         ) : (
-          /* DETAILED TABULAR ATTENDANCE OVERVIEW FOR THE SEARCHED EMPLOYEE */
           <div className="w-full max-w-5xl flex flex-col bg-white rounded-2xl shadow-xl border border-slate-200/60 overflow-hidden animate-in fade-in zoom-in-95 duration-300">
-            {/* Upper Profile Context Identification */}
             <div className="px-6 py-6 bg-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 relative">
               <div className="absolute right-6 top-6 opacity-10 pointer-events-none hidden sm:block">
                 <img
@@ -572,9 +561,7 @@ export default function IntegratedPortal() {
                 </p>
               </div>
 
-              {/* Dynamic Filter Select Trigger */}
               <div className="flex flex-wrap items-center gap-3 relative z-10">
-                {/* PDF EXTRACT ACTION TRIGGER BUTTON */}
                 <Button
                   onClick={generatePDFReport}
                   className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-wider h-9 px-4 rounded-lg flex items-center gap-2 transition shadow-md active:scale-95"
@@ -602,7 +589,6 @@ export default function IntegratedPortal() {
               </div>
             </div>
 
-            {/* Attendance Report Sheet Data Display Grid */}
             <div className="overflow-x-auto w-full">
               <table className="w-full text-left border-collapse">
                 <thead>
@@ -680,7 +666,6 @@ export default function IntegratedPortal() {
         )}
       </main>
 
-      {/* POPUP OVERLAY WINDOW FOR SYSTEM MANAGERS ONLY */}
       {showLoginModal && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
           <Card className="w-full max-w-md bg-white border-slate-200 shadow-2xl rounded-2xl overflow-hidden text-slate-900 animate-in zoom-in-95 duration-200">
@@ -693,11 +678,14 @@ export default function IntegratedPortal() {
                     className="w-5 h-5 object-contain rounded"
                   />
                   <CardTitle className="text-lg font-black tracking-wide text-slate-900">
-                    Manager Sign In
+                    {loginType === "retail" ? "Retail Manager Sign In" : "EMS Manager Sign In"}
                   </CardTitle>
                 </div>
                 <button
-                  onClick={() => setShowLoginModal(false)}
+                  onClick={() => {
+                    setShowLoginModal(false);
+                    setLoginType(null);
+                  }}
                   className="text-slate-400 hover:text-slate-600 text-2xl outline-none leading-none transition-colors"
                 >
                   &times;
@@ -768,7 +756,6 @@ export default function IntegratedPortal() {
         </div>
       )}
 
-      {/* Corporate Footing Content */}
       <footer className="w-full text-center py-5 text-xs text-slate-400 font-medium border-t border-slate-200/60 bg-white/40 backdrop-blur-sm">
         © 2026 GoFresh EMS. All system sign-in access points are securely
         logged.

@@ -20,7 +20,6 @@ import {
   Clock, 
   Users,
   MapPin,
-  AlertCircle,
   Layers
 } from "lucide-react";
 import jsPDF from "jspdf";
@@ -48,7 +47,7 @@ interface OnsiteStaffRecord {
   time: string;
 }
 
-type ComplianceFilterMode = "ALL" | "ON_TIME" | "ABSENT" | "LATE" | "ONSITE" | "MISSED_PUNCH";
+type ComplianceFilterMode = "ALL" | "ON_TIME" | "ABSENT" | "LATE" | "ONSITE";
 
 export default function EMSTimesheetDashboard() {
   const departmentStructure: Record<string, string[]> = {
@@ -78,10 +77,6 @@ export default function EMSTimesheetDashboard() {
     ],
   };
 
-  // Direct lists mapping exactly to your database columns (Sub Center / Sub Item).
-  // "Processing" is the only Sub Center that carries a Sub Item breakdown
-  // (Fillets, Mixed Portion, Drumsticks, Cutlets, Wings). Every other Sub
-  // Center has no Sub Item, so "All" means "don't filter on this field".
   const subCentersList = [
     "All",
     "Receiving",
@@ -109,7 +104,6 @@ export default function EMSTimesheetDashboard() {
     "Wings",
   ];
 
-  // Sub Item is only meaningful when Sub Center is "Processing"
   const isSubItemApplicable = (subCenter: string) => subCenter === "Processing";
 
   const departmentsList = Object.keys(departmentStructure);
@@ -127,12 +121,9 @@ export default function EMSTimesheetDashboard() {
     }
   }, [activeCostCenters, selectedCC]);
 
-  // Direct selection states matching table column string fields
   const [selectedSubCenter, setSelectedSubCenter] = useState<string>("All");
   const [selectedSubItem, setSelectedSubItem] = useState<string>("All");
 
-  // Sub Item only applies to the "Processing" sub center — reset it whenever
-  // the user picks a different sub center so stale filters can't hide staff.
   useEffect(() => {
     if (!isSubItemApplicable(selectedSubCenter) && selectedSubItem !== "All") {
       setSelectedSubItem("All");
@@ -234,8 +225,6 @@ export default function EMSTimesheetDashboard() {
           selectedSubCenter === "All" ||
           String(emp.subCenter).trim().toLowerCase() === String(selectedSubCenter).trim().toLowerCase();
 
-        // Only enforce the Sub Item match when one is actually selected;
-        // non-Processing sub centers never have a Sub Item value to match.
         const subItemMatch =
           selectedSubItem === "All" ||
           String(emp.subItem).trim().toLowerCase() === String(selectedSubItem).trim().toLowerCase();
@@ -250,7 +239,6 @@ export default function EMSTimesheetDashboard() {
         let dynamicLateCount = 0;
         let dynamicOnTimeCount = 0;
         let dynamicAbsentCount = 0;
-        let dynamicMissedPunchCount = 0;
 
         const currentStaffCodeClean = String(emp.staffCode).trim().toLowerCase();
 
@@ -265,11 +253,24 @@ export default function EMSTimesheetDashboard() {
           const isWeekend = checkDate.getDay() === 0 || checkDate.getDay() === 6; 
           const currentDayCap = isWeekend ? 5.5 : 8.5;
 
+          // 1. ABSENT: No raw swipes whatsoever
           if (daySwipes.length === 0) {
             const isFuture = dateStr > todayStr;
             const isAbsentMark = !isWeekend && !isFuture;
             if (isAbsentMark) dynamicAbsentCount++;
-            return { label: "0.0 / 0.0", isAbsent: isAbsentMark, isLate: false, isOnTime: false, isMissedPunch: false };
+            return { label: "0.0 / 0.0", isAbsent: isAbsentMark, isLate: false, isOnTime: false };
+          }
+
+          // 2. SINGLE PUNCH: Exactly one punch is found, treat as late
+          if (daySwipes.length === 1) {
+            dynamicLateCount++;
+            dynamicOnsiteCount++; // Counted as active onsite record, but late
+            return {
+              label: "0.0 / 0.0",
+              isAbsent: false,
+              isLate: true,
+              isOnTime: false
+            };
           }
 
           const ins = daySwipes
@@ -286,15 +287,18 @@ export default function EMSTimesheetDashboard() {
             })
             .sort((a, b) => String(a.time).localeCompare(String(b.time)));
 
+          // MISSING PUNCH HANDLING: If there is no clear IN or OUT swipe pairs
           if (ins.length === 0 || outs.length === 0) {
             const sortedFallback = [...daySwipes].sort((a, b) => String(a.time).localeCompare(String(b.time)));
+            // Try to extract chronological IN/OUT from general day swipes
             if (sortedFallback.length >= 2) {
               ins.push(sortedFallback[0]);
               outs.push(sortedFallback[sortedFallback.length - 1]);
             } else {
-              dynamicMissedPunchCount++;
-              dynamicOnsiteCount++; 
-              return { label: "8.5 / 0.0", isAbsent: false, isLate: false, isOnTime: false, isMissedPunch: true };
+              // Less than 2 swipes fallback is not possible, meaning they missed punches -> Regard as absent
+              const isAbsentMark = !isWeekend && dateStr <= todayStr;
+              if (isAbsentMark) dynamicAbsentCount++;
+              return { label: "0.0 / 0.0", isAbsent: isAbsentMark, isLate: false, isOnTime: false };
             }
           }
 
@@ -305,10 +309,9 @@ export default function EMSTimesheetDashboard() {
           const [outH, outM] = lastOutTime.split(":").map(Number);
 
           if (isNaN(inH) || isNaN(outH)) {
-            dynamicMissedPunchCount++;
-            dynamicOnsiteCount++;
-            cumulativeRegular += 8.5; // Add standard 8.5 hours for missed punch
-            return { label: "8.5 / 0.0", isAbsent: false, isLate: false, isOnTime: false, isMissedPunch: true };
+            const isAbsentMark = !isWeekend && dateStr <= todayStr;
+            if (isAbsentMark) dynamicAbsentCount++;
+            return { label: "0.0 / 0.0", isAbsent: isAbsentMark, isLate: false, isOnTime: false };
           }
 
           const rawTotalHours = (outH * 60 + outM - (inH * 60 + inM)) / 60;
@@ -316,7 +319,7 @@ export default function EMSTimesheetDashboard() {
 
           if (totalHoursAfterLunch <= 0) {
             dynamicAbsentCount++;
-            return { label: "0.0 / 0.0", isAbsent: true, isLate: false, isOnTime: false, isMissedPunch: false };
+            return { label: "0.0 / 0.0", isAbsent: true, isLate: false, isOnTime: false };
           }
 
           let worked = totalHoursAfterLunch > currentDayCap ? currentDayCap : totalHoursAfterLunch;
@@ -326,6 +329,7 @@ export default function EMSTimesheetDashboard() {
           cumulativeOvertime += ot;
           dynamicOnsiteCount++;
 
+          // 3. LATE SHIFT rule: came after 7:20
           const isLateShift = (inH > 7 || (inH === 7 && inM > 30));
           if (isLateShift) {
             dynamicLateCount++;
@@ -337,8 +341,7 @@ export default function EMSTimesheetDashboard() {
             label: `${worked.toFixed(1)} / ${ot.toFixed(1)}`,
             isAbsent: false,
             isLate: isLateShift,
-            isOnTime: !isLateShift,
-            isMissedPunch: false
+            isOnTime: !isLateShift
           };
         });
 
@@ -349,7 +352,6 @@ export default function EMSTimesheetDashboard() {
           dynamicLateCount,
           dynamicAbsentCount,
           dynamicOnsiteCount,
-          dynamicMissedPunchCount,
           grandTotalLabel: `${cumulativeRegular.toFixed(1)} / ${cumulativeOvertime.toFixed(1)}`,
         };
       });
@@ -369,17 +371,15 @@ export default function EMSTimesheetDashboard() {
     let onTimeTotal = 0;
     let absentTotal = 0;
     let lateTotal = 0;
-    let missedPunchTotal = 0;
 
     fullyCalculatedDataset.forEach(row => {
       if (row.dynamicOnsiteCount > 0) onsiteTotal++;
       if (row.dynamicOnTimeCount > 0) onTimeTotal++;
       if (row.dynamicLateCount > 0) lateTotal++;
-      if (row.dynamicMissedPunchCount > 0) missedPunchTotal++;
       if (row.dynamicOnsiteCount === 0 && row.dynamicAbsentCount > 0) absentTotal++;
     });
 
-    return { totalWorkforce, onTimeTotal, absentTotal, lateTotal, onsiteTotal, missedPunchTotal };
+    return { totalWorkforce, onTimeTotal, absentTotal, lateTotal, onsiteTotal };
   }, [fullyCalculatedDataset]);
 
   const processedTimesheetData = useMemo(() => {
@@ -388,12 +388,11 @@ export default function EMSTimesheetDashboard() {
       if (complianceFilter === "ABSENT") return row.dynamicOnsiteCount === 0 && row.dynamicAbsentCount > 0;
       if (complianceFilter === "LATE") return row.dynamicLateCount > 0;
       if (complianceFilter === "ON_TIME") return row.dynamicOnTimeCount > 0;
-      if (complianceFilter === "MISSED_PUNCH") return row.dynamicMissedPunchCount > 0;
       return true;
     });
   }, [fullyCalculatedDataset, complianceFilter]);
 
- const handleDownloadReport = async () => {
+  const handleDownloadReport = async () => {
     if (!processedTimesheetData || processedTimesheetData.length === 0) {
       alert("No active timesheet data available to export.");
       return;
@@ -403,18 +402,15 @@ export default function EMSTimesheetDashboard() {
     try {
       const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
 
-      // 🔥 LOGO ASYNC PROMISE BINDING: Safely render gofresh_logo.jpg before injecting table rows
       await new Promise<void>((resolve) => {
         const img = new Image();
         img.src = "/gofresh_logo.jpg";
         img.onload = () => {
-          // Adjust position and dimension (x, y, width, height) to frame perfectly
           doc.addImage(img, "JPEG", 12, 12, 14, 14);
           resolve();
         };
         img.onerror = () => {
           console.warn("Logo asset missing from /public/gofresh_logo.jpg. Falling back to corporate typography text.");
-          // Fallback text context alignment if image is unpopulated or missing
           doc.setTextColor(30, 41, 59).setFont("helvetica", "bold").setFontSize(22).text("Go", 12, 22);
           doc.setTextColor(21, 128, 61).text("Fresh", 23, 22);
           resolve();
@@ -472,10 +468,7 @@ export default function EMSTimesheetDashboard() {
               data.cell.styles.fontStyle = "bold";
             }
           } else if (data.column.index >= 4) {
-            if (cellValue === "MISSED") {
-              data.cell.styles.textColor = [220, 38, 38];
-              data.cell.styles.fillColor = [254, 242, 242];
-            } else if (cellValue !== "0.0 / 0.0" && cellValue !== "") {
+            if (cellValue !== "0.0 / 0.0" && cellValue !== "") {
               data.cell.styles.textColor = [5, 150, 105];
               data.cell.styles.fillColor = [240, 253, 250];
             }
@@ -589,7 +582,7 @@ export default function EMSTimesheetDashboard() {
         </Card>
 
         {/* --- COMPLIANCE METRICS ROW --- */}
-        <div className="grid grid-cols-2 sm:grid-cols-6 gap-4 w-full">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 w-full">
           <button onClick={() => setComplianceFilter("ALL")} className={`p-4 text-left border rounded-xl transition-all flex items-center justify-between ${complianceFilter === "ALL" ? "bg-slate-900 border-slate-900 text-white" : "bg-white text-slate-700"}`}>
             <div>
               <p className="text-[10px] font-black uppercase text-slate-400">Workforce</p>
@@ -620,22 +613,6 @@ export default function EMSTimesheetDashboard() {
               <p className="text-xl font-extrabold text-amber-600 mt-0.5">{aggregateMetrics.lateTotal}</p>
             </div>
             <Clock className="w-5 h-5 text-amber-500" />
-          </button>
-
-          <button onClick={() => setComplianceFilter("MISSED_PUNCH")} className={`p-4 text-left border rounded-xl transition-all flex items-center justify-between ${complianceFilter === "MISSED_PUNCH" ? "bg-purple-900 text-purple-50" : "bg-white text-slate-700"}`}>
-            <div>
-              <p className="text-[10px] font-black uppercase text-slate-400">Missed</p>
-              <p className="text-xl font-extrabold text-purple-600 mt-0.5">{aggregateMetrics.missedPunchTotal}</p>
-            </div>
-            <AlertCircle className="w-5 h-5 text-purple-500" />
-          </button>
-
-          <button onClick={() => setComplianceFilter("ABSENT")} className={`p-4 text-left border rounded-xl transition-all flex items-center justify-between ${complianceFilter === "ABSENT" ? "bg-rose-900 text-rose-50" : "bg-white text-slate-700"}`}>
-            <div>
-              <p className="text-[10px] font-black uppercase text-slate-400">Absent</p>
-              <p className="text-xl font-extrabold text-rose-600 mt-0.5">{aggregateMetrics.absentTotal}</p>
-            </div>
-            <XCircle className="w-5 h-5 text-rose-500" />
           </button>
         </div>
 
@@ -708,8 +685,7 @@ export default function EMSTimesheetDashboard() {
                         </TableCell>
                         {row.dailyBreakdown.map((day, dayIdx) => {
                           let displayStyle = "text-slate-400";
-                          if (day.isMissedPunch) displayStyle = "text-purple-600 font-bold bg-purple-50/40";
-                          else if (!day.isAbsent) displayStyle = day.isLate ? "text-amber-600 font-bold bg-amber-50/40" : "text-emerald-600 font-bold bg-emerald-50/30";
+                          if (!day.isAbsent) displayStyle = day.isLate ? "text-amber-600 font-bold bg-amber-50/40" : "text-emerald-600 font-bold bg-emerald-50/30";
                           else displayStyle = "text-rose-400 bg-rose-50/20";
                           return (
                             <TableCell key={dayIdx} className={`p-3 text-center font-mono text-xs ${displayStyle}`}>{day.label}</TableCell>
