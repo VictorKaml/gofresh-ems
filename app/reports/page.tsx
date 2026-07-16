@@ -78,27 +78,39 @@ export default function EMSTimesheetDashboard() {
     ],
   };
 
-  // Direct lists mapping exactly to your database columns
+  // Direct lists mapping exactly to your database columns (Sub Center / Sub Item).
+  // "Processing" is the only Sub Center that carries a Sub Item breakdown
+  // (Fillets, Mixed Portion, Drumsticks, Cutlets, Wings). Every other Sub
+  // Center has no Sub Item, so "All" means "don't filter on this field".
   const subCentersList = [
+    "All",
     "Receiving",
-    "Bleeding",
-    "Defeathering",
-    "Evulation",
+    "Plucking",
     "Evisceration",
-    "Plucking And Scolding",
-    "Bailing Out",
-    "Dispatch"
+    "Processing",
+    "IQF Material",
+    "Day Cleaners",
+    "Whole Bird",
+    "Quality Control",
+    "Bailing",
+    "Night Cleaners",
+    "Loading",
+    "Dispatch",
+    "Date Coding",
+    "Live Sales",
   ];
 
   const subItemsList = [
-    "Wholebirds",
-    "Leg portion / Thigh",
-    "Mixed portion",
+    "All",
+    "Fillets",
+    "Mixed Portion",
+    "Drumsticks",
+    "Cutlets",
     "Wings",
-    "Drumstick",
-    "Fillet",
-    "Cutlets"
   ];
+
+  // Sub Item is only meaningful when Sub Center is "Processing"
+  const isSubItemApplicable = (subCenter: string) => subCenter === "Processing";
 
   const departmentsList = Object.keys(departmentStructure);
   const [selectedDept, setSelectedDept] = useState<string>("Go Fresh Chicken");
@@ -116,8 +128,16 @@ export default function EMSTimesheetDashboard() {
   }, [activeCostCenters, selectedCC]);
 
   // Direct selection states matching table column string fields
-  const [selectedSubCenter, setSelectedSubCenter] = useState<string>("Evulation");
-  const [selectedSubItem, setSelectedSubItem] = useState<string>("Wholebirds");
+  const [selectedSubCenter, setSelectedSubCenter] = useState<string>("All");
+  const [selectedSubItem, setSelectedSubItem] = useState<string>("All");
+
+  // Sub Item only applies to the "Processing" sub center — reset it whenever
+  // the user picks a different sub center so stale filters can't hide staff.
+  useEffect(() => {
+    if (!isSubItemApplicable(selectedSubCenter) && selectedSubItem !== "All") {
+      setSelectedSubItem("All");
+    }
+  }, [selectedSubCenter, selectedSubItem]);
 
   const [startDate, setStartDate] = useState<string>(() => new Date().toISOString().split("T")[0]);
   const [endDate, setEndDate] = useState<string>(() => new Date().toISOString().split("T")[0]);
@@ -206,13 +226,22 @@ export default function EMSTimesheetDashboard() {
     const todayStr = new Date().toISOString().split("T")[0];
 
     return employeeDirectory
-      .filter(
-        (emp) =>
-          emp.department === selectedDept &&
-          emp.costCenter === selectedCC &&
-          String(emp.subCenter).trim().toLowerCase() === String(selectedSubCenter).trim().toLowerCase() &&
-          String(emp.subItem).trim().toLowerCase() === String(selectedSubItem).trim().toLowerCase()
-      )
+      .filter((emp) => {
+        const deptMatch = emp.department === selectedDept;
+        const ccMatch = emp.costCenter === selectedCC;
+
+        const subCenterMatch =
+          selectedSubCenter === "All" ||
+          String(emp.subCenter).trim().toLowerCase() === String(selectedSubCenter).trim().toLowerCase();
+
+        // Only enforce the Sub Item match when one is actually selected;
+        // non-Processing sub centers never have a Sub Item value to match.
+        const subItemMatch =
+          selectedSubItem === "All" ||
+          String(emp.subItem).trim().toLowerCase() === String(selectedSubItem).trim().toLowerCase();
+
+        return deptMatch && ccMatch && subCenterMatch && subItemMatch;
+      })
       .map((emp) => {
         let cumulativeRegular = 0;
         let cumulativeOvertime = 0;
@@ -265,7 +294,7 @@ export default function EMSTimesheetDashboard() {
             } else {
               dynamicMissedPunchCount++;
               dynamicOnsiteCount++; 
-              return { label: "MISSED", isAbsent: false, isLate: false, isOnTime: false, isMissedPunch: true };
+              return { label: "8.5 / 0.0", isAbsent: false, isLate: false, isOnTime: false, isMissedPunch: true };
             }
           }
 
@@ -396,13 +425,15 @@ export default function EMSTimesheetDashboard() {
 
       doc.setTextColor(71, 85, 105).setFontSize(9).setFont("helvetica", "normal");
       doc.text(`Department: ${selectedDept}`, 285, 20, { align: "right" });
-      doc.text(`Cost Centre: ${selectedCC} (${selectedSubCenter})`, 285, 24, { align: "right" });
+      const subCenterLabel = selectedSubCenter === "All" ? "All Sub Centers" : selectedSubCenter;
+      const subItemLabel = selectedSubItem === "All" ? "" : ` / ${selectedSubItem}`;
+      doc.text(`Cost Centre: ${selectedCC} (${subCenterLabel}${subItemLabel})`, 285, 24, { align: "right" });
       doc.text(`Period Frame: ${startDate} to ${endDate}`, 285, 28, { align: "right" });
 
       doc.setDrawColor(226, 232, 240).setLineWidth(0.5).line(12, 34, 285, 34);
 
       const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-      const tableHeaders = ["Staff Code", "Full Name"];
+      const tableHeaders = ["Staff Code", "Full Name", "Sub Center", "Sub Item"];
 
       customRangeDatesArray.forEach((dateStr) => {
         const d = new Date(dateStr);
@@ -411,7 +442,12 @@ export default function EMSTimesheetDashboard() {
       tableHeaders.push("Total (Reg/OT)");
 
       const tableBody = processedTimesheetData.map((row) => {
-        const dataCells = [row.staffCode.toUpperCase(), row.fullName.toUpperCase()];
+        const dataCells = [
+          row.staffCode.toUpperCase(),
+          row.fullName.toUpperCase(),
+          row.subCenter ? row.subCenter.toUpperCase() : "—",
+          row.subItem ? row.subItem.toUpperCase() : "—",
+        ];
         row.dailyBreakdown.forEach((day) => dataCells.push(day.label));
         dataCells.push(row.grandTotalLabel);
         return dataCells;
@@ -434,7 +470,7 @@ export default function EMSTimesheetDashboard() {
               data.cell.styles.textColor = [6, 78, 59];
               data.cell.styles.fontStyle = "bold";
             }
-          } else if (data.column.index >= 2) {
+          } else if (data.column.index >= 4) {
             if (cellValue === "MISSED") {
               data.cell.styles.textColor = [220, 38, 38];
               data.cell.styles.fillColor = [254, 242, 242];
@@ -533,7 +569,8 @@ export default function EMSTimesheetDashboard() {
               <select
                 value={selectedSubItem}
                 onChange={(e) => setSelectedSubItem(e.target.value)}
-                className="w-full bg-white border h-10 text-xs font-bold rounded-lg px-3 uppercase text-slate-800 focus:outline-green-700 shadow-xs"
+                disabled={!isSubItemApplicable(selectedSubCenter)}
+                className="w-full bg-white border h-10 text-xs font-bold rounded-lg px-3 uppercase text-slate-800 focus:outline-green-700 shadow-xs disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
               >
                 {subItemsList.map((si) => (
                   <option key={si} value={si}>
@@ -541,6 +578,11 @@ export default function EMSTimesheetDashboard() {
                   </option>
                 ))}
               </select>
+              {!isSubItemApplicable(selectedSubCenter) && (
+                <p className="text-[10px] text-slate-400 font-medium">
+                  Only applicable when Sub Center is &quot;Processing&quot;
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -603,8 +645,12 @@ export default function EMSTimesheetDashboard() {
               <span>Roster Grid:</span> 
               <span className="text-green-700">{selectedDept}</span> &rarr;{" "}
               <span className="text-green-700">{selectedCC}</span> &rarr;{" "}
-              <span className="text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">{selectedSubCenter}</span> &rarr;{" "}
-              <span className="text-green-700 font-black">{selectedSubItem}</span>
+              <span className="text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                {selectedSubCenter === "All" ? "All Sub Centers" : selectedSubCenter}
+              </span> &rarr;{" "}
+              <span className="text-green-700 font-black">
+                {selectedSubItem === "All" ? "All Sub Items" : selectedSubItem}
+              </span>
             </div>
 
             <div className="flex flex-wrap items-center gap-3 bg-white p-2 border rounded-xl shadow-xs">
@@ -635,6 +681,8 @@ export default function EMSTimesheetDashboard() {
                     <TableRow>
                       <TableHead className="w-[100px] p-3">Staff Code</TableHead>
                       <TableHead className="w-[160px] p-3">Full Name</TableHead>
+                      <TableHead className="w-[120px] p-3">Sub Center</TableHead>
+                      <TableHead className="w-[110px] p-3">Sub Item</TableHead>
                       {customRangeDatesArray.map((dateStr) => {
                         const d = new Date(dateStr);
                         return (
@@ -651,6 +699,12 @@ export default function EMSTimesheetDashboard() {
                       <TableRow key={row.staffCode} className="hover:bg-slate-50/50">
                         <TableCell className="p-3 font-mono font-bold text-xs text-slate-900">{row.staffCode}</TableCell>
                         <TableCell className="p-3 text-xs font-extrabold text-slate-700 uppercase truncate max-w-[160px]">{row.fullName}</TableCell>
+                        <TableCell className="p-3 text-xs font-bold text-blue-700 uppercase">
+                          {row.subCenter ? row.subCenter : <span className="text-slate-300 font-medium normal-case">&mdash;</span>}
+                        </TableCell>
+                        <TableCell className="p-3 text-xs font-bold text-green-700 uppercase">
+                          {row.subItem ? row.subItem : <span className="text-slate-300 font-medium normal-case">&mdash;</span>}
+                        </TableCell>
                         {row.dailyBreakdown.map((day, dayIdx) => {
                           let displayStyle = "text-slate-400";
                           if (day.isMissedPunch) displayStyle = "text-purple-600 font-bold bg-purple-50/40";

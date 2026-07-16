@@ -26,7 +26,6 @@ import {
   LayoutDashboard,
   Clock,
   AlertTriangle,
-  Contact2,
   Building2,
   CheckCircle2,
   Terminal,
@@ -820,7 +819,22 @@ export default function EMSDashboard() {
     }
   };
 
-  // 1️⃣ MOVE THIS FIRST (targetTimelineDates)
+// Handle logging out the user
+  const handleSignOut = async () => {
+    try {
+      addLog("[AUTH] Terminating secure user session...");
+      const response = await fetch("/api/auth/signout", { method: "POST" });
+      if (response.ok) {
+        router.push("/");
+      } else {
+        // Fallback redirection if endpoint acts unexpectedly
+        router.push("/");
+      }
+    } catch (err: any) {
+      addLog(`[ERROR] Logout request failed: ${err.message}`);
+      router.push("/");
+    }
+  };
 
   // 2️⃣ PLACE THIS SECOND (liveMetricsRollup)
   const liveMetricsRollup = useMemo(() => {
@@ -1422,6 +1436,15 @@ export default function EMSDashboard() {
                 </label>
               </Button>
             </div>
+           {/* 🚪 NEW SIGN OUT BUTTON */}
+          <Button
+            onClick={handleSignOut}
+            variant="outline"
+            className="h-9 px-3 gap-2 border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700 text-xs font-bold rounded-lg shadow-sm"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Sign Out</span>
+          </Button>
           </div>
         </div>
       </header>

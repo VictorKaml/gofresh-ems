@@ -22,7 +22,11 @@ export async function POST(request: Request) {
       designation: String(emp.designation || "Operator").trim(),
       department: String(emp.department || emp.department_name || "Go Fresh Chicken").trim(),
       cost_center: String(emp.costCenter || emp.cost_center || "Chicken Abattoir").trim(),
-      sub_center: String(emp.subCenter || emp.sub_center || "Evaluation").trim(), // Added field support
+      // sub_center / sub_item default to "" (not a fake value) when the client
+      // doesn't send one — most departments genuinely have no sub_item, and
+      // only "Processing" staff carry Fillets/Mixed Portion/Drumsticks/Cutlets/Wings.
+      sub_center: String(emp.subCenter || emp.sub_center || "").trim(),
+      sub_item: String(emp.subItem || emp.sub_item || "").trim(),
       updated_at: new Date().toISOString(),
     })).filter(emp => emp.staff_code && emp.full_name);
 
