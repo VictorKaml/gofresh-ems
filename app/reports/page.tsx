@@ -307,7 +307,8 @@ export default function EMSTimesheetDashboard() {
           if (isNaN(inH) || isNaN(outH)) {
             dynamicMissedPunchCount++;
             dynamicOnsiteCount++;
-            return { label: "MISSED", isAbsent: false, isLate: false, isOnTime: false, isMissedPunch: true };
+            cumulativeRegular += 8.5; // Add standard 8.5 hours for missed punch
+            return { label: "8.5 / 0.0", isAbsent: false, isLate: false, isOnTime: false, isMissedPunch: true };
           }
 
           const rawTotalHours = (outH * 60 + outM - (inH * 60 + inM)) / 60;
