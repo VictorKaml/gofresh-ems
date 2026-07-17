@@ -548,7 +548,7 @@ export default function EMSTimesheetDashboard() {
 
       // We add Department and Cost Center directly into the global headers
       const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-      const tableHeaders = ["Code", "Full Name", "Department", "Cost Center", "Sub Item"];
+      const tableHeaders = ["Code", "Full Name", "Department", "Cost Center", "Sub Center"];
 
       customRangeDatesArray.forEach((dateStr) => {
         const d = new Date(dateStr);
