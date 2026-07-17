@@ -16,11 +16,11 @@ import {
   Building2, 
   Loader2, 
   CheckCircle2, 
-  XCircle, 
   Clock, 
   Users,
   MapPin,
-  Layers
+  Layers,
+  FileSpreadsheet
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -30,7 +30,7 @@ interface EmployeeProfile {
   fullName: string;
   department: string;
   costCenter: string;
-  subCenter: string; // e.g., 'Evulation'
+  subCenter: string; // e.g., 'Evisceration'
   subItem: string;    // e.g., 'Wholebirds'
 }
 
@@ -48,6 +48,154 @@ interface OnsiteStaffRecord {
 }
 
 type ComplianceFilterMode = "ALL" | "ON_TIME" | "ABSENT" | "LATE" | "ONSITE";
+
+// Reusable business logic for dynamic employee timesheet calculation
+function calculateEmployeeTimesheet(
+  emp: EmployeeProfile,
+  rawSwipesBuffer: RawSwipe[],
+  customRangeDatesArray: string[],
+  todayStr: string
+) {
+  let cumulativeRegular = 0;
+  let cumulativeOvertime = 0;
+  
+  let dynamicOnsiteCount = 0;
+  let dynamicLateCount = 0;
+  let dynamicOnTimeCount = 0;
+  let dynamicAbsentCount = 0;
+
+  const currentStaffCodeClean = String(emp.staffCode).trim().toLowerCase();
+
+  const dailyBreakdown = customRangeDatesArray.map((dateStr) => {
+    const daySwipes = rawSwipesBuffer.filter((s) => {
+      const matchId = String(s.id).trim().toLowerCase() === currentStaffCodeClean;
+      const matchDate = String(s.date).trim() === String(dateStr).trim();
+      return matchId && matchDate;
+    });
+
+    const checkDate = new Date(dateStr);
+    const isWeekend = checkDate.getDay() === 0 || checkDate.getDay() === 6; 
+    const currentDayCap = isWeekend ? 5.5 : 8.5;
+
+    // 1. ABSENT: No swipes whatsoever[cite: 6]
+    if (daySwipes.length === 0) {
+      const isFuture = dateStr > todayStr;
+      const isAbsentMark = !isWeekend && !isFuture;
+      if (isAbsentMark) dynamicAbsentCount++;
+      return { label: "0.0 / 0.0", isAbsent: isAbsentMark, isLate: false, isOnTime: false };
+    }
+
+    // 2. SINGLE PUNCH: Exactly one punch is found -> Grant standard hours[cite: 6]
+    if (daySwipes.length === 1) {
+      cumulativeRegular += currentDayCap;
+      dynamicOnsiteCount++;
+      dynamicLateCount++;
+      return {
+        label: `${currentDayCap.toFixed(1)} / 0.0`,
+        isAbsent: false,
+        isLate: true, 
+        isOnTime: false
+      };
+    }
+
+    const ins = daySwipes
+      .filter((s) => {
+        const t = String(s.type).toUpperCase().trim();
+        return t === "CHECK IN" || t === "IN" || t.includes("IN");
+      })
+      .sort((a, b) => String(a.time).localeCompare(String(b.time)));
+
+    const outs = daySwipes
+      .filter((s) => {
+        const t = String(s.type).toUpperCase().trim();
+        return t === "CHECK OUT" || t === "OUT" || t.includes("OUT");
+      })
+      .sort((a, b) => String(a.time).localeCompare(String(b.time)));
+
+    // MISSING PUNCH HANDLING[cite: 6]
+    if (ins.length === 0 || outs.length === 0) {
+      const sortedFallback = [...daySwipes].sort((a, b) => String(a.time).localeCompare(String(b.time)));
+      if (sortedFallback.length >= 2) {
+        ins.push(sortedFallback[0]);
+        outs.push(sortedFallback[sortedFallback.length - 1]);
+      } else {
+        cumulativeRegular += currentDayCap;
+        dynamicOnsiteCount++;
+        dynamicLateCount++;
+        return {
+          label: `${currentDayCap.toFixed(1)} / 0.0`,
+          isAbsent: false,
+          isLate: true,
+          isOnTime: false
+        };
+      }
+    }
+
+    const firstInTime = ins[0].time;
+    const lastOutTime = outs[outs.length - 1].time;
+
+    const [inH, inM] = firstInTime.split(":").map(Number);
+    const [outH, outM] = lastOutTime.split(":").map(Number);
+
+    if (isNaN(inH) || isNaN(outH)) {
+      cumulativeRegular += currentDayCap;
+      dynamicOnsiteCount++;
+      dynamicLateCount++;
+      return {
+        label: `${currentDayCap.toFixed(1)} / 0.0`,
+        isAbsent: false,
+        isLate: true,
+        isOnTime: false
+      };
+    }
+
+    const rawTotalHours = (outH * 60 + outM - (inH * 60 + inM)) / 60;
+    const totalHoursAfterLunch = Math.max(0, rawTotalHours - 1); 
+
+    if (totalHoursAfterLunch <= 0) {
+      cumulativeRegular += currentDayCap;
+      dynamicOnsiteCount++;
+      dynamicLateCount++;
+      return {
+        label: `${currentDayCap.toFixed(1)} / 0.0`,
+        isAbsent: false,
+        isLate: true,
+        isOnTime: false
+      };
+    }
+
+    let worked = totalHoursAfterLunch > currentDayCap ? currentDayCap : totalHoursAfterLunch;
+    let ot = totalHoursAfterLunch > currentDayCap ? totalHoursAfterLunch - currentDayCap : 0;
+
+    cumulativeRegular += worked;
+    cumulativeOvertime += ot;
+    dynamicOnsiteCount++;
+
+    const isLateShift = (inH > 7 || (inH === 7 && inM > 30));
+    if (isLateShift) {
+      dynamicLateCount++;
+    } else {
+      dynamicOnTimeCount++;
+    }
+
+    return {
+      label: `${worked.toFixed(1)} / ${ot.toFixed(1)}`,
+      isAbsent: false,
+      isLate: isLateShift,
+      isOnTime: !isLateShift
+    };
+  });
+
+  return {
+    ...emp,
+    dailyBreakdown,
+    dynamicOnTimeCount,
+    dynamicLateCount,
+    dynamicAbsentCount,
+    dynamicOnsiteCount,
+    grandTotalLabel: `${cumulativeRegular.toFixed(1)} / ${cumulativeOvertime.toFixed(1)}`,
+  };
+}
 
 export default function EMSTimesheetDashboard() {
   const departmentStructure: Record<string, string[]> = {
@@ -143,6 +291,7 @@ export default function EMSTimesheetDashboard() {
   const [isLoadingAttendance, setIsLoadingAttendance] = useState<boolean>(true);
   const [isLoadingOnsite, setIsLoadingOnsite] = useState<boolean>(true);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState<boolean>(false);
+  const [isDownloadingAllPdf, setIsDownloadingAllPdf] = useState<boolean>(false);
 
   const customRangeDatesArray = useMemo(() => {
     const dates: string[] = [];
@@ -213,6 +362,7 @@ export default function EMSTimesheetDashboard() {
     fetchOnsiteStaff();
   }, []);
 
+  // Filtered dataset mapped for the UI layout view
   const fullyCalculatedDataset = useMemo(() => {
     const todayStr = new Date().toISOString().split("T")[0];
 
@@ -223,138 +373,15 @@ export default function EMSTimesheetDashboard() {
 
         const subCenterMatch =
           selectedSubCenter === "All" ||
-          String(emp.subCenter).trim().toLowerCase() === String(selectedSubCenter).trim().toLowerCase();
+          String(emp.subCenter).toLowerCase().trim() === String(selectedSubCenter).toLowerCase().trim();
 
         const subItemMatch =
           selectedSubItem === "All" ||
-          String(emp.subItem).trim().toLowerCase() === String(selectedSubItem).trim().toLowerCase();
+          String(emp.subItem).toLowerCase().trim() === String(selectedSubItem).toLowerCase().trim();
 
         return deptMatch && ccMatch && subCenterMatch && subItemMatch;
       })
-      .map((emp) => {
-        let cumulativeRegular = 0;
-        let cumulativeOvertime = 0;
-        
-        let dynamicOnsiteCount = 0;
-        let dynamicLateCount = 0;
-        let dynamicOnTimeCount = 0;
-        let dynamicAbsentCount = 0;
-
-        const currentStaffCodeClean = String(emp.staffCode).trim().toLowerCase();
-
-        const dailyBreakdown = customRangeDatesArray.map((dateStr) => {
-          const daySwipes = rawSwipesBuffer.filter((s) => {
-            const matchId = String(s.id).trim().toLowerCase() === currentStaffCodeClean;
-            const matchDate = String(s.date).trim() === String(dateStr).trim();
-            return matchId && matchDate;
-          });
-
-          const checkDate = new Date(dateStr);
-          const isWeekend = checkDate.getDay() === 0 || checkDate.getDay() === 6; 
-          const currentDayCap = isWeekend ? 5.5 : 8.5;
-
-          // 1. ABSENT: No raw swipes whatsoever
-          if (daySwipes.length === 0) {
-            const isFuture = dateStr > todayStr;
-            const isAbsentMark = !isWeekend && !isFuture;
-            if (isAbsentMark) dynamicAbsentCount++;
-            return { label: "0.0 / 0.0", isAbsent: isAbsentMark, isLate: false, isOnTime: false };
-          }
-
-          // 2. SINGLE PUNCH: Exactly one punch is found, treat as late
-          if (daySwipes.length === 1) {
-            dynamicLateCount++;
-            dynamicOnsiteCount++; // Counted as active onsite record, but late
-            return {
-              label: "0.0 / 0.0",
-              isAbsent: false,
-              isLate: true,
-              isOnTime: false
-            };
-          }
-
-          const ins = daySwipes
-            .filter((s) => {
-              const t = String(s.type).toUpperCase().trim();
-              return t === "CHECK IN" || t === "IN" || t.includes("IN");
-            })
-            .sort((a, b) => String(a.time).localeCompare(String(b.time)));
-
-          const outs = daySwipes
-            .filter((s) => {
-              const t = String(s.type).toUpperCase().trim();
-              return t === "CHECK OUT" || t === "OUT" || t.includes("OUT");
-            })
-            .sort((a, b) => String(a.time).localeCompare(String(b.time)));
-
-          // MISSING PUNCH HANDLING: If there is no clear IN or OUT swipe pairs
-          if (ins.length === 0 || outs.length === 0) {
-            const sortedFallback = [...daySwipes].sort((a, b) => String(a.time).localeCompare(String(b.time)));
-            // Try to extract chronological IN/OUT from general day swipes
-            if (sortedFallback.length >= 2) {
-              ins.push(sortedFallback[0]);
-              outs.push(sortedFallback[sortedFallback.length - 1]);
-            } else {
-              // Less than 2 swipes fallback is not possible, meaning they missed punches -> Regard as absent
-              const isAbsentMark = !isWeekend && dateStr <= todayStr;
-              if (isAbsentMark) dynamicAbsentCount++;
-              return { label: "0.0 / 0.0", isAbsent: isAbsentMark, isLate: false, isOnTime: false };
-            }
-          }
-
-          const firstInTime = ins[0].time;
-          const lastOutTime = outs[outs.length - 1].time;
-
-          const [inH, inM] = firstInTime.split(":").map(Number);
-          const [outH, outM] = lastOutTime.split(":").map(Number);
-
-          if (isNaN(inH) || isNaN(outH)) {
-            const isAbsentMark = !isWeekend && dateStr <= todayStr;
-            if (isAbsentMark) dynamicAbsentCount++;
-            return { label: "0.0 / 0.0", isAbsent: isAbsentMark, isLate: false, isOnTime: false };
-          }
-
-          const rawTotalHours = (outH * 60 + outM - (inH * 60 + inM)) / 60;
-          const totalHoursAfterLunch = Math.max(0, rawTotalHours - 1); 
-
-          if (totalHoursAfterLunch <= 0) {
-            dynamicAbsentCount++;
-            return { label: "0.0 / 0.0", isAbsent: true, isLate: false, isOnTime: false };
-          }
-
-          let worked = totalHoursAfterLunch > currentDayCap ? currentDayCap : totalHoursAfterLunch;
-          let ot = totalHoursAfterLunch > currentDayCap ? totalHoursAfterLunch - currentDayCap : 0;
-
-          cumulativeRegular += worked;
-          cumulativeOvertime += ot;
-          dynamicOnsiteCount++;
-
-          // 3. LATE SHIFT rule: came after 7:20
-          const isLateShift = (inH > 7 || (inH === 7 && inM > 30));
-          if (isLateShift) {
-            dynamicLateCount++;
-          } else {
-            dynamicOnTimeCount++;
-          }
-
-          return {
-            label: `${worked.toFixed(1)} / ${ot.toFixed(1)}`,
-            isAbsent: false,
-            isLate: isLateShift,
-            isOnTime: !isLateShift
-          };
-        });
-
-        return {
-          ...emp,
-          dailyBreakdown,
-          dynamicOnTimeCount,
-          dynamicLateCount,
-          dynamicAbsentCount,
-          dynamicOnsiteCount,
-          grandTotalLabel: `${cumulativeRegular.toFixed(1)} / ${cumulativeOvertime.toFixed(1)}`,
-        };
-      });
+      .map((emp) => calculateEmployeeTimesheet(emp, rawSwipesBuffer, customRangeDatesArray, todayStr));
   }, [
     employeeDirectory,
     rawSwipesBuffer,
@@ -392,6 +419,7 @@ export default function EMSTimesheetDashboard() {
     });
   }, [fullyCalculatedDataset, complianceFilter]);
 
+  // Download filtered single-department report
   const handleDownloadReport = async () => {
     if (!processedTimesheetData || processedTimesheetData.length === 0) {
       alert("No active timesheet data available to export.");
@@ -410,7 +438,6 @@ export default function EMSTimesheetDashboard() {
           resolve();
         };
         img.onerror = () => {
-          console.warn("Logo asset missing from /public/gofresh_logo.jpg. Falling back to corporate typography text.");
           doc.setTextColor(30, 41, 59).setFont("helvetica", "bold").setFontSize(22).text("Go", 12, 22);
           doc.setTextColor(21, 128, 61).text("Fresh", 23, 22);
           resolve();
@@ -481,6 +508,113 @@ export default function EMSTimesheetDashboard() {
       console.error(err);
     } finally {
       setIsDownloadingPdf(false);
+    }
+  };
+
+  // Downloads all-inclusive report across ALL departments, cost centers, sub-centers, and sub-items
+  const handleDownloadAllDepartmentsReport = async () => {
+    if (!employeeDirectory || employeeDirectory.length === 0) {
+      alert("No employee directory available to export.");
+      return;
+    }
+    setIsDownloadingAllPdf(true);
+
+    try {
+      const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+      const todayStr = new Date().toISOString().split("T")[0];
+
+      await new Promise<void>((resolve) => {
+        const img = new Image();
+        img.src = "/gofresh_logo.jpg";
+        img.onload = () => {
+          doc.addImage(img, "JPEG", 12, 12, 14, 14);
+          resolve();
+        };
+        img.onerror = () => {
+          doc.setTextColor(30, 41, 59).setFont("helvetica", "bold").setFontSize(22).text("Go", 12, 22);
+          doc.setTextColor(21, 128, 61).text("Fresh", 23, 22);
+          resolve();
+        };
+      });
+
+      doc.setTextColor(148, 163, 184).setFontSize(7.5).setFont("helvetica", "bold").text("MASTER TIMESHEET ARCHIVE", 12, 31);
+      doc.setTextColor(21, 128, 61).setFontSize(11).text("ALL DEPARTMENTS SUMMARY", 285, 15, { align: "right" });
+
+      doc.setTextColor(71, 85, 105).setFontSize(9).setFont("helvetica", "normal");
+      doc.text("Scope: All Departments, Sub Centers & Sub Items", 285, 21, { align: "right" });
+      doc.text(`Period Frame: ${startDate} to ${endDate}`, 285, 26, { align: "right" });
+
+      doc.setDrawColor(226, 232, 240).setLineWidth(0.5).line(12, 34, 285, 34);
+
+      // We add Department and Cost Center directly into the global headers
+      const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      const tableHeaders = ["Code", "Full Name", "Department", "Cost Center", "Sub Item"];
+
+      customRangeDatesArray.forEach((dateStr) => {
+        const d = new Date(dateStr);
+        tableHeaders.push(`${weekdays[d.getDay()]} ${d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit" })}`);
+      });
+      tableHeaders.push("Total (Reg/OT)");
+
+      // Process and map EVERY employee in the system
+      const allCalculated = employeeDirectory
+        .map((emp) => calculateEmployeeTimesheet(emp, rawSwipesBuffer, customRangeDatesArray, todayStr))
+        // Sort alphabetically by Department then Employee Name
+        .sort((a, b) => {
+          const deptCompare = a.department.localeCompare(b.department);
+          if (deptCompare !== 0) return deptCompare;
+          return a.fullName.localeCompare(b.fullName);
+        });
+
+      const tableBody = allCalculated.map((row) => {
+        const dataCells = [
+          row.staffCode.toUpperCase(),
+          row.fullName.toUpperCase(),
+          row.department.toUpperCase(),
+          row.costCenter.toUpperCase(),
+          row.subItem ? row.subItem.toUpperCase() : "—",
+        ];
+        row.dailyBreakdown.forEach((day) => dataCells.push(day.label));
+        dataCells.push(row.grandTotalLabel);
+        return dataCells;
+      });
+
+      autoTable(doc, {
+        startY: 38,
+        margin: { left: 12, right: 12 },
+        head: [tableHeaders],
+        body: tableBody,
+        theme: "striped",
+        headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontSize: 7, fontStyle: "bold", halign: "center" },
+        styles: { fontSize: 6.5, cellPadding: 2, halign: "center", valign: "middle" },
+        columnStyles: {
+          1: { halign: "left" }, // Align name to the left for clean scanning
+        },
+        didParseCell: (data) => {
+          if (data.section !== "body") return;
+          const cellValue = String(data.cell.raw || "").trim();
+          const totalColumnIndex = tableHeaders.length - 1;
+          
+          if (data.column.index === totalColumnIndex) {
+            if (cellValue !== "0.0 / 0.0" && cellValue !== "") {
+              data.cell.styles.fillColor = [209, 250, 229];
+              data.cell.styles.textColor = [6, 78, 59];
+              data.cell.styles.fontStyle = "bold";
+            }
+          } else if (data.column.index >= 6) {
+            if (cellValue !== "0.0 / 0.0" && cellValue !== "") {
+              data.cell.styles.textColor = [5, 150, 105];
+              data.cell.styles.fillColor = [240, 253, 250];
+            }
+          }
+        },
+      });
+
+      doc.save(`GoFresh_Timesheet_MASTER_ALL_${startDate}.pdf`);
+    } catch (err) {
+      console.error("Master Export Failed:", err);
+    } finally {
+      setIsDownloadingAllPdf(false);
     }
   };
 
@@ -640,10 +774,38 @@ export default function EMSTimesheetDashboard() {
                 <span className="text-[10px] font-black text-slate-400 uppercase px-1">To:</span>
                 <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-8 text-xs font-mono font-bold border-none bg-transparent p-1 focus-visible:ring-0" />
               </div>
-              <Button size="sm" onClick={handleDownloadReport} disabled={isDownloadingPdf || processedTimesheetData.length === 0} className="h-8 text-xs font-bold bg-blue-600 text-white hover:bg-blue-700">
-                {isDownloadingPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5 mr-1" />}
-                <span>Report</span>
-              </Button>
+              
+              <div className="flex items-center gap-2">
+                {/* Master Report Button */}
+                <Button 
+                  size="sm" 
+                  onClick={handleDownloadAllDepartmentsReport} 
+                  disabled={isDownloadingAllPdf || employeeDirectory.length === 0} 
+                  className="h-8 text-xs font-bold bg-slate-800 text-white hover:bg-slate-900 flex items-center gap-1"
+                >
+                  {isDownloadingAllPdf ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <FileSpreadsheet className="w-3.5 h-3.5" />
+                  )}
+                  <span>All Departments Report</span>
+                </Button>
+
+                {/* Filtered Single Department Button */}
+                <Button 
+                  size="sm" 
+                  onClick={handleDownloadReport} 
+                  disabled={isDownloadingPdf || processedTimesheetData.length === 0} 
+                  className="h-8 text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-1"
+                >
+                  {isDownloadingPdf ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Download className="w-3.5 h-3.5" />
+                  )}
+                  <span>Filtered Report</span>
+                </Button>
+              </div>
             </div>
           </CardHeader>
 
