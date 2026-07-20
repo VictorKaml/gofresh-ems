@@ -14,7 +14,8 @@ import {
   Layers,
   FileSpreadsheet,
   AlertTriangle,
-  Calendar
+  Calendar,
+  Fingerprint
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -41,9 +42,8 @@ interface OnsiteStaffRecord {
   time: string;
 }
 
-type MetricFilterMode = "ALL" | "ON_TIME" | "ABSENT" | "LATE" | "ONSITE";
+type MetricFilterMode = "ALL" | "ON_TIME" | "ABSENT" | "LATE" | "ONSITE" | "SINGLE_PUNCH";
 
-// Helper function to convert an image path to base64 string
 const getBase64ImageFromUrl = async (imageUrl: string): Promise<string> => {
   const res = await fetch(imageUrl);
   const blob = await res.blob();
@@ -245,6 +245,7 @@ export default function Overview() {
         let rangeLate = false;
         let rangeOnTime = false;
         let rangeAbsent = false;
+        let rangeSinglePunch = false;
 
         const currentStaffCodeClean = String(emp.staffCode).trim().toLowerCase();
         let totalWeekdaysWithNoSwipes = 0;
@@ -280,16 +281,17 @@ export default function Overview() {
 
           rangeOnsite = true;
 
+          // Adjusted single punch behavior: force 0 hours instead of applying day cap framework
           if (daySwipes.length === 1) {
-            regularTotal += currentDayCap;
             rangeLate = true; 
+            rangeSinglePunch = true; 
             return {
               dateStr: day.dateStr,
               clockIn: daySwipes[0].time,
               clockOut: "MISSING",
-              regularHours: currentDayCap,
+              regularHours: 0,
               overtimeHours: 0,
-              label: `${currentDayCap.toFixed(1)} / 0.0`
+              label: "0.0 / 0.0"
             };
           }
 
@@ -313,15 +315,15 @@ export default function Overview() {
               ins.push(sortedFallback[0]);
               outs.push(sortedFallback[sortedFallback.length - 1]);
             } else {
-              regularTotal += currentDayCap;
               rangeLate = true;
+              rangeSinglePunch = true;
               return {
                 dateStr: day.dateStr,
                 clockIn: sortedFallback[0].time,
                 clockOut: "MISSING",
-                regularHours: currentDayCap,
+                regularHours: 0,
                 overtimeHours: 0,
-                label: `${currentDayCap.toFixed(1)} / 0.0`
+                label: "0.0 / 0.0"
               };
             }
           }
@@ -346,14 +348,14 @@ export default function Overview() {
           const [outH, outM] = lastOutTime.split(":").map(Number);
 
           if (isNaN(inH) || isNaN(outH)) {
-            regularTotal += currentDayCap;
+            // Also treat unexpected structural formatting errors as zero-hour outputs
             return {
               dateStr: day.dateStr,
               clockIn: firstInTime,
               clockOut: lastOutTime,
-              regularHours: currentDayCap,
+              regularHours: 0,
               overtimeHours: 0,
-              label: `${currentDayCap.toFixed(1)} / 0.0`
+              label: "0.0 / 0.0"
             };
           }
 
@@ -387,7 +389,8 @@ export default function Overview() {
             onsite: rangeOnsite,
             late: rangeLate,
             onTime: rangeOnTime,
-            absent: rangeAbsent
+            absent: rangeAbsent,
+            singlePunch: rangeSinglePunch
           },
           metricsSummary: {
             regularTotal,
@@ -404,15 +407,17 @@ export default function Overview() {
     let absent = 0;
     let onTime = 0;
     let late = 0;
+    let singlePunch = 0;
 
     fullyCalculatedDataset.forEach((row) => {
       if (row.rangeDateFlags.onsite) onsite++;
       if (row.rangeDateFlags.absent) absent++;
       if (row.rangeDateFlags.onTime) onTime++;
       if (row.rangeDateFlags.late) late++;
+      if (row.rangeDateFlags.singlePunch) singlePunch++;
     });
 
-    return { onsite, absent, onTime, late };
+    return { onsite, absent, onTime, late, singlePunch };
   }, [fullyCalculatedDataset]);
 
   const filteredViewDataset = useMemo(() => {
@@ -421,6 +426,7 @@ export default function Overview() {
       if (selectedMetricFilter === "ABSENT") return row.rangeDateFlags.absent;
       if (selectedMetricFilter === "ON_TIME") return row.rangeDateFlags.onTime;
       if (selectedMetricFilter === "LATE") return row.rangeDateFlags.late;
+      if (selectedMetricFilter === "SINGLE_PUNCH") return row.rangeDateFlags.singlePunch;
       return true;
     });
   }, [fullyCalculatedDataset, selectedMetricFilter]);
@@ -437,8 +443,7 @@ export default function Overview() {
       
       try {
         const logoBase64 = await getBase64ImageFromUrl("/gofresh_logo.jpg");
-        // params: imageSrc, format, x, y, width, height
-        doc.addImage(logoBase64, "JPEG", 12, 10, 32, 14);
+        doc.addImage(logoBase64, "JPEG", 12, 10, 14, 14);
       } catch (imgErr) {
         console.error("Logo could not be loaded into the PDF", imgErr);
         doc.setTextColor(30, 41, 59).setFont("helvetica", "bold").setFontSize(22).text("Go", 12, 22);
@@ -501,7 +506,7 @@ export default function Overview() {
 
       try {
         const logoBase64 = await getBase64ImageFromUrl("/gofresh_logo.jpg");
-        doc.addImage(logoBase64, "JPEG", 12, 10, 32, 14);
+        doc.addImage(logoBase64, "JPEG", 12, 10, 14, 14);
       } catch (imgErr) {
         console.error("Logo could not be loaded into the Master PDF", imgErr);
         doc.setTextColor(30, 41, 59).setFont("helvetica", "bold").setFontSize(22).text("Go", 12, 22);
@@ -531,31 +536,36 @@ export default function Overview() {
             const daySwipes = rawSwipesBuffer.filter((s) => {
               return String(s.id).trim().toLowerCase() === currentStaffCodeClean && String(s.date).trim() === day.dateStr;
             });
-            const checkDate = new Date(day.dateStr);
-            const isWeekend = checkDate.getDay() === 0 || checkDate.getDay() === 6; 
-            const currentDayCap = isWeekend ? 5.5 : 8.5;
 
             if (daySwipes.length === 0) return { label: "0.0 / 0.0" };
+            
+            // Single punch yields zero hours layout inside the master download
             if (daySwipes.length === 1) {
-              regularTotal += currentDayCap;
-              return { label: `${currentDayCap.toFixed(1)} / 0.0` };
+              return { label: "0.0 / 0.0" };
             }
 
             const ins = daySwipes.filter((s) => String(s.type).toUpperCase().includes("IN")).sort((a, b) => String(a.time).localeCompare(String(b.time)));
             const outs = daySwipes.filter((s) => String(s.type).toUpperCase().includes("OUT")).sort((a, b) => String(a.time).localeCompare(String(b.time)));
 
             if (ins.length === 0 || outs.length === 0) {
-              regularTotal += currentDayCap;
-              return { label: `${currentDayCap.toFixed(1)} / 0.0` };
+              const fallback = [...daySwipes].sort((a, b) => String(a.time).localeCompare(String(b.time)));
+              if (fallback.length < 2) {
+                return { label: "0.0 / 0.0" };
+              }
+              ins.push(fallback[0]);
+              outs.push(fallback[fallback.length - 1]);
             }
 
             const [inH, inM] = ins[0].time.split(":").map(Number);
             const [outH, outM] = outs[outs.length - 1].time.split(":").map(Number);
             
             if (isNaN(inH) || isNaN(outH)) {
-              regularTotal += currentDayCap;
-              return { label: `${currentDayCap.toFixed(1)} / 0.0` };
+              return { label: "0.0 / 0.0" };
             }
+
+            const checkDate = new Date(day.dateStr);
+            const isWeekend = checkDate.getDay() === 0 || checkDate.getDay() === 6; 
+            const currentDayCap = isWeekend ? 5.5 : 8.5;
 
             const rawTotalHours = (outH * 60 + outM - (inH * 60 + inM)) / 60;
             const totalHoursAfterLunch = Math.max(0, rawTotalHours - 1); 
@@ -653,7 +663,7 @@ export default function Overview() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4">
             <Card
               onClick={() => setSelectedMetricFilter(selectedMetricFilter === "ONSITE" ? "ALL" : "ONSITE")}
               className={`bg-white border border-slate-200 rounded-xl border-l-4 border-l-blue-600 shadow-xs cursor-pointer transition-all hover:scale-[1.01] ${
@@ -665,8 +675,8 @@ export default function Overview() {
                   <Users className="w-4 h-4 text-blue-600" /> Onsite
                 </CardDescription>
                 <CardTitle className="text-xl font-black text-slate-900 mt-1 flex justify-between items-center">
-                  <span>{liveMetricsRollup.onsite} Checked In</span>
-                  {selectedMetricFilter === "ONSITE" && <Badge className="bg-blue-600 text-[9px]">FILTER ACTIVE</Badge>}
+                  <span>{liveMetricsRollup.onsite}</span>
+                  {selectedMetricFilter === "ONSITE" && <Badge className="bg-blue-600 text-[9px]">ACTIVE</Badge>}
                 </CardTitle>
               </CardHeader>
             </Card>
@@ -679,11 +689,28 @@ export default function Overview() {
             >
               <CardHeader className="p-4">
                 <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                  <AlertTriangle className="w-4 h-4 text-amber-500" /> Absent / Incomplete
+                  <AlertTriangle className="w-4 h-4 text-amber-500" /> Absent Range
                 </CardDescription>
                 <CardTitle className="text-xl font-black text-slate-900 mt-1 flex justify-between items-center">
-                  <span>{liveMetricsRollup.absent} Workers</span>
-                  {selectedMetricFilter === "ABSENT" && <Badge className="bg-amber-500 text-[9px]">FILTER ACTIVE</Badge>}
+                  <span>{liveMetricsRollup.absent}</span>
+                  {selectedMetricFilter === "ABSENT" && <Badge className="bg-amber-500 text-[9px]">ACTIVE</Badge>}
+                </CardTitle>
+              </CardHeader>
+            </Card>
+
+            <Card
+              onClick={() => setSelectedMetricFilter(selectedMetricFilter === "SINGLE_PUNCH" ? "ALL" : "SINGLE_PUNCH")}
+              className={`bg-white border border-slate-200 rounded-xl border-l-4 border-l-purple-600 shadow-xs cursor-pointer transition-all hover:scale-[1.01] ${
+                selectedMetricFilter === "SINGLE_PUNCH" ? "ring-2 ring-purple-500 bg-purple-50/10" : ""
+              }`}
+            >
+              <CardHeader className="p-4">
+                <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                  <Fingerprint className="w-4 h-4 text-purple-600" /> Single/Missing Punch
+                </CardDescription>
+                <CardTitle className="text-xl font-black text-purple-600 mt-1 flex justify-between items-center">
+                  <span>{liveMetricsRollup.singlePunch}</span>
+                  {selectedMetricFilter === "SINGLE_PUNCH" && <Badge className="bg-purple-600 text-[9px]">ACTIVE</Badge>}
                 </CardTitle>
               </CardHeader>
             </Card>
@@ -696,11 +723,11 @@ export default function Overview() {
             >
               <CardHeader className="p-4">
                 <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500" /> On Time (&le; 07:30 AM)
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500" /> On Time (&le; 07:30)
                 </CardDescription>
                 <CardTitle className="text-xl font-black text-slate-900 mt-1 flex justify-between items-center">
-                  <span>{liveMetricsRollup.onTime} Workers</span>
-                  {selectedMetricFilter === "ON_TIME" && <Badge className="bg-emerald-600 text-[9px]">FILTER ACTIVE</Badge>}
+                  <span>{liveMetricsRollup.onTime}</span>
+                  {selectedMetricFilter === "ON_TIME" && <Badge className="bg-emerald-600 text-[9px]">ACTIVE</Badge>}
                 </CardTitle>
               </CardHeader>
             </Card>
@@ -713,11 +740,11 @@ export default function Overview() {
             >
               <CardHeader className="p-4">
                 <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                  <Clock className="w-4 h-4 text-rose-500" /> Late Arrivals (&gt; 07:30 AM)
+                  <Clock className="w-4 h-4 text-rose-500" /> Late Arrival (&gt; 07:30)
                 </CardDescription>
                 <CardTitle className="text-xl font-black text-rose-600 mt-1 flex justify-between items-center">
-                  <span>{liveMetricsRollup.late} Workers</span>
-                  {selectedMetricFilter === "LATE" && <Badge className="bg-rose-600 text-[9px]">FILTER ACTIVE</Badge>}
+                  <span>{liveMetricsRollup.late}</span>
+                  {selectedMetricFilter === "LATE" && <Badge className="bg-rose-600 text-[9px]">ACTIVE</Badge>}
                 </CardTitle>
               </CardHeader>
             </Card>
@@ -861,11 +888,18 @@ export default function Overview() {
                         <tr key={emp.staffCode} className="hover:bg-slate-50/50 transition-colors">
                           <td className="p-3 font-semibold sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                             <div className="font-bold text-slate-900 uppercase truncate max-w-[180px]">{emp.fullName}</div>
-                            <div className="text-[9px] font-mono text-slate-400 flex items-center justify-between mt-0.5">
+                            <div className="text-[9px] font-mono text-slate-400 flex items-center justify-between mt-0.5 gap-1">
                               <span>{emp.staffCode}</span>
-                              <Badge className="text-[7px] px-1 py-0 h-3.5 tracking-tighter" variant={emp.rangeDateFlags.onsite ? "secondary" : "destructive"}>
-                                {emp.rangeDateFlags.onsite ? "ONSITE" : "ABSENT"}
-                              </Badge>
+                              <div className="flex gap-1 shrink-0">
+                                {emp.rangeDateFlags.singlePunch && (
+                                  <Badge className="text-[7px] px-1 py-0 h-3.5 tracking-tighter bg-purple-100 text-purple-800 border-none">
+                                    INCOMPLETE
+                                  </Badge>
+                                )}
+                                <Badge className="text-[7px] px-1 py-0 h-3.5 tracking-tighter" variant={emp.rangeDateFlags.onsite ? "secondary" : "destructive"}>
+                                  {emp.rangeDateFlags.onsite ? "ONSITE" : "ABSENT"}
+                                </Badge>
+                              </div>
                             </div>
                             <div className="mt-2 space-y-1">
                               <div className="text-[9px] font-black uppercase text-blue-600 bg-blue-50 px-1 py-0.5 rounded w-max">Regular (8.5h Cap)</div>
@@ -875,7 +909,7 @@ export default function Overview() {
 
                           {emp.weeklyDayBreakdowns.map((day) => (
                             <td key={day.dateStr} className="p-3 text-center border-l border-slate-200 align-top">
-                              <div className="text-[10px] text-slate-400 font-mono font-medium">
+                              <div className={`text-[10px] font-mono font-medium ${day.clockOut === "MISSING" ? "text-purple-600 font-bold bg-purple-50/40 rounded px-0.5" : "text-slate-400"}`}>
                                 {day.clockIn} &rarr; {day.clockOut}
                               </div>
                               <div className="mt-2 space-y-1 font-mono font-bold text-xs">
