@@ -48,6 +48,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import AttendanceReportPage from "../overall/page";
 import AttendanceDashboard from "../reports/page";
+import Overview from "../overview/page";
 
 interface EmployeeProfile {
   staffCode: string;
@@ -442,6 +443,29 @@ export default function EMSDashboard() {
 
   const [workersDataset, setWorkersDataset] = useState<EmployeeProfile[]>([]);
 
+  // Helper logic to get the full week range matching a specific date anchor string
+  const targetWeekDays = useMemo(() => {
+    const current = new Date(selectedDate);
+    const day = current.getDay();
+    const distanceToMonday = day === 0 ? -6 : 1 - day;
+    const monday = new Date(current);
+    monday.setDate(current.getDate() + distanceToMonday);
+
+    const daysList = [];
+    const weekdayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    
+    for (let i = 0; i < 7; i++) {
+      const nextDay = new Date(monday);
+      nextDay.setDate(monday.getDate() + i);
+      const isoString = nextDay.toISOString().split("T")[0];
+      daysList.push({
+        dateStr: isoString,
+        dayName: weekdayNames[nextDay.getDay()],
+      });
+    }
+    return daysList;
+  }, [selectedDate]);
+
   const handleCreateStaffSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -522,7 +546,7 @@ export default function EMSDashboard() {
     }
   };
 
- const handleBulkEmployeeExcelUpload = async (
+  const handleBulkEmployeeExcelUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
   ) => {
     const file = e.target.files?.[0];
@@ -595,7 +619,6 @@ export default function EMSDashboard() {
 
           if (response.ok) {
             addLog(`Successfully synchronized ${cleanEmployees.length} employee profiles to backend records.`);
-          
           } else {
             alert(`Roster Sync Failed: ${result.error || "Server transaction rejected."}`);
             addLog(`[ROSTER API ERROR]: ${result.error || "Batch payload rejected."}`);
@@ -697,7 +720,7 @@ export default function EMSDashboard() {
 
           // Optional: If you still consider them late if their partial checkIn is late
           if (clockIn !== "—" && clockIn > "07:30") {
-            dayStatus = "LATE"; // Or keep it as "MISSED A CLOCK PUNCH" based on your preference
+            dayStatus = "LATE";
           }
         } else {
           const [inH, inM] = clockIn.split(":").map(Number);
@@ -753,7 +776,7 @@ export default function EMSDashboard() {
         },
       };
     });
-  }, [employeeDirectory, rawSwipesBuffer, monthFilter]);
+  }, [employeeDirectory, rawSwipesBuffer, monthFilter, selectedDate]);
 
   // Derive dynamic list of Cost Centers based on selected department to avoid dead-ends
   const availableCostCenters = useMemo(() => {
@@ -819,7 +842,7 @@ export default function EMSDashboard() {
     }
   };
 
-// Handle logging out the user
+  // Handle logging out the user
   const handleSignOut = async () => {
     try {
       addLog("[AUTH] Terminating secure user session...");
@@ -827,7 +850,6 @@ export default function EMSDashboard() {
       if (response.ok) {
         router.push("/");
       } else {
-        // Fallback redirection if endpoint acts unexpectedly
         router.push("/");
       }
     } catch (err: any) {
@@ -837,55 +859,155 @@ export default function EMSDashboard() {
   };
 
   // 2️⃣ PLACE THIS SECOND (liveMetricsRollup)
+// Computes base operational counts strictly dynamic to selected Department & Cost Center selection
   const liveMetricsRollup = useMemo(() => {
-    // Filter raw swipes that fall strictly within our start and end dates
-    const recordsInRange = rawSwipesBuffer.filter((s) => {
-      if (!s.date) return false;
-      return s.date >= startDate && s.date <= endDate;
-    });
-
     let onsite = 0;
     let onTime = 0;
     let late = 0;
     let absent = 0;
 
-    employeeDirectory.forEach((emp) => {
-      const employeeSwipesInRange = recordsInRange.filter(
-        (s) => s.id === emp.staffCode,
+    const departmentFilteredEmployees = employeeDirectory.filter((emp) => {
+      if (reportDept !== "ALL" && emp.department !== reportDept) return false;
+      if (reportCC !== "ALL" && emp.costCenter !== reportCC) return false;
+      return true;
+    });
+
+    departmentFilteredEmployees.forEach((emp) => {
+      const daySwipes = rawSwipesBuffer.filter(
+        (s) => s.id === emp.staffCode && s.date === selectedDate
       );
 
-      if (employeeSwipesInRange.length > 0) {
-        onsite++; // The employee checked in at least once during this timeframe
+      const ins = daySwipes
+        .filter((s) => s.type.toLowerCase().includes("in"))
+        .sort((a, b) => a.time.localeCompare(b.time));
+      const outs = daySwipes
+        .filter((s) => s.type.toLowerCase().includes("out"))
+        .sort((a, b) => a.time.localeCompare(b.time));
 
-        // Find their first absolute check-in time inside the range to flag arrival habits
-        const ins = employeeSwipesInRange
-          .filter((s) => s.type.toLowerCase().includes("in"))
-          .sort((a, b) => a.time.localeCompare(b.time));
+      const clockIn = ins.length > 0 ? ins[0].time : "—";
+      const clockOut = outs.length > 0 ? outs[outs.length - 1].time : "—";
 
-        const firstIn =
-          ins.length > 0 ? ins[0].time : employeeSwipesInRange[0].time;
-
-        if (firstIn <= "07:30") {
+      if (clockIn !== "—" || clockOut !== "—") {
+        onsite++;
+        if (clockIn !== "—" && clockIn <= "07:30") {
           onTime++;
         } else {
           late++;
         }
+        if (clockIn === "—" || clockOut === "—") {
+          absent++;
+        }
       } else {
-        absent++; // Zero records found for this employee across the whole range window
+        absent++;
       }
     });
 
-    return { onsite, onTime, late, absent, total: employeeDirectory.length };
-  }, [rawSwipesBuffer, employeeDirectory, startDate, endDate]);
+    return { onsite, onTime, late, absent, total: departmentFilteredEmployees.length };
+  }, [rawSwipesBuffer, employeeDirectory, selectedDate, reportDept, reportCC]);
 
-  const filteredViewDataset = useMemo(() => {
-    return systemProcessedDataset.filter((row) => {
-      return (
-        row.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        row.staffCode.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+  // Comprehensive analytics parsing utilizing standard 8.5 hour shift caps across entire calendar week row structures
+  const processedRosterDataset = useMemo(() => {
+    const departmentFilteredEmployees = employeeDirectory.filter((emp) => {
+      if (reportDept !== "ALL" && emp.department !== reportDept) return false;
+      if (reportCC !== "ALL" && emp.costCenter !== reportCC) return false;
+      return true;
     });
-  }, [systemProcessedDataset, searchQuery]);
+
+    return departmentFilteredEmployees.map((emp) => {
+      let grandRegularTotal = 0;
+      let grandOvertimeTotal = 0;
+      let isEmployeeOnsiteOnSelectedDate = false;
+      let isEmployeeAbsentOnSelectedDate = false;
+      let isEmployeeOnTimeOnSelectedDate = false;
+      let isEmployeeLateOnSelectedDate = false;
+
+      const weeklyDayBreakdowns = targetWeekDays.map((day) => {
+        const daySwipes = rawSwipesBuffer.filter(
+          (s) => s.id === emp.staffCode && s.date === day.dateStr
+        );
+
+        const ins = daySwipes
+          .filter((s) => s.type.toLowerCase().includes("in"))
+          .sort((a, b) => a.time.localeCompare(b.time));
+        const outs = daySwipes
+          .filter((s) => s.type.toLowerCase().includes("out"))
+          .sort((a, b) => a.time.localeCompare(b.time));
+
+        const clockIn = ins.length > 0 ? ins[0].time : "—";
+        const clockOut = outs.length > 0 ? outs[outs.length - 1].time : "—";
+
+        let regularHours = 0;
+        let overtimeHours = 0;
+        let isAbsent = true;
+
+        if (clockIn !== "—" || clockOut !== "—") {
+          if (day.dateStr === selectedDate) isEmployeeOnsiteOnSelectedDate = true;
+
+          if (clockIn !== "—" && clockOut !== "—") {
+            isAbsent = false;
+            const [inH, inM] = clockIn.split(":").map(Number);
+            const [outH, outM] = clockOut.split(":").map(Number);
+            const duration = parseFloat(((outH * 60 + outM - (inH * 60 + inM)) / 60).toFixed(2));
+
+            if (duration > 8.5) {
+              regularHours = 8.5;
+              overtimeHours = parseFloat((duration - 8.5).toFixed(2));
+            } else {
+              regularHours = duration > 0 ? duration : 0;
+              overtimeHours = 0;
+            }
+          }
+        }
+
+        if (day.dateStr === selectedDate) {
+          isEmployeeAbsentOnSelectedDate = isAbsent;
+          if (clockIn !== "—") {
+            if (clockIn <= "07:30") isEmployeeOnTimeOnSelectedDate = true;
+            else isEmployeeLateOnSelectedDate = true;
+          }
+        }
+
+        grandRegularTotal += regularHours;
+        grandOvertimeTotal += overtimeHours;
+
+        return {
+          dateStr: day.dateStr,
+          regularHours,
+          overtimeHours,
+          clockIn,
+          clockOut,
+        };
+      });
+
+      return {
+        ...emp,
+        weeklyDayBreakdowns,
+        metricsSummary: {
+          regularTotal: parseFloat(grandRegularTotal.toFixed(2)),
+          overtimeTotal: parseFloat(grandOvertimeTotal.toFixed(2)),
+          combinedTotal: parseFloat((grandRegularTotal + grandOvertimeTotal).toFixed(2)),
+        },
+        selectedDateFlags: {
+          onsite: isEmployeeOnsiteOnSelectedDate,
+          absent: isEmployeeAbsentOnSelectedDate,
+          onTime: isEmployeeOnTimeOnSelectedDate,
+          late: isEmployeeLateOnSelectedDate,
+        },
+      };
+    });
+  }, [employeeDirectory, rawSwipesBuffer, targetWeekDays, selectedDate, reportDept, reportCC]);
+
+ // Master layout structural logic dynamic to selected interactive metrics indicators
+  const filteredViewDataset = useMemo(() => {
+    return processedRosterDataset.filter((emp) => {
+      if (selectedMetricFilter === "ALL") return true;
+      if (selectedMetricFilter === "ONSITE") return emp.selectedDateFlags.onsite;
+      if (selectedMetricFilter === "ABSENT") return emp.selectedDateFlags.absent;
+      if (selectedMetricFilter === "ON_TIME") return emp.selectedDateFlags.onTime;
+      if (selectedMetricFilter === "LATE") return emp.selectedDateFlags.late;
+      return true;
+    });
+  }, [processedRosterDataset, selectedMetricFilter]);
 
   const staffModuleDataset = useMemo(() => {
     return systemProcessedDataset.filter((row) => {
@@ -902,7 +1024,6 @@ export default function EMSDashboard() {
   }, [systemProcessedDataset, staffSubTab, staffSearchQuery]);
 
   // Derive headcount summary totals for selected operational department workspace bounds
-
   const departmentMetrics = useMemo(() => {
     const counts: Record<string, { total: number; active: number }> = {};
     systemProcessedDataset.forEach((e) => {
@@ -990,7 +1111,7 @@ export default function EMSDashboard() {
             },
             body: JSON.stringify({
               records: dynamicSwipes,
-              operatorEmail: "DASHBOARD_EXCEL_INGEST", // Pass actual session email here if available
+              operatorEmail: "DASHBOARD_EXCEL_INGEST",
             }),
           });
 
@@ -1123,7 +1244,6 @@ export default function EMSDashboard() {
       return;
     }
 
-    // Helper engine to convert "HH:MM" timestamp strings into total minutes
     const parseTimeToMinutes = (timeStr: string): number => {
       if (!timeStr || timeStr === "—") return 0;
       const [hours, minutes] = timeStr.split(":").map(Number);
@@ -1132,42 +1252,31 @@ export default function EMSDashboard() {
 
     try {
       const doc = new jsPDF();
-
-      // 1. Determine Day of the Week & Shift Benchmarks
-      // Expects selectedDate to be in a standard format (e.g., "YYYY-MM-DD" or "MM/DD/YYYY")
       const dateObj = new Date(selectedDate);
-      const dayOfWeek = dateObj.getDay(); // 0 = Sunday, 6 = Saturday, 1-5 = Mon-Fri
+      const dayOfWeek = dateObj.getDay();
       const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
 
-      // Define standard working configurations in minutes (minus 1 hour lunch break)
       const lunchDeductionMins = 60;
       let standardShiftMins = 0;
       let dayTypeText = "";
 
       if (isWeekend) {
-        // 07:30 to 13:00 is 5.5 hours (330 mins). Minus 60 mins lunch = 270 mins (4.5 hours)
         standardShiftMins = 5.5 * 60 - lunchDeductionMins;
         dayTypeText = "Weekend Rules Apply (4.5h Regular Benchmark)";
       } else {
-        // 07:30 to 17:00 is 9.5 hours (570 mins). Minus 60 mins lunch = 510 mins (8.5 hours)
         standardShiftMins = 9.5 * 60 - lunchDeductionMins;
         dayTypeText = "Weekday Rules Apply (8.5h Regular Benchmark)";
       }
 
-      // 2. Render Corporate Branding Header
       try {
         doc.addImage("/gofresh_logo.jpg", "JPEG", 14, 12, 25, 25);
       } catch (logoErr) {
-        console.warn(
-          "Logo image could not be loaded, skipping render.",
-          logoErr,
-        );
+        console.warn("Logo image could not be loaded, skipping render.", logoErr);
       }
 
-      // 3. Document Title & Operational Metadata Layout
       doc.setFont("helvetica", "bold");
       doc.setFontSize(16);
-      doc.setTextColor(37, 99, 235); // Blue-600
+      doc.setTextColor(37, 99, 235);
       doc.text("OVERALL OPERATIONAL ANALTICS REPORT", 44, 20);
 
       doc.setFontSize(9);
@@ -1187,20 +1296,17 @@ export default function EMSDashboard() {
       doc.setDrawColor(226, 232, 240);
       doc.line(14, 42, 196, 42);
 
-      // 4. Filter Target Personnel Dataset Matrix
       const subsetWorkers = systemProcessedDataset.filter(
         (emp) =>
           emp.department === checklistDept &&
           emp.costCenter === checklistCostCenter,
       );
 
-      // Trackers for Summary KPI Blocks
       let onsiteCount = 0;
       let onTimeCount = 0;
       let lateCount = 0;
       let absentCount = 0;
 
-      // 5. Compute Swipe Metrics, Hours, & Compile Rows
       const tableRows = subsetWorkers.map((emp) => {
         const daySwipes = rawSwipesBuffer.filter(
           (s) => s.id === emp.staffCode && s.date === selectedDate,
@@ -1222,7 +1328,6 @@ export default function EMSDashboard() {
         let regularHoursStr = "0.00";
         let overtimeStr = "0.00";
 
-        // Strict historical logic: requires both pieces of structural data
         if (clockIn !== "—" && clockOut !== "—") {
           onsiteCount++;
 
@@ -1234,18 +1339,16 @@ export default function EMSDashboard() {
             status = "LATE";
           }
 
-          // Calculate total gross time in minutes
           const startMins = parseTimeToMinutes(clockIn);
           const endMins = parseTimeToMinutes(clockOut);
 
-          // Net Time worked after enforcing the 1-hour unpaid lunch break deduction
           const totalMinsWorked = Math.max(
             0,
             endMins - startMins - lunchDeductionMins,
           );
 
           if (totalMinsWorked > standardShiftMins) {
-            regularHoursStr = (standardShiftMins / 60).toFixed(2); // caps at max standard shift limit (8.5 or 4.5)
+            regularHoursStr = (standardShiftMins / 60).toFixed(2);
             const otMins = totalMinsWorked - standardShiftMins;
             overtimeStr = (otMins / 60).toFixed(2);
           } else {
@@ -1267,9 +1370,8 @@ export default function EMSDashboard() {
         ];
       });
 
-      // 6. Draw Aggregate Summary Matrix Banner Block
       doc.setFont("helvetica", "bold");
-      doc.setFillColor(248, 250, 252); // slate-50
+      doc.setFillColor(248, 250, 252);
       doc.rect(14, 46, 182, 12, "F");
       doc.setFontSize(9);
       doc.setTextColor(51, 65, 85);
@@ -1279,7 +1381,6 @@ export default function EMSDashboard() {
         54,
       );
 
-      // 7. Generate Master Data Table via autoTable Engine
       autoTable(doc, {
         startY: 64,
         head: [
@@ -1295,7 +1396,7 @@ export default function EMSDashboard() {
         ],
         body: tableRows,
         theme: "striped",
-        headStyles: { fillColor: [79, 70, 229] }, // Indigo-600
+        headStyles: { fillColor: [79, 70, 229] },
         styles: { fontSize: 8.5, cellPadding: 2.5 },
         columnStyles: {
           5: { halign: "right" },
@@ -1321,7 +1422,6 @@ export default function EMSDashboard() {
         },
       });
 
-      // 8. Trigger File Save Dialog & Write System Log
       doc.save(
         `Overall_Analytics_${checklistDept.replace(/\s+/g, "_")}_${selectedDate}.pdf`,
       );
@@ -1377,7 +1477,7 @@ export default function EMSDashboard() {
               onClick={() => setActiveTab("REPORTS_HUB")}
               className={`px-4 py-2 rounded-lg flex items-center gap-1.5 transition-all ${activeTab === "REPORTS_HUB" ? "bg-white text-blue-600 shadow-xs" : "text-slate-600 hover:text-slate-900"}`}
             >
-              <Terminal className="w-4 h-4 text-blue-600" /> Detailed Logs
+              <Terminal className="w-4 h-4 text-blue-600" /> Logs
             </button>
             <button
               onClick={() => setActiveTab("SUMMARY")}
@@ -1419,7 +1519,7 @@ export default function EMSDashboard() {
                 onChange={handleBulkEmployeeExcelUpload}
                 accept=".xlsx, .xls, .csv"
                 className="hidden"
-               id="excel-bulk-file-uploader"
+                id="excel-bulk-file-uploader"
               />
               <Button
                 asChild
@@ -1436,15 +1536,14 @@ export default function EMSDashboard() {
                 </label>
               </Button>
             </div>
-           {/* 🚪 NEW SIGN OUT BUTTON */}
-          <Button
-            onClick={handleSignOut}
-            variant="outline"
-            className="h-9 px-3 gap-2 border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700 text-xs font-bold rounded-lg shadow-sm"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span>Sign Out</span>
-          </Button>
+            <Button
+              onClick={handleSignOut}
+              variant="outline"
+              className="h-9 px-3 gap-2 border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700 text-xs font-bold rounded-lg shadow-sm"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Sign Out</span>
+            </Button>
           </div>
         </div>
       </header>
@@ -1471,722 +1570,11 @@ export default function EMSDashboard() {
 
           {/* ========================================== OVERVIEW TAB CONTENT ========================================== */}
           {activeTab === "OVERVIEW" && (
-            <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-2">
-                <div>
-                  <h2 className="text-base font-extrabold text-slate-800 uppercase tracking-wide">
-                    Workforce Attendance Analytics Dashboard
-                  </h2>
-                  <p className="text-xs text-slate-400 font-medium uppercase">
-                    Select target transaction dates below to parse automatic
-                    card metric accumulations.
-                  </p>
-                </div>
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-2">
-                  {/* 🗓️ DUAL PARAMETER RANGE PROCESSING CONSOLE */}
-                  <div className="flex flex-wrap items-center gap-3 bg-white border border-slate-200 p-2 rounded-xl shadow-xs shrink-0">
-                    <div className="flex items-center gap-1.5">
-                      <label
-                        htmlFor="start-date"
-                        className="text-[10px] font-black uppercase text-slate-400 pl-1 tracking-wider"
-                      >
-                        From:
-                      </label>
-                      <Input
-                        id="start-date"
-                        type="date"
-                        value={startDate}
-                        onChange={(e) => setStartDate(e.target.value)}
-                        className="h-8 text-xs font-bold border-none shadow-none focus-visible:ring-0 w-auto cursor-pointer p-0 pr-2 text-blue-600 bg-transparent uppercase"
-                      />
-                    </div>
-
-                    <div className="h-4 w-[1px] bg-slate-200 hidden sm:block" />
-
-                    <div className="flex items-center gap-1.5">
-                      <label
-                        htmlFor="end-date"
-                        className="text-[10px] font-black uppercase text-slate-400 pl-1 tracking-wider"
-                      >
-                        To:
-                      </label>
-                      <Input
-                        id="end-date"
-                        type="date"
-                        value={endDate}
-                        onChange={(e) => setEndDate(e.target.value)}
-                        className="h-8 text-xs font-bold border-none shadow-none focus-visible:ring-0 w-auto cursor-pointer p-0 pr-2 text-blue-600 bg-transparent uppercase"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* 1. Metric Breakdown Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <Card
-                  onClick={() => {
-                    setSelectedMetricFilter(
-                      selectedMetricFilter === "ONSITE" ? "ALL" : "ONSITE",
-                    );
-                    setReportDept("ALL");
-                    setReportCC("ALL");
-                  }}
-                  className={`bg-white border border-slate-200 rounded-xl border-l-4 border-l-blue-600 shadow-xs cursor-pointer transition-all hover:scale-[1.01] ${
-                    selectedMetricFilter === "ONSITE"
-                      ? "ring-2 ring-blue-500 ring-offset-2 bg-blue-50/10"
-                      : ""
-                  }`}
-                >
-                  <CardHeader className="p-4">
-                    <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                      <Users className="w-4 h-4 text-blue-600" /> Onsite
-                    </CardDescription>
-                    <CardTitle className="text-xl font-black text-slate-900 mt-1 flex justify-between items-center">
-                      <span>{liveMetricsRollup.onsite} Checked In</span>
-                      {selectedMetricFilter === "ONSITE" && (
-                        <Badge className="bg-blue-600 text-[9px] tracking-wider">
-                          FILTER ACTIVE
-                        </Badge>
-                      )}
-                    </CardTitle>
-                  </CardHeader>
-                </Card>
-
-                <Card
-                  onClick={() => {
-                    setSelectedMetricFilter(
-                      selectedMetricFilter === "ABSENT" ? "ALL" : "ABSENT",
-                    );
-                    setReportDept("ALL");
-                    setReportCC("ALL");
-                  }}
-                  className={`bg-white border border-slate-200 rounded-xl border-l-4 border-l-amber-500 shadow-xs cursor-pointer transition-all hover:scale-[1.01] ${
-                    selectedMetricFilter === "ABSENT"
-                      ? "ring-2 ring-amber-500 ring-offset-2 bg-amber-50/10"
-                      : ""
-                  }`}
-                >
-                  <CardHeader className="p-4">
-                    <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                      <AlertTriangle className="w-4 h-4 text-amber-500" />{" "}
-                      Absent
-                    </CardDescription>
-                    <CardTitle className="text-xl font-black text-slate-900 mt-1 flex justify-between items-center">
-                      <span>{liveMetricsRollup.absent} Workers</span>
-                      {selectedMetricFilter === "ABSENT" && (
-                        <Badge className="bg-amber-500 text-[9px] tracking-wider">
-                          FILTER ACTIVE
-                        </Badge>
-                      )}
-                    </CardTitle>
-                  </CardHeader>
-                </Card>
-
-                <Card
-                  onClick={() => {
-                    setSelectedMetricFilter(
-                      selectedMetricFilter === "ON_TIME" ? "ALL" : "ON_TIME",
-                    );
-                    setReportDept("ALL");
-                    setReportCC("ALL");
-                  }}
-                  className={`bg-white border border-slate-200 rounded-xl border-l-4 border-l-emerald-500 shadow-xs cursor-pointer transition-all hover:scale-[1.01] ${
-                    selectedMetricFilter === "ON_TIME"
-                      ? "ring-2 ring-emerald-500 ring-offset-2 bg-emerald-50/10"
-                      : ""
-                  }`}
-                >
-                  <CardHeader className="p-4">
-                    <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500" /> On
-                      Time (&le; 07:30 AM)
-                    </CardDescription>
-                    <CardTitle className="text-xl font-black text-emerald-600 mt-1 flex justify-between items-center">
-                      <span>{liveMetricsRollup.onTime} Workers</span>
-                      {selectedMetricFilter === "ON_TIME" && (
-                        <Badge className="bg-emerald-600 text-[9px] tracking-wider">
-                          FILTER ACTIVE
-                        </Badge>
-                      )}
-                    </CardTitle>
-                  </CardHeader>
-                </Card>
-
-                <Card
-                  onClick={() => {
-                    setSelectedMetricFilter(
-                      selectedMetricFilter === "LATE" ? "ALL" : "LATE",
-                    );
-                    setReportDept("ALL");
-                    setReportCC("ALL");
-                  }}
-                  className={`bg-white border border-slate-200 rounded-xl border-l-4 border-l-rose-500 shadow-xs cursor-pointer transition-all hover:scale-[1.01] ${
-                    selectedMetricFilter === "LATE"
-                      ? "ring-2 ring-rose-500 ring-offset-2 bg-rose-50/10"
-                      : ""
-                  }`}
-                >
-                  <CardHeader className="p-4">
-                    <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                      <Clock className="w-4 h-4 text-rose-500" /> Late Arrivals
-                      (&gt; 07:30 AM)
-                    </CardDescription>
-                    <CardTitle className="text-xl font-black text-rose-600 mt-1 flex justify-between items-center">
-                      <span>{liveMetricsRollup.late} Workers</span>
-                      {selectedMetricFilter === "LATE" && (
-                        <Badge className="bg-rose-600 text-[9px] tracking-wider">
-                          FILTER ACTIVE
-                        </Badge>
-                      )}
-                    </CardTitle>
-                  </CardHeader>
-                </Card>
-              </div>
-
-              {/* 2. Dynamic Filter View & Functional PDF Report Engine Section */}
-              {(() => {
-                const filteredWorkerDataset = employeeDirectory.filter(
-                  (emp) => {
-                    // 🚀 FIX: Evaluate swipes across the entire selected date range, matching liveMetricsRollup
-                    const personalSwipes = rawSwipesBuffer.filter(
-                      (s) =>
-                        s.id === emp.staffCode &&
-                        s.date >= startDate &&
-                        s.date <= endDate,
-                    );
-                    const checkIns = personalSwipes
-                      .filter((s) => s.type.toLowerCase().includes("in"))
-                      .sort((a, b) => a.time.localeCompare(b.time));
-                    const clockIn =
-                      checkIns.length > 0
-                        ? checkIns[0].time
-                        : personalSwipes.length > 0
-                          ? personalSwipes[0].time
-                          : null;
-
-                    if (
-                      selectedMetricFilter === "ONSITE" &&
-                      personalSwipes.length === 0
-                    )
-                      return false;
-                    if (
-                      selectedMetricFilter === "ABSENT" &&
-                      personalSwipes.length > 0
-                    )
-                      return false;
-                    if (
-                      selectedMetricFilter === "ON_TIME" &&
-                      (!clockIn || clockIn > "07:30")
-                    )
-                      return false;
-                    if (
-                      selectedMetricFilter === "LATE" &&
-                      (!clockIn || clockIn <= "07:30")
-                    )
-                      return false;
-
-                    if (reportDept !== "ALL" && emp.department !== reportDept)
-                      return false;
-                    if (reportCC !== "ALL" && emp.costCenter !== reportCC)
-                      return false;
-
-                    return true;
-                  },
-                );
-
-                // Pure JS PDF Generation Logic
-
-                return (
-                  <div className="space-y-4">
-                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                      <div>
-                        <h3 className="text-sm font-black text-slate-800 uppercase tracking-wide flex items-center gap-2">
-                          Live Report Matrix
-                          <Badge
-                            variant="outline"
-                            className="bg-slate-200 text-slate-800 border-slate-300 font-mono text-[10px] px-2 font-bold"
-                          >
-                            {selectedMetricFilter.replace("_", " ")}
-                          </Badge>
-                        </h3>
-                        <p className="text-xs text-slate-500 font-medium mt-0.5">
-                          Showing{" "}
-                          <span className="font-bold text-slate-900">
-                            {filteredWorkerDataset.length}
-                          </span>{" "}
-                          records on this display grid interface.
-                        </p>
-                      </div>
-
-                      {/* ==================== FILTERS & EXPORT CONTROL BAR ==================== */}
-                      <div className="flex flex-wrap gap-4 items-end bg-slate-50 p-4 rounded-xl border border-slate-200">
-                        {/* Department Dropdown Filter */}
-                        <div className="flex flex-col gap-1">
-                          <label className="text-[10px] font-black uppercase text-slate-400 pl-0.5">
-                            Department Filter:
-                          </label>
-                          <select
-                            value={reportDept}
-                            onChange={(e) => {
-                              setReportDept(e.target.value);
-                              setReportCC("ALL"); // Reset child dropdown to avoid orphans
-                            }}
-                            className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-xs focus:outline-none min-w-[170px]"
-                          >
-                            <option value="ALL">ALL DEPARTMENTS</option>
-                            {Array.from(
-                              new Set(
-                                employeeDirectory.map((e) => e.department),
-                              ),
-                            )
-                              .filter(Boolean)
-                              .map((dept) => (
-                                <option key={dept} value={dept}>
-                                  {dept.toUpperCase()}
-                                </option>
-                              ))}
-                          </select>
-                        </div>
-
-                        {/* Cost Center Dropdown Filter (Dependent) */}
-                        <div className="flex flex-col gap-1">
-                          <label className="text-[10px] font-black uppercase text-slate-400 pl-0.5">
-                            Cost Center Context:
-                          </label>
-                          <select
-                            value={reportCC}
-                            onChange={(e) => setReportCC(e.target.value)}
-                            className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-xs focus:outline-none min-w-[170px]"
-                          >
-                            <option value="ALL">ALL COST CENTERS</option>
-                            {Array.from(
-                              new Set(
-                                employeeDirectory
-                                  .filter(
-                                    (e) =>
-                                      reportDept === "ALL" ||
-                                      e.department === reportDept,
-                                  )
-                                  .map((e) => e.costCenter),
-                              ),
-                            )
-                              .filter(Boolean)
-                              .map((cc) => (
-                                <option key={cc} value={cc}>
-                                  {cc.toUpperCase()}
-                                </option>
-                              ))}
-                          </select>
-                        </div>
-
-                        {/* Dynamic Branded PDF Export Action Button */}
-                        {/* Dynamic Branded PDF Export Action Button */}
-                        <div className="ml-auto">
-                          <Button
-                            onClick={() => {
-                              // 1. Create a virtual Image element to load the local public file
-                              const img = new Image();
-                              img.src = "/gofresh_logo.jpg"; // Path points to public/gofresh_logo.jpg
-
-                              img.onload = () => {
-                                // Convert image to canvas to get a clean JPEG data URL string
-                                const canvas = document.createElement("canvas");
-                                canvas.width = img.width;
-                                canvas.height = img.height;
-                                const ctx = canvas.getContext("2d");
-
-                                if (ctx) {
-                                  ctx.drawImage(img, 0, 0);
-                                  const logoDataUrl =
-                                    canvas.toDataURL("image/jpeg");
-
-                                  // Initialize jsPDF inside the load callback
-                                  const doc = new jsPDF({
-                                    orientation: "portrait",
-                                    unit: "mm",
-                                    format: "a4",
-                                  });
-
-                                  // HEADER BANNER GRAPHIC (Deep Slate Blue)
-                                  doc.setFillColor(30, 41, 59); // Slate 800
-                                  doc.rect(0, 0, 210, 42, "F");
-
-                                  // ======================================================================
-                                  // 2. LOGO RENDER
-                                  // ======================================================================
-                                  // Parameters: image, format, x, y, width, height
-                                  doc.addImage(
-                                    logoDataUrl,
-                                    "JPEG",
-                                    14,
-                                    11,
-                                    14,
-                                    14,
-                                  );
-                                  // ======================================================================
-
-                                  // 3. DYNAMIC CONTENT DOCK HEADERS
-                                  doc.setTextColor(255, 255, 255);
-                                  doc.setFont("helvetica", "bold");
-                                  doc.setFontSize(13);
-
-                                  const activeDeptText =
-                                    reportDept === "ALL"
-                                      ? "ALL DEPARTMENTS"
-                                      : reportDept.toUpperCase();
-                                  const activeCcText =
-                                    reportCC === "ALL"
-                                      ? "ALL COST CENTERS"
-                                      : reportCC.toUpperCase();
-
-                                  doc.text(
-                                    `ATTENDANCE REPORT: ${activeDeptText}`,
-                                    52,
-                                    16,
-                                  );
-
-                                  // Subtext Meta Parameters
-                                  doc.setFont("helvetica", "normal");
-                                  doc.setFontSize(8.5);
-                                  doc.setTextColor(203, 213, 225); // Slate 300
-                                  doc.text(
-                                    `Cost Center Context: ${activeCcText}`,
-                                    52,
-                                    22,
-                                  );
-                                  doc.text(
-                                    `Date Range Window: ${startDate} to ${endDate}   |   Export Run Time: ${new Date().toLocaleTimeString()}`,
-                                    52,
-                                    27,
-                                  );
-
-                                  // 4. METRIC STATUS CONTEXT CALLOUT BADGE
-                                  doc.setFillColor(248, 250, 252);
-                                  doc.setDrawColor(226, 232, 240);
-                                  doc.rect(14, 48, 182, 16, "FD");
-
-                                  doc.setFontSize(9);
-                                  doc.setTextColor(71, 85, 105);
-                                  doc.setFont("helvetica", "bold");
-                                  doc.text(
-                                    "CURRENT PARAMETER SELECTION CRITERIA:",
-                                    18,
-                                    54,
-                                  );
-
-                                  // Active Metric Highlight Pill
-                                  doc.setFillColor(239, 246, 255);
-                                  doc.rect(102, 50.5, 34, 5, "F");
-                                  doc.setTextColor(29, 78, 216);
-                                  doc.setFontSize(8);
-                                  doc.text(
-                                    `METRIC: ${selectedMetricFilter}`,
-                                    104,
-                                    54.2,
-                                  );
-
-                                  doc.setFont("helvetica", "normal");
-                                  doc.setTextColor(100, 116, 139);
-                                  doc.text(
-                                    `Total Records Found Matching Active Filters: ${filteredWorkerDataset.length} Employee(s)`,
-                                    18,
-                                    60,
-                                  );
-
-                                  // 5. DATASET TABLE ROW MAPPER
-                                  const tableRows = filteredWorkerDataset.map(
-                                    (emp) => {
-                                      const trackingSwipes = rawSwipesBuffer
-                                        .filter(
-                                          (s) =>
-                                            s.id === emp.staffCode &&
-                                            s.date >= startDate &&
-                                            s.date <= endDate,
-                                        )
-                                        .sort(
-                                          (a, b) =>
-                                            a.date.localeCompare(b.date) ||
-                                            a.time.localeCompare(b.time),
-                                        );
-
-                                      const inPunches = trackingSwipes.filter(
-                                        (s) =>
-                                          s.type.toLowerCase().includes("in"),
-                                      );
-                                      const clockInTime =
-                                        inPunches.length > 0
-                                          ? inPunches[0].time
-                                          : trackingSwipes.length > 0
-                                            ? trackingSwipes[0].time
-                                            : null;
-
-                                      const clockInDate =
-                                        inPunches.length > 0
-                                          ? inPunches[0].date
-                                          : trackingSwipes.length > 0
-                                            ? trackingSwipes[0].date
-                                            : "";
-
-                                      const rawSwipesString =
-                                        trackingSwipes.length > 0
-                                          ? trackingSwipes
-                                              .map(
-                                                (s) =>
-                                                  `${s.type.toUpperCase()}(${s.time} - ${s.date?.substring(5)})`,
-                                              )
-                                              .join(", ")
-                                          : "No records found";
-
-                                      let calculatedStatus = "ABSENT";
-                                      if (clockInTime) {
-                                        calculatedStatus =
-                                          clockInTime <= "07:30"
-                                            ? "ON TIME"
-                                            : "LATE ARRIVAL";
-                                      }
-
-                                      return [
-                                        `${emp.fullName.toUpperCase()}\n[ID: ${emp.staffCode}]`,
-                                        `${emp.department.toUpperCase()}\n[CC: ${emp.costCenter.toUpperCase()}]`,
-                                        clockInTime
-                                          ? `${clockInTime} AM (${clockInDate.substring(5)})`
-                                          : "--:--",
-                                        rawSwipesString,
-                                        calculatedStatus,
-                                      ];
-                                    },
-                                  );
-
-                                  // 6. INJECT AUTO-TABLE LAYOUT
-                                  autoTable(doc, {
-                                    startY: 70,
-                                    head: [
-                                      [
-                                        "Staff Member Details",
-                                        "Department / Cost Center Allocation",
-                                        "First Punch-In Time",
-                                        "Raw History Timeline Actions Log",
-                                        "Status Flag",
-                                      ],
-                                    ],
-                                    body: tableRows,
-                                    theme: "striped",
-                                    headStyles: {
-                                      fillColor: [51, 65, 85],
-                                      textColor: [255, 255, 255],
-                                      fontStyle: "bold",
-                                      fontSize: 9,
-                                    },
-                                    bodyStyles: {
-                                      fontSize: 8,
-                                      cellPadding: 3,
-                                      textColor: [51, 65, 85],
-                                    },
-                                    columnStyles: {
-                                      0: { cellWidth: 42 },
-                                      1: { cellWidth: 42 },
-                                      2: { cellWidth: 26, halign: "center" },
-                                      3: { cellWidth: 46 },
-                                      4: { cellWidth: 26, fontStyle: "bold" },
-                                    },
-                                    didParseCell: (data: any) => {
-                                      if (
-                                        data.section === "body" &&
-                                        data.column.index === 4
-                                      ) {
-                                        const statusText = data.cell.raw;
-                                        if (statusText === "ON TIME")
-                                          data.cell.styles.textColor = [
-                                            22, 163, 74,
-                                          ];
-                                        if (statusText === "LATE ARRIVAL")
-                                          data.cell.styles.textColor = [
-                                            217, 119, 6,
-                                          ];
-                                        if (statusText === "ABSENT")
-                                          data.cell.styles.textColor = [
-                                            220, 38, 38,
-                                          ];
-                                      }
-                                    },
-                                  });
-
-                                  // 7. FILE SAVE INITIATOR
-                                  const fileDeptName = reportDept
-                                    .replace(/\s+/g, "_")
-                                    .toUpperCase();
-                                  const fileCcName = reportCC
-                                    .replace(/\s+/g, "_")
-                                    .toUpperCase();
-                                  doc.save(
-                                    `ATTENDANCE_REPORT_${fileDeptName}_${fileCcName}_[${selectedMetricFilter}].pdf`,
-                                  );
-                                }
-                              };
-
-                              // Fallback handling if image fails to load or path doesn't exist
-                              img.onerror = () => {
-                                alert(
-                                  "Could not find gofresh_logo.jpg in the public folder. Exporting without logo.",
-                                );
-                              };
-                            }}
-                            className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs h-9 px-4 gap-2 flex items-center rounded-lg shadow-xs transition-all"
-                          >
-                            <Download className="w-4 h-4" />
-                            Export Filtered PDF Report
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 3. Live Data Table Grid View */}
-                    <Card className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
-                      <div className="overflow-x-auto max-h-[400px]">
-                        <table className="w-full text-left border-collapse">
-                          <thead>
-                            <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-400 tracking-wider uppercase">
-                              <th className="p-3">Staff Member</th>
-                              <th className="p-3">Department / Cost Center</th>
-                              <th className="p-3">First Clock In</th>
-                              <th className="p-3">Punches / Activities</th>
-                              <th className="p-3 text-right">Status Flag</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
-                            {filteredWorkerDataset.length > 0 ? (
-                              filteredWorkerDataset.map((emp) => {
-                                // FIX: Filter swipes across the entire selected date range instead of a single day
-                                const trackingSwipes = rawSwipesBuffer
-                                  .filter(
-                                    (s) =>
-                                      s.id === emp.staffCode &&
-                                      s.date >= startDate &&
-                                      s.date <= endDate,
-                                  )
-                                  .sort(
-                                    (a, b) =>
-                                      a.date.localeCompare(b.date) ||
-                                      a.time.localeCompare(b.time),
-                                  );
-
-                                const inPunches = trackingSwipes.filter((s) =>
-                                  s.type.toLowerCase().includes("in"),
-                                );
-
-                                // Grabs their very first clock-in time during this entire range timeframe
-                                const clockInTime =
-                                  inPunches.length > 0
-                                    ? inPunches[0].time
-                                    : trackingSwipes.length > 0
-                                      ? trackingSwipes[0].time
-                                      : null;
-
-                                // Grabs the corresponding date for that first clock-in
-                                const clockInDate =
-                                  inPunches.length > 0
-                                    ? inPunches[0].date
-                                    : trackingSwipes.length > 0
-                                      ? trackingSwipes[0].date
-                                      : null;
-
-                                return (
-                                  <tr
-                                    key={emp.staffCode}
-                                    className="hover:bg-slate-50/70 transition-colors"
-                                  >
-                                    <td className="p-3">
-                                      <div className="font-bold text-slate-900 uppercase">
-                                        {emp.fullName}
-                                      </div>
-                                      <div className="text-[10px] font-mono text-slate-400">
-                                        {emp.staffCode}
-                                      </div>
-                                    </td>
-                                    <td className="p-3">
-                                      <div className="font-semibold text-slate-700 uppercase text-[11px]">
-                                        {emp.department}
-                                      </div>
-                                      <div className="text-[10px] text-slate-400 uppercase font-bold tracking-tight">
-                                        {emp.costCenter}
-                                      </div>
-                                    </td>
-                                    <td className="p-3 font-mono font-bold text-slate-800">
-                                      {clockInTime
-                                        ? `${clockInTime} AM (${clockInDate?.substring(5)})` // Appends MM-DD for range clarity
-                                        : "--:--"}
-                                    </td>
-                                    <td className="p-3">
-                                      {trackingSwipes.length > 0 ? (
-                                        <div className="flex flex-wrap gap-1 max-w-sm">
-                                          {trackingSwipes.map((s, idx) => (
-                                            <Badge
-                                              key={idx}
-                                              variant="outline"
-                                              className={`text-[9px] font-mono font-bold px-1.5 py-0 rounded ${
-                                                s.type
-                                                  .toLowerCase()
-                                                  .includes("in")
-                                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                                  : "bg-rose-50 text-rose-700 border-rose-200"
-                                              }`}
-                                            >
-                                              {s.type.toUpperCase()} ({s.time} -{" "}
-                                              {s.date?.substring(5)})
-                                            </Badge>
-                                          ))}
-                                        </div>
-                                      ) : (
-                                        <span className="text-[11px] italic text-slate-400 font-normal">
-                                          No activity logs recorded
-                                        </span>
-                                      )}
-                                    </td>
-                                    <td className="p-3 text-right">
-                                      {!clockInTime ? (
-                                        <Badge
-                                          variant="destructive"
-                                          className="text-[9px] font-black tracking-widest bg-rose-600"
-                                        >
-                                          ABSENT
-                                        </Badge>
-                                      ) : clockInTime <= "07:30" ? (
-                                        <Badge className="text-[9px] font-black tracking-widest bg-emerald-600 text-white">
-                                          ON TIME
-                                        </Badge>
-                                      ) : (
-                                        <Badge className="text-[9px] font-black tracking-widest bg-amber-500 text-white">
-                                          LATE
-                                        </Badge>
-                                      )}
-                                    </td>
-                                  </tr>
-                                );
-                              })
-                            ) : (
-                              <tr>
-                                <td
-                                  colSpan={5}
-                                  className="text-center p-8 text-slate-400 font-semibold italic uppercase"
-                                >
-                                  No employees match the requested parameters.
-                                </td>
-                              </tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    </Card>
-                  </div>
-                );
-              })()}
-            </div>
+           <Overview/>
           )}
 
           {activeTab === "CHECKLIST" && (
             <div className="space-y-6">
-              {/* Cascade Filter Control Board */}
               <Card className="bg-white border border-slate-200 shadow-xs rounded-xl">
                 <CardHeader className="p-4 border-b border-slate-100 bg-slate-50/50">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -2201,9 +1589,7 @@ export default function EMSDashboard() {
                       </CardDescription>
                     </div>
 
-                    {/* Container holding both the Report Button and the Date Input side-by-side */}
                     <div className="flex items-end gap-3 shrink-0">
-                      {/* 📊 OVERALL ANALYTICS REPORT BUTTON */}
                       <Button
                         variant="outline"
                         disabled={!checklistDept || !checklistCostCenter}
@@ -2214,7 +1600,6 @@ export default function EMSDashboard() {
                         <span>Analytics Report</span>
                       </Button>
 
-                      {/* 📅 DYNAMIC DATE SELECTOR ENGINE */}
                       <div className="flex flex-col text-left sm:text-right">
                         <label
                           htmlFor="target-shift-date"
@@ -2237,7 +1622,6 @@ export default function EMSDashboard() {
                 </CardHeader>
 
                 <CardContent className="p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 items-end">
-                  {/* Step A: Choose Department */}
                   <div>
                     <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">
                       1. Select Target Department
@@ -2246,7 +1630,7 @@ export default function EMSDashboard() {
                       value={checklistDept}
                       onChange={(e) => {
                         setChecklistDept(e.target.value);
-                        setChecklistCostCenter(""); // Reset downstream filter
+                        setChecklistCostCenter("");
                       }}
                       className="w-full bg-white border border-slate-200 text-xs font-bold rounded-lg p-2 uppercase text-slate-800 focus:ring-1 focus:ring-blue-500"
                     >
@@ -2259,7 +1643,6 @@ export default function EMSDashboard() {
                     </select>
                   </div>
 
-                  {/* Step B: Choose Cost Center */}
                   <div>
                     <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">
                       2. Select Cost Center Workspace
@@ -2279,7 +1662,6 @@ export default function EMSDashboard() {
                     </select>
                   </div>
 
-                  {/* Quick Diagnostics Readout / Clear Trigger */}
                   <div className="flex gap-2">
                     <Button
                       variant="outline"
@@ -2295,7 +1677,6 @@ export default function EMSDashboard() {
                 </CardContent>
               </Card>
 
-              {/* 📊 CLICKABLE SUB-METRICS REPORT CARDS BLOCK */}
               {checklistDept &&
                 checklistCostCenter &&
                 (() => {
@@ -2338,8 +1719,6 @@ export default function EMSDashboard() {
                     }
                   });
 
-                  // Keep your existing downloadGroupPDF definition helper...
-
                   const downloadGroupPDF = (
                     title: string,
                     list: typeof subsetWorkers,
@@ -2357,42 +1736,26 @@ export default function EMSDashboard() {
                           25,
                         );
                       } catch (logoErr) {
-                        console.warn(
-                          "Logo image could not be loaded, skipping render.",
-                          logoErr,
-                        );
+                        console.warn("Logo image could not be loaded, skipping render.", logoErr);
                       }
 
                       doc.setFont("helvetica", "bold");
                       doc.setFontSize(16);
                       doc.setTextColor(37, 99, 235);
-                      doc.text(
-                        `CHECKLIST EXCEPTION REPORT: ${title.toUpperCase()}`,
-                        44,
-                        20,
-                      );
+                      doc.text(`CHECKLIST EXCEPTION REPORT: ${title.toUpperCase()}`, 44, 20);
 
                       doc.setFontSize(9);
                       doc.setFont("helvetica", "normal");
                       doc.setTextColor(71, 85, 105);
-                      doc.text(
-                        `Department: ${checklistDept}  |  Cost Center: ${checklistCostCenter}`,
-                        44,
-                        27,
-                      );
-                      doc.text(
-                        `Target Date: ${selectedDate}  |  Generated: ${new Date().toLocaleTimeString()}`,
-                        44,
-                        33,
-                      );
+                      doc.text(`Department: ${checklistDept}  |  Cost Center: ${checklistCostCenter}`, 44, 27);
+                      doc.text(`Target Date: ${selectedDate}  |  Generated: ${new Date().toLocaleTimeString()}`, 44, 33);
 
                       doc.setDrawColor(226, 232, 240);
                       doc.line(14, 42, 196, 42);
 
                       const tableRows = list.map((emp) => {
                         const daySwipes = rawSwipesBuffer.filter(
-                          (s) =>
-                            s.id === emp.staffCode && s.date === selectedDate,
+                          (s) => s.id === emp.staffCode && s.date === selectedDate,
                         );
                         const checkIns = daySwipes
                           .filter((s) => s.type.toLowerCase().includes("in"))
@@ -2405,35 +1768,21 @@ export default function EMSDashboard() {
                           emp.fullName,
                           emp.designation,
                           checkIns.length > 0 ? checkIns[0].time : "—",
-                          checkOuts.length > 0
-                            ? checkOuts[checkOuts.length - 1].time
-                            : "—",
+                          checkOuts.length > 0 ? checkOuts[checkOuts.length - 1].time : "—",
                         ];
                       });
 
                       autoTable(doc, {
                         startY: 48,
-                        head: [
-                          [
-                            "Staff ID",
-                            "Employee Full Name",
-                            "Designation",
-                            "Clock In",
-                            "Clock Out",
-                          ],
-                        ],
+                        head: [["Staff ID", "Employee Full Name", "Designation", "Clock In", "Clock Out"]],
                         body: tableRows,
                         theme: "striped",
                         headStyles: { fillColor: [37, 99, 235] },
                         styles: { fontSize: 9, cellPadding: 3 },
                       });
 
-                      doc.save(
-                        `Checklist_${title.replace(/\s+/g, "_")}_${selectedDate}.pdf`,
-                      );
-                      addLog(
-                        `Successfully generated and downloaded ${title} metrics document context.`,
-                      );
+                      doc.save(`Checklist_${title.replace(/\s+/g, "_")}_${selectedDate}.pdf`);
+                      addLog(`Successfully generated and downloaded ${title} metrics document context.`);
                     } catch (err) {
                       console.error("PDF generation block failure", err);
                     }
@@ -2442,12 +1791,7 @@ export default function EMSDashboard() {
                   return (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                       <Card
-                        onClick={() =>
-                          downloadGroupPDF(
-                            "Fully Clocked Onsite",
-                            groups.onsite,
-                          )
-                        }
+                        onClick={() => downloadGroupPDF("Fully Clocked Onsite", groups.onsite)}
                         className="bg-white border border-slate-200 rounded-xl border-l-4 border-l-blue-600 shadow-xs cursor-pointer hover:bg-slate-50 hover:scale-[1.01] active:scale-95 transition-all select-none"
                       >
                         <CardHeader className="p-4">
@@ -2465,9 +1809,7 @@ export default function EMSDashboard() {
                       </Card>
 
                       <Card
-                        onClick={() =>
-                          downloadGroupPDF("On Time Roster", groups.onTime)
-                        }
+                        onClick={() => downloadGroupPDF("On Time Roster", groups.onTime)}
                         className="bg-white border border-slate-200 rounded-xl border-l-4 border-l-emerald-500 shadow-xs cursor-pointer hover:bg-slate-50 hover:scale-[1.01] active:scale-95 transition-all select-none"
                       >
                         <CardHeader className="p-4">
@@ -2485,9 +1827,7 @@ export default function EMSDashboard() {
                       </Card>
 
                       <Card
-                        onClick={() =>
-                          downloadGroupPDF("Late Arrivals", groups.late)
-                        }
+                        onClick={() => downloadGroupPDF("Late Arrivals", groups.late)}
                         className="bg-white border border-slate-200 rounded-xl border-l-4 border-l-amber-500 shadow-xs cursor-pointer hover:bg-slate-50 hover:scale-[1.01] active:scale-95 transition-all select-none"
                       >
                         <CardHeader className="p-4">
@@ -2505,12 +1845,7 @@ export default function EMSDashboard() {
                       </Card>
 
                       <Card
-                        onClick={() =>
-                          downloadGroupPDF(
-                            "Absenteeism and Missed Shifts",
-                            groups.absent,
-                          )
-                        }
+                        onClick={() => downloadGroupPDF("Absenteeism and Missed Shifts", groups.absent)}
                         className="bg-white border border-slate-200 rounded-xl border-l-4 border-l-rose-500 shadow-xs cursor-pointer hover:bg-slate-50 hover:scale-[1.01] active:scale-95 transition-all select-none"
                       >
                         <CardHeader className="p-4">
@@ -2530,7 +1865,6 @@ export default function EMSDashboard() {
                   );
                 })()}
 
-              {/* Attendance Checklist Grid Output */}
               <Card className="bg-white border border-slate-200 shadow-xs rounded-xl overflow-hidden">
                 <CardContent className="p-0">
                   {!checklistDept || !checklistCostCenter ? (
@@ -2929,423 +2263,324 @@ export default function EMSDashboard() {
                           Add Employee
                         </CardTitle>
                         <CardDescription className="text-[11px] font-medium text-slate-400 uppercase mt-0.5">
-                          Add a new team member to your database organization
+                          Manually enroll a new team member directly into the workspace registry directory pipeline.
                         </CardDescription>
                       </div>
-                      <button
+                      <Button
+                        variant="ghost"
                         onClick={() => setIsAddModalOpen(false)}
-                        className="text-slate-400 hover:text-slate-600 font-bold text-sm"
+                        className="h-8 w-8 p-0 text-slate-400 hover:text-slate-600 rounded-lg text-xs"
                       >
                         ✕
-                      </button>
+                      </Button>
                     </CardHeader>
-                    <CardContent className="p-6">
-                      <form
-                        onSubmit={handleCreateStaffSubmit}
-                        className="space-y-5"
-                      >
-                        {/* Row 1: Full Name & Staff Code (Primary Key) */}
+
+                    <form onSubmit={handleCreateStaffSubmit}>
+                      <CardContent className="p-5 space-y-4">
                         <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
-                              Full Name *
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-wide block">
+                              Staff Code ID *
                             </label>
                             <Input
                               required
-                              value={newStaffName} // Maps to schema: full_name
-                              onChange={(e) => setNewStaffName(e.target.value)}
-                              placeholder="e.g. MACKCHESTER BENFORD"
-                              className="text-xs font-bold uppercase"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
-                              Employee ID Code * (Primary Key)
-                            </label>
-                            <Input
-                              required
-                              value={newStaffCode} // Maps to schema: staff_code
+                              value={newStaffCode}
                               onChange={(e) => setNewStaffCode(e.target.value)}
-                              placeholder="e.g. BA036"
-                              className="text-xs font-bold uppercase"
+                              placeholder="e.g. GF109"
+                              className="h-9 text-xs font-bold uppercase"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-wide block">
+                              Full Corporate Name *
+                            </label>
+                            <Input
+                              required
+                              value={newStaffName}
+                              onChange={(e) => setNewStaffName(e.target.value)}
+                              placeholder="FIRSTNAME LASTNAME"
+                              className="h-9 text-xs font-bold uppercase"
                             />
                           </div>
                         </div>
 
-                        {/* Row 2: Designation */}
-                        <div>
-                          <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
-                            Job Designation *
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-wide block">
+                            Corporate Designation *
                           </label>
-                          <select
+                          <Input
                             required
-                            value={newStaffDesignation} // Maps to schema: designation
-                            onChange={(e) =>
-                              setNewStaffDesignation(e.target.value)
-                            }
-                            className="w-full bg-white border border-slate-200 text-xs font-bold uppercase rounded-lg h-9 px-3 text-slate-700 shadow-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          >
-                            <option value="">-- SELECT DESIGNATION --</option>
-                            <option value="Security Guard">
-                              Security Guard
-                            </option>
-                            <option value="Supervisor">Supervisor</option>
-                            <option value="Cleaner">Cleaner</option>
-                            <option value="Production Assistant">
-                              Production Assistant
-                            </option>
-                            <option value="General Fitter">
-                              General Fitter
-                            </option>
-                            <option value="Merchandiser">Merchandiser</option>
-                            <option value="Driver">Driver</option>
-                          </select>
+                            value={newStaffDesignation}
+                            onChange={(e) => setNewStaffDesignation(e.target.value)}
+                            placeholder="e.g. Field Enforcement Officer"
+                            className="h-9 text-xs font-bold uppercase"
+                          />
                         </div>
 
-                        {/* Row 3: Department & Conditional Cost Center */}
                         <div className="grid grid-cols-2 gap-4">
-                          {/* DEPARTMENT */}
-                          <div>
-                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
-                              Department *
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-wide block">
+                              Assigned Department *
                             </label>
                             <select
-                              required
-                              value={newStaffDept} // Maps to schema: department
-                              onChange={(e) => {
-                                setNewStaffDept(e.target.value);
-                                setNewStaffCostCenter(""); // Reset dependent selection
-                              }}
-                              className="w-full bg-white border border-slate-200 text-xs font-bold uppercase rounded-lg h-9 px-3 text-slate-700 shadow-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              value={newStaffDept}
+                              onChange={(e) => setNewStaffDept(e.target.value)}
+                              className="w-full bg-white border border-slate-200 text-xs font-bold rounded-lg p-2 h-9 uppercase text-slate-800 focus:ring-1 focus:ring-blue-500"
                             >
-                              <option value="">-- SELECT DEPARTMENT --</option>
-                              <option value="Go Fresh Beef">
-                                Go Fresh Beef
-                              </option>
-                              <option value="Go Fresh Chicken">
-                                Go Fresh Chicken
-                              </option>
-                              <option value="Tray Factory">Tray Factory</option>
-                              <option value="Live Sales">Live Sales</option>
-                              <option value="Retail">Retail</option>
+                              <option value="Operations">Operations</option>
+                              <option value="Administration">Administration</option>
+                              <option value="Engineering">Engineering</option>
+                              <option value="Design">Design</option>
                             </select>
                           </div>
-
-                          {/* CONDITIONAL COST CENTER */}
-                          <div>
-                            <label className="text-[10px] font-black uppercase text-slate-500 block mb-1">
-                              Cost Center *
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-wide block">
+                              Cost Center Assignment *
                             </label>
                             <select
-                              required
-                              value={newStaffCostCenter} // Maps to schema: cost_center
-                              onChange={(e) =>
-                                setNewStaffCostCenter(e.target.value)
-                              }
-                              disabled={!newStaffDept}
-                              className="w-full bg-white border border-slate-200 text-xs font-bold uppercase rounded-lg h-9 px-3 text-slate-700 shadow-xs focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
+                              value={newStaffCostCenter}
+                              onChange={(e) => setNewStaffCostCenter(e.target.value)}
+                              className="w-full bg-white border border-slate-200 text-xs font-bold rounded-lg p-2 h-9 uppercase text-slate-800 focus:ring-1 focus:ring-blue-500"
                             >
-                              <option value="">-- SELECT COST CENTRE --</option>
-
-                              {newStaffDept === "Go Fresh Beef" && (
-                                <>
-                                  <option value="Ngabu General">
-                                    Ngabu General
-                                  </option>
-                                  <option value="Lilongwe LCS">
-                                    Lilongwe LCS
-                                  </option>
-                                  <option value="Lilongwe Sales">
-                                    Lilongwe Sales
-                                  </option>
-                                  <option value="Lilongwe Production">
-                                    Lilongwe Production
-                                  </option>
-                                  <option value="Blantyre Sales">
-                                    Blantyre Sales
-                                  </option>
-                                  <option value="Blantyre Production">
-                                    Blantyre Production
-                                  </option>
-                                  <option value="Lilongwe House">
-                                    Lilongwe House
-                                  </option>
-                                </>
-                              )}
-
-                              {newStaffDept === "Go Fresh Chicken" && (
-                                <>
-                                  <option value="Chicken Abattoir">
-                                    Kanengo Farm
-                                  </option>
-                                  <option value="Chicken Abattoir">
-                                    Chicken Abattoir
-                                  </option>
-                                  <option value="Lilongwe Sales">
-                                    Lilongwe Sales
-                                  </option>
-                                  <option value="Lilongwe Production">
-                                    Lilongwe Production
-                                  </option>
-                                  <option value="Blantyre Sales">
-                                    Blantyre Sales
-                                  </option>
-                                  <option value="Live Sales Lilongwe">
-                                    Live Sales Lilongwe
-                                  </option>
-                                  <option value="Lilongwe House">
-                                    Lilongwe House
-                                  </option>
-                                </>
-                              )}
-
-                              {newStaffDept === "Tray Factory" && (
-                                <>
-                                  <option value="GF Tray Factory">
-                                    GF Tray Factory
-                                  </option>
-                                </>
-                              )}
-
-                              {newStaffDept === "Live Sales" && (
-                                <>
-                                  <option value="Live Sales Lilongwe">
-                                    Live Sales Lilongwe
-                                  </option>
-                                  <option value="Lilongwe Sales">
-                                    Lilongwe Sales Production
-                                  </option>
-                                  <option value="Blantyre Production">
-                                    Blantyre Production
-                                  </option>
-                                </>
-                              )}
-
-                              {newStaffDept === "Retail" && (
-                                <>
-                                  <option value="Lilongwe Sales">
-                                    Lilongwe Sales
-                                  </option>
-                                  <option value="Blantyre Sales">
-                                    Blantyre Sales
-                                  </option>
-                                  <option value="GF Retail">GF Retail</option>
-                                </>
-                              )}
+                              <option value="Main Barn">Main Barn</option>
+                              <option value="Front Office">Front Office</option>
+                              <option value="Workshop">Workshop</option>
+                              <option value="HQ">HQ</option>
+                              <option value="Remote Hub">Remote Hub</option>
                             </select>
                           </div>
                         </div>
+                      </CardContent>
 
-                        {/* Action Row */}
-                        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => setIsAddModalOpen(false)}
-                            className="text-xs font-bold uppercase h-9 rounded-lg"
-                          >
-                            Cancel
-                          </Button>
-                          <Button
-                            type="submit"
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase h-9 px-4 rounded-lg"
-                          >
-                            Save to Database
-                          </Button>
-                        </div>
-                      </form>
-                    </CardContent>
+                      <div className="bg-slate-50 px-5 py-3 border-t border-slate-100 flex justify-end gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setIsAddModalOpen(false)}
+                          className="h-9 text-xs font-bold uppercase px-4 rounded-lg"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="submit"
+                          disabled={isSubmitting}
+                          className="h-9 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold uppercase px-4 rounded-lg inline-flex items-center gap-1"
+                        >
+                          {isSubmitting ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>Saving...</span>
+                            </>
+                          ) : (
+                            <span>Register Employee</span>
+                          )}
+                        </Button>
+                      </div>
+                    </form>
                   </Card>
                 </div>
               )}
             </div>
           )}
 
-          {activeTab === "REPORTS_HUB" && <AttendanceReportPage />}
+          {activeTab === "REPORTS_HUB" && (
+            <div className="space-y-6">
+              <AttendanceDashboard />
+            </div>
+          )}
 
-          {activeTab === "SUMMARY" && <AttendanceDashboard />}
+          {activeTab === "SUMMARY" && (
+            <div className="space-y-6">
+              <AttendanceReportPage />
+            </div>
+          )}
 
           {activeTab === "SETTINGS" && (
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
-              {/* Left Column: Authorization Provision Engine */}
-              <Card className="bg-white border border-slate-200 shadow-sm rounded-xl xl:col-span-1">
-                <CardHeader>
-                  <CardTitle className="text-xs font-black text-slate-400 uppercase tracking-widest">
-                    PROVISION SECURITY OPERATOR
+            <div className="space-y-6">
+              <Card className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+                <CardHeader className="p-4 bg-slate-50 border-b border-slate-200">
+                  <CardTitle className="text-xs font-black text-slate-700 uppercase tracking-widest flex items-center gap-2">
+                    <Settings className="w-4 h-4 text-blue-600" /> Administrative Access Configuration Layer
                   </CardTitle>
+                  <CardDescription className="text-[10px] font-semibold text-slate-400 uppercase mt-0.5">
+                    Provision secure workspace system access, update credentials, and audit operators.
+                  </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  {provisionStatus && (
-                    <div className="p-3 bg-slate-900 text-emerald-400 font-mono text-[10px] rounded-lg uppercase block whitespace-pre-wrap">
-                      {provisionStatus}
-                    </div>
-                  )}
-                  <div>
-                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">
-                      Corporate Email Address
-                    </label>
-                    <Input
-                      type="email"
-                      placeholder="operator@gofresh.corp"
-                      value={newEmail}
-                      onChange={(e) => setNewEmail(e.target.value)}
-                      className="text-xs font-bold border-slate-200 h-9"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">
-                      Systemic Password Seed
-                    </label>
-                    <Input
-                      type="password"
-                      placeholder="••••••••••••"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      className="text-xs font-bold border-slate-200 h-9"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">
-                      Authorization Privilege Stratum
-                    </label>
-                    <select
-                      value={newRole}
-                      onChange={(e) => setNewRole(e.target.value)}
-                      className="w-full bg-white border border-slate-200 text-xs font-bold rounded-lg p-2.5 uppercase text-slate-800"
-                    >
-                      <option value="operator">
-                        Standard Operations Operator
-                      </option>
-                      <option value="manager">Control Manager Stratum</option>
-                      <option value="admin">
-                        System Administration Architecture
-                      </option>
-                    </select>
-                  </div>
-                  <div className="flex gap-4 pt-2">
-                    <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={isSuper}
-                        onChange={(e) => setIsSuper(e.target.checked)}
-                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      SUPERUSER FLAG
-                    </label>
-                  </div>
-                  <Button
-                    onClick={async () => {
-                      setProvisionStatus(
-                        "[PENDING] Executing user creation...",
-                      );
-                      const res = await fetch("/api/users/manage", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          email: newEmail,
-                          password: newPassword,
-                          role_tier: newRole,
-                          is_superuser: isSuper,
-                          can_ingest_chrono: rightChrono,
-                          can_modify_roster: rightRoster,
-                        }),
-                      });
-                      const dat = await res.json();
-                      if (res.ok) {
-                        setProvisionStatus(
-                          `[SUCCESS] Created entry user target id: ${dat.userId}`,
-                        );
-                        setNewEmail("");
-                        setNewPassword("");
-                        fetchSystemUsers(); // Reload management grid automatically
-                      } else {
-                        setProvisionStatus(
-                          `[ERROR] ${dat.error || "Execution failed."}`,
-                        );
-                      }
-                    }}
-                    className="w-full h-9 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs uppercase rounded-lg tracking-wider"
-                  >
-                    PROVISION CREDENTIAL ENTITY
-                  </Button>
-                </CardContent>
-              </Card>
+                <CardContent className="p-6 space-y-8">
+                  <div className="space-y-4 max-w-xl">
+                    <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-1">
+                      Provision New System Account
+                    </h3>
 
-              {/* Right Column: Active System Authorized Access Management Roster */}
-              <div className="xl:col-span-2 space-y-6">
-                <Card className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden">
-                  <CardHeader className="bg-slate-50 border-b border-slate-100 p-4">
-                    <CardTitle className="text-xs font-black text-slate-400 uppercase tracking-widest">
-                      AUTHORIZED SYSTEM ACCESS ACCOUNTS
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-0">
-                    {isLoadingUsers ? (
-                      <div className="p-6 text-center text-xs text-slate-400 font-bold uppercase animate-pulse">
-                        Retrieving security core accounts configuration...
+                    {provisionStatus && (
+                      <div className="p-3 bg-blue-50 text-blue-800 border border-blue-200 font-bold uppercase rounded-lg text-[11px]">
+                        {provisionStatus}
                       </div>
-                    ) : (
+                    )}
+
+                    <form
+                      onSubmit={async (e) => {
+                        e.preventDefault();
+                        setProvisionStatus("Configuring system access keys...");
+                        try {
+                          const payload = {
+                            email_address: newEmail.trim().toLowerCase(),
+                            raw_password_string: newPassword,
+                            role_tier: newRole,
+                            is_superuser: isSuper,
+                            permission_flags: { chrono: rightChrono, roster: rightRoster },
+                          };
+
+                          const res = await fetch("/api/auth/register", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify(payload),
+                          });
+                          const data = await res.json();
+
+                          if (res.ok && data.success) {
+                            setProvisionStatus(`[SUCCESS]: Authorized account created for ${data.user.email}`);
+                            addLog(`Provisioned access keys for operator agent: ${data.user.email}`);
+                            setNewEmail("");
+                            setNewPassword("");
+                            fetchSystemUsers();
+                          } else {
+                            setProvisionStatus(`[FAILURE]: ${data.error || "Transaction rejected."}`);
+                          }
+                        } catch (err: any) {
+                          setProvisionStatus(`[ERROR]: ${err.message}`);
+                        }
+                      }}
+                      className="space-y-3 text-xs"
+                    >
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase text-slate-400 pl-0.5">
+                            Account Email Address
+                          </label>
+                          <Input
+                            required
+                            type="email"
+                            value={newEmail}
+                            onChange={(e) => setNewEmail(e.target.value)}
+                            placeholder="operator@gofresh.com"
+                            className="h-9 text-xs font-bold"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase text-slate-400 pl-0.5">
+                            Temporary System Password
+                          </label>
+                          <Input
+                            required
+                            type="password"
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                            placeholder="••••••••"
+                            className="h-9 text-xs font-mono font-bold"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4 items-center pt-2">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase text-slate-400 pl-0.5">
+                            Functional Role Tier
+                          </label>
+                          <select
+                            value={newRole}
+                            onChange={(e) => setNewRole(e.target.value)}
+                            className="w-full bg-white border border-slate-200 text-xs font-bold rounded-lg p-2 h-9 uppercase text-slate-700 focus:ring-1 focus:ring-blue-500"
+                          >
+                            <option value="operator">System Operator Agent</option>
+                            <option value="manager">Operations Manager</option>
+                            <option value="auditor">Compliance Auditor</option>
+                          </select>
+                        </div>
+
+                        <div className="flex items-center gap-4 h-full pt-4">
+                          <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={isSuper}
+                              onChange={(e) => setIsSuper(e.target.checked)}
+                              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
+                            />
+                            <span className="text-[10px] font-black text-slate-600 uppercase tracking-wide">
+                              Superuser Controls
+                            </span>
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="pt-3">
+                        <Button
+                          type="submit"
+                          className="bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-wider text-[11px] px-4 h-9 rounded-lg shadow-xs"
+                        >
+                          Commit Roster Authorization Keys
+                        </Button>
+                      </div>
+                    </form>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-1">
+                      Active Authorized Administrators & Operators Pool
+                    </h3>
+                    <Card className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
                       <Table>
                         <TableHeader>
                           <TableRow className="bg-slate-50 border-b border-slate-200">
-                            <TableHead className="text-[10px] font-black uppercase text-slate-500">
-                              User Email Identifier
-                            </TableHead>
-                            <TableHead className="text-[10px] font-black uppercase text-slate-500">
-                              Privilege Role Tier
-                            </TableHead>
-                            <TableHead className="text-[10px] font-black uppercase text-slate-500 text-right">
-                              Revoke Account
-                            </TableHead>
+                            <TableHead className="text-[10px] font-black uppercase text-slate-500">System Identity Account</TableHead>
+                            <TableHead className="text-[10px] font-black uppercase text-slate-500">Database Prim Key ID</TableHead>
+                            <TableHead className="text-[10px] font-black uppercase text-slate-500">Role Authority Level</TableHead>
+                            <TableHead className="text-[10px] font-black uppercase text-slate-500 text-right">Revoke Access Control</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {systemUsers.length === 0 ? (
+                          {isLoadingUsers ? (
                             <TableRow>
-                              <TableCell
-                                colSpan={3}
-                                className="text-center py-6 text-xs text-slate-400 uppercase font-bold"
-                              >
-                                No secondary authorization records found.
+                              <TableCell colSpan={4} className="text-center p-4 text-xs font-bold uppercase text-slate-400">
+                                Synchronizing system user tables...
+                              </TableCell>
+                            </TableRow>
+                          ) : systemUsers.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={4} className="text-center p-4 text-xs font-bold uppercase text-slate-400">
+                                No secondary operator keys found in the system registry cluster.
                               </TableCell>
                             </TableRow>
                           ) : (
-                            systemUsers.map((sysUser) => (
-                              <TableRow
-                                key={sysUser.id}
-                                className="border-b border-slate-100 hover:bg-slate-50/50"
-                              >
-                                <TableCell className="font-medium text-xs text-slate-900">
-                                  {sysUser.email}
+                            systemUsers.map((su) => (
+                              <TableRow key={su.id} className="border-b border-slate-100 hover:bg-slate-50/50 text-xs">
+                                <TableCell>
+                                  <div className="font-bold text-slate-900">{su.email}</div>
+                                  {su.isSuperuser && (
+                                    <Badge className="bg-blue-600 text-[8px] tracking-widest font-black uppercase px-1.5 py-0 mt-0.5 rounded">
+                                      SUPERUSER ROOT
+                                    </Badge>
+                                  )}
                                 </TableCell>
+                                <td className="p-3 font-mono font-bold text-slate-400">{su.id}</td>
                                 <TableCell>
                                   <select
-                                    value={sysUser.role}
-                                    disabled={user?.id === sysUser.id} // Prevent accidental self-demotion
-                                    onChange={(e) =>
-                                      handleUpdateUserRole(
-                                        sysUser.id,
-                                        e.target.value,
-                                      )
-                                    }
-                                    className="bg-slate-50 border border-slate-200 text-[11px] font-bold uppercase rounded p-1.5 focus:ring-1 focus:ring-blue-500 text-slate-700"
+                                    value={su.roleTier}
+                                    onChange={(e) => handleUpdateUserRole(su.id, e.target.value)}
+                                    className="bg-white border border-slate-200 text-[11px] font-bold rounded-md p-1 px-2 uppercase text-slate-700 outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
                                   >
-                                    <option value="operator">OPERATOR</option>
-                                    <option value="manager">MANAGER</option>
-                                    <option value="ADMIN">ADMIN</option>
+                                    <option value="operator">operator</option>
+                                    <option value="manager">manager</option>
+                                    <option value="auditor">auditor</option>
                                   </select>
                                 </TableCell>
                                 <TableCell className="text-right">
                                   <Button
+                                    onClick={() => handleDeleteSystemUser(su.id)}
                                     variant="outline"
-                                    size="sm"
-                                    disabled={user?.id === sysUser.id} // Block self-deletion protection guard
-                                    onClick={() =>
-                                      handleDeleteSystemUser(sysUser.id)
-                                    }
-                                    className="h-7 text-[10px] border-rose-200 text-rose-600 hover:bg-rose-50 font-bold uppercase rounded-md inline-flex items-center gap-1"
+                                    className="h-7 border-rose-200 hover:bg-rose-50 text-rose-600 hover:text-rose-700 font-bold text-[10px] uppercase rounded-md tracking-wider shadow-2xs"
                                   >
-                                    <UserX className="w-3 h-3" /> Revoke
+                                    Revoke Access Account
                                   </Button>
                                 </TableCell>
                               </TableRow>
@@ -3353,64 +2588,33 @@ export default function EMSDashboard() {
                           )}
                         </TableBody>
                       </Table>
-                    )}
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-white border border-slate-200 shadow-sm rounded-xl">
-                  <CardHeader>
-                    <CardTitle className="text-xs font-black text-slate-400 uppercase tracking-widest">
-                      SYSTEM ARCHITECTURE RULES
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4 text-xs font-medium text-slate-600">
-                    <div className="flex gap-3 items-start border-b border-slate-100 pb-3">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                      <div>
-                        <span className="font-black text-slate-900 block uppercase mb-0.5">
-                          ADMINISTRATOR
-                        </span>
-                        Full schematic modification engine tracking schemas,
-                        access keys context layer rules, database seeding
-                        configurations and matrix ingestion blocks.
-                      </div>
-                    </div>
-                    <div className="flex gap-3 items-start">
-                      <CheckCircle2 className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
-                      <div>
-                        <span className="font-black text-slate-900 block uppercase mb-0.5">
-                          OPERATOR STRATUM
-                        </span>
-                        Standard read-only runtime feed monitoring view and
-                        basic biometric file dropping actions.
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+                    </Card>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           )}
         </main>
       )}
 
-      <footer className="p-6 max-w-7xl w-full mx-auto pt-0">
-        <Card className="bg-white border border-slate-200 rounded-xl shadow-xs">
-          <CardHeader className="py-2 px-4 border-b border-slate-100">
-            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-              <Terminal className="w-3 h-3 text-blue-600" /> System Status Feed
-              Notice
+      <footer className="mt-auto bg-white border-t border-slate-200 p-4">
+        <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
+          <div className="flex items-center gap-4 bg-slate-50 border border-slate-100 p-2 rounded-xl w-full sm:w-auto overflow-hidden">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 shrink-0 flex items-center gap-1">
+              <Terminal className="w-3.5 h-3.5 text-blue-600" /> Active Console Logs:
             </span>
-          </CardHeader>
-          <CardContent className="p-3">
-            <div className="bg-slate-950 p-2.5 rounded-lg font-mono text-[10px] text-slate-400 space-y-0.5">
+            <div className="flex items-center gap-3 overflow-x-auto whitespace-nowrap scrollbar-none font-mono text-[11px] text-slate-600 font-bold uppercase tracking-tight">
               {systemLogs.map((log, index) => (
-                <div key={index} className="truncate">
+                <span key={index} className="opacity-80">
                   {log}
-                </div>
+                </span>
               ))}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center sm:text-right shrink-0">
+            TIMENOX CORE PARSER ENGINE v2.4.0
+          </span>
+        </div>
       </footer>
     </div>
   );
