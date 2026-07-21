@@ -49,6 +49,7 @@ import autoTable from "jspdf-autotable";
 import AttendanceReportPage from "../overall/page";
 import AttendanceDashboard from "../reports/page";
 import Overview from "../overview/page";
+import { DailyChecklist } from "../checklist/page";
 
 interface EmployeeProfile {
   staffCode: string;
@@ -452,8 +453,16 @@ export default function EMSDashboard() {
     monday.setDate(current.getDate() + distanceToMonday);
 
     const daysList = [];
-    const weekdayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-    
+    const weekdayNames = [
+      "Sunday",
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+    ];
+
     for (let i = 0; i < 7; i++) {
       const nextDay = new Date(monday);
       nextDay.setDate(monday.getDate() + i);
@@ -558,7 +567,7 @@ export default function EMSDashboard() {
     reader.onload = async (evt) => {
       try {
         const arrayBuffer = evt.target?.result as ArrayBuffer;
-        
+
         // 1. Matches your exact ArrayBuffer timecard ingestion logic
         const workbook = XLSX.read(arrayBuffer, { type: "array" });
         const worksheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -585,7 +594,7 @@ export default function EMSDashboard() {
           const costCenterIdx = headers.indexOf("Cost Centre");
 
           const cleanEmployees: any[] = [];
-          
+
           // Slice down past the titles/metadata to start mapping rows
           rawRows.slice(headerIdx + 1).forEach((row) => {
             if (!row || !row[staffCodeIdx] || !row[fullNameIdx]) return;
@@ -594,17 +603,30 @@ export default function EMSDashboard() {
             cleanEmployees.push({
               staffCode: String(row[staffCodeIdx]).trim().toUpperCase(),
               fullName: String(row[fullNameIdx]).trim().toUpperCase(),
-              designation: designationIdx !== -1 && row[designationIdx] ? String(row[designationIdx]).trim() : "Operator",
-              department: departmentIdx !== -1 && row[departmentIdx] ? String(row[departmentIdx]).trim() : "Operations",
-              costCenter: costCenterIdx !== -1 && row[costCenterIdx] ? String(row[costCenterIdx]).trim() : "Main Barn",
+              designation:
+                designationIdx !== -1 && row[designationIdx]
+                  ? String(row[designationIdx]).trim()
+                  : "Operator",
+              department:
+                departmentIdx !== -1 && row[departmentIdx]
+                  ? String(row[departmentIdx]).trim()
+                  : "Operations",
+              costCenter:
+                costCenterIdx !== -1 && row[costCenterIdx]
+                  ? String(row[costCenterIdx]).trim()
+                  : "Main Barn",
             });
           });
 
           if (cleanEmployees.length === 0) {
-            throw new Error("No valid personnel metadata lines could be matched.");
+            throw new Error(
+              "No valid personnel metadata lines could be matched.",
+            );
           }
 
-          addLog(`Uploading ${cleanEmployees.length} clean employee registry records to database transaction...`);
+          addLog(
+            `Uploading ${cleanEmployees.length} clean employee registry records to database transaction...`,
+          );
 
           // 4. Fire payload array to your dedicated database API route
           const response = await fetch("/api/employees/batch", {
@@ -618,18 +640,28 @@ export default function EMSDashboard() {
           const result = await response.json();
 
           if (response.ok) {
-            addLog(`Successfully synchronized ${cleanEmployees.length} employee profiles to backend records.`);
+            addLog(
+              `Successfully synchronized ${cleanEmployees.length} employee profiles to backend records.`,
+            );
           } else {
-            alert(`Roster Sync Failed: ${result.error || "Server transaction rejected."}`);
-            addLog(`[ROSTER API ERROR]: ${result.error || "Batch payload rejected."}`);
+            alert(
+              `Roster Sync Failed: ${result.error || "Server transaction rejected."}`,
+            );
+            addLog(
+              `[ROSTER API ERROR]: ${result.error || "Batch payload rejected."}`,
+            );
           }
         } else {
-          alert("Invalid roster format. Could not locate required columns: 'Staff Code' and 'Full Name'.");
+          alert(
+            "Invalid roster format. Could not locate required columns: 'Staff Code' and 'Full Name'.",
+          );
           addLog("Spreadsheet validation failed: Target anchors missing.");
         }
       } catch (err: any) {
         console.error("Bulk Roster Upload Error Context:", err);
-        alert(`Process Error: ${err.message || "Failed reading sheet rows safely."}`);
+        alert(
+          `Process Error: ${err.message || "Failed reading sheet rows safely."}`,
+        );
       } finally {
         setIsBulkEmployeeUploading(false);
         // Clear value pointer so the same file name can be uploaded repeatedly
@@ -859,7 +891,7 @@ export default function EMSDashboard() {
   };
 
   // 2️⃣ PLACE THIS SECOND (liveMetricsRollup)
-// Computes base operational counts strictly dynamic to selected Department & Cost Center selection
+  // Computes base operational counts strictly dynamic to selected Department & Cost Center selection
   const liveMetricsRollup = useMemo(() => {
     let onsite = 0;
     let onTime = 0;
@@ -874,7 +906,7 @@ export default function EMSDashboard() {
 
     departmentFilteredEmployees.forEach((emp) => {
       const daySwipes = rawSwipesBuffer.filter(
-        (s) => s.id === emp.staffCode && s.date === selectedDate
+        (s) => s.id === emp.staffCode && s.date === selectedDate,
       );
 
       const ins = daySwipes
@@ -902,7 +934,13 @@ export default function EMSDashboard() {
       }
     });
 
-    return { onsite, onTime, late, absent, total: departmentFilteredEmployees.length };
+    return {
+      onsite,
+      onTime,
+      late,
+      absent,
+      total: departmentFilteredEmployees.length,
+    };
   }, [rawSwipesBuffer, employeeDirectory, selectedDate, reportDept, reportCC]);
 
   // Comprehensive analytics parsing utilizing standard 8.5 hour shift caps across entire calendar week row structures
@@ -923,7 +961,7 @@ export default function EMSDashboard() {
 
       const weeklyDayBreakdowns = targetWeekDays.map((day) => {
         const daySwipes = rawSwipesBuffer.filter(
-          (s) => s.id === emp.staffCode && s.date === day.dateStr
+          (s) => s.id === emp.staffCode && s.date === day.dateStr,
         );
 
         const ins = daySwipes
@@ -941,13 +979,16 @@ export default function EMSDashboard() {
         let isAbsent = true;
 
         if (clockIn !== "—" || clockOut !== "—") {
-          if (day.dateStr === selectedDate) isEmployeeOnsiteOnSelectedDate = true;
+          if (day.dateStr === selectedDate)
+            isEmployeeOnsiteOnSelectedDate = true;
 
           if (clockIn !== "—" && clockOut !== "—") {
             isAbsent = false;
             const [inH, inM] = clockIn.split(":").map(Number);
             const [outH, outM] = clockOut.split(":").map(Number);
-            const duration = parseFloat(((outH * 60 + outM - (inH * 60 + inM)) / 60).toFixed(2));
+            const duration = parseFloat(
+              ((outH * 60 + outM - (inH * 60 + inM)) / 60).toFixed(2),
+            );
 
             if (duration > 8.5) {
               regularHours = 8.5;
@@ -985,7 +1026,9 @@ export default function EMSDashboard() {
         metricsSummary: {
           regularTotal: parseFloat(grandRegularTotal.toFixed(2)),
           overtimeTotal: parseFloat(grandOvertimeTotal.toFixed(2)),
-          combinedTotal: parseFloat((grandRegularTotal + grandOvertimeTotal).toFixed(2)),
+          combinedTotal: parseFloat(
+            (grandRegularTotal + grandOvertimeTotal).toFixed(2),
+          ),
         },
         selectedDateFlags: {
           onsite: isEmployeeOnsiteOnSelectedDate,
@@ -995,15 +1038,25 @@ export default function EMSDashboard() {
         },
       };
     });
-  }, [employeeDirectory, rawSwipesBuffer, targetWeekDays, selectedDate, reportDept, reportCC]);
+  }, [
+    employeeDirectory,
+    rawSwipesBuffer,
+    targetWeekDays,
+    selectedDate,
+    reportDept,
+    reportCC,
+  ]);
 
- // Master layout structural logic dynamic to selected interactive metrics indicators
+  // Master layout structural logic dynamic to selected interactive metrics indicators
   const filteredViewDataset = useMemo(() => {
     return processedRosterDataset.filter((emp) => {
       if (selectedMetricFilter === "ALL") return true;
-      if (selectedMetricFilter === "ONSITE") return emp.selectedDateFlags.onsite;
-      if (selectedMetricFilter === "ABSENT") return emp.selectedDateFlags.absent;
-      if (selectedMetricFilter === "ON_TIME") return emp.selectedDateFlags.onTime;
+      if (selectedMetricFilter === "ONSITE")
+        return emp.selectedDateFlags.onsite;
+      if (selectedMetricFilter === "ABSENT")
+        return emp.selectedDateFlags.absent;
+      if (selectedMetricFilter === "ON_TIME")
+        return emp.selectedDateFlags.onTime;
       if (selectedMetricFilter === "LATE") return emp.selectedDateFlags.late;
       return true;
     });
@@ -1271,7 +1324,10 @@ export default function EMSDashboard() {
       try {
         doc.addImage("/gofresh_logo.jpg", "JPEG", 14, 12, 25, 25);
       } catch (logoErr) {
-        console.warn("Logo image could not be loaded, skipping render.", logoErr);
+        console.warn(
+          "Logo image could not be loaded, skipping render.",
+          logoErr,
+        );
       }
 
       doc.setFont("helvetica", "bold");
@@ -1436,6 +1492,36 @@ export default function EMSDashboard() {
     }
   };
 
+  const departmentsList = useMemo(() => {
+    return Array.from(
+      new Set(employeeDirectory.map((emp) => emp.department)),
+    ).filter(Boolean);
+  }, [employeeDirectory]);
+
+  const costCentersList = useMemo(() => {
+    return Array.from(
+      new Set(employeeDirectory.map((emp) => emp.costCenter)),
+    ).filter(Boolean);
+  }, [employeeDirectory]);
+
+  // Map EmployeeProfile[] -> Employee[]
+  const mappedEmployees = useMemo(() => {
+    return employeeDirectory.map((emp) => ({
+      id: emp.staffCode,
+      name: emp.fullName,
+      ...emp,
+    }));
+  }, [employeeDirectory]);
+
+  // Map RawSwipe[] -> AttendanceRecord[]
+  const mappedAttendanceRecords = useMemo(() => {
+    return rawSwipesBuffer.map((swipe) => ({
+      employeeId: swipe.id,
+      status: swipe.type.toLowerCase().includes("in") ? "PRESENT" : "ABSENT",
+      ...swipe,
+    }));
+  }, [rawSwipesBuffer]);
+
   return (
     <div className="bg-slate-50 text-slate-900 min-h-screen flex flex-col font-sans antialiased">
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-xs">
@@ -1465,7 +1551,7 @@ export default function EMSDashboard() {
               onClick={() => setActiveTab("CHECKLIST")}
               className={`px-4 py-2 rounded-lg flex items-center gap-1.5 transition-all ${activeTab === "CHECKLIST" ? "bg-white text-blue-600 shadow-xs" : "text-slate-600 hover:text-slate-900"}`}
             >
-              <UserCheck className="w-4 h-4" /> Daily Checklist
+              <UserCheck className="w-4 h-4" /> Checklist
             </button>
             <button
               onClick={() => setActiveTab("STAFF_PANEL")}
@@ -1477,13 +1563,13 @@ export default function EMSDashboard() {
               onClick={() => setActiveTab("REPORTS_HUB")}
               className={`px-4 py-2 rounded-lg flex items-center gap-1.5 transition-all ${activeTab === "REPORTS_HUB" ? "bg-white text-blue-600 shadow-xs" : "text-slate-600 hover:text-slate-900"}`}
             >
-              <Terminal className="w-4 h-4 text-blue-600" /> Logs
+              <CalendarDays className="w-4 h-4 text-blue-600" /> Summary
             </button>
             <button
               onClick={() => setActiveTab("SUMMARY")}
               className={`px-4 py-2 rounded-lg flex items-center gap-1.5 transition-all ${activeTab === "SUMMARY" ? "bg-white text-blue-600 shadow-xs" : "text-slate-600 hover:text-slate-900"}`}
             >
-              <CalendarDays className="w-4 h-4" /> Summary
+              <Terminal className="w-4 h-4" /> Labour
             </button>
             <button
               onClick={() => setActiveTab("SETTINGS")}
@@ -1529,9 +1615,7 @@ export default function EMSDashboard() {
                 <label htmlFor="excel-bulk-file-uploader">
                   <UploadCloud className="w-4 h-4 mr-1 shrink-0" />
                   <span>
-                    {isBulkEmployeeUploading
-                      ? "Reading..."
-                      : "Employees"}
+                    {isBulkEmployeeUploading ? "Reading..." : "Employees"}
                   </span>
                 </label>
               </Button>
@@ -1569,427 +1653,29 @@ export default function EMSDashboard() {
           )}
 
           {/* ========================================== OVERVIEW TAB CONTENT ========================================== */}
-          {activeTab === "OVERVIEW" && (
-           <Overview/>
-          )}
+          {activeTab === "OVERVIEW" && <Overview />}
 
           {activeTab === "CHECKLIST" && (
-            <div className="space-y-6">
-              <Card className="bg-white border border-slate-200 shadow-xs rounded-xl">
-                <CardHeader className="p-4 border-b border-slate-100 bg-slate-50/50">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div>
-                      <CardTitle className="text-xs font-black text-slate-700 uppercase tracking-widest flex items-center gap-2">
-                        <Filter className="w-4 h-4 text-blue-600" /> Operational
-                        Roster Checklist Controller
-                      </CardTitle>
-                      <CardDescription className="text-[10px] uppercase font-semibold text-slate-400 mt-0.5">
-                        Isolate departments and cost-centers to punch remote
-                        shop workers into active tracking.
-                      </CardDescription>
-                    </div>
-
-                    <div className="flex items-end gap-3 shrink-0">
-                      <Button
-                        variant="outline"
-                        disabled={!checklistDept || !checklistCostCenter}
-                        onClick={downloadOverallAnalyticsPDF}
-                        className="h-9 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border-blue-200 hover:border-blue-300 text-blue-700 text-xs font-black uppercase tracking-wide rounded-lg flex items-center gap-2 px-3 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <BarChart3 className="w-4 h-4 text-blue-600" />
-                        <span>Analytics Report</span>
-                      </Button>
-
-                      <div className="flex flex-col text-left sm:text-right">
-                        <label
-                          htmlFor="target-shift-date"
-                          className="text-[9px] font-black uppercase text-slate-400 block mb-1"
-                        >
-                          Target Shift Date
-                        </label>
-                        <input
-                          id="target-shift-date"
-                          type="date"
-                          value={selectedDate}
-                          min="2026-01-01"
-                          max="2026-12-31"
-                          onChange={(e) => setSelectedDate(e.target.value)}
-                          className="h-9 bg-white border border-slate-200 text-xs font-mono font-black text-blue-600 uppercase rounded-lg p-1 px-2 focus:ring-1 focus:ring-blue-500 outline-none cursor-pointer tracking-wider"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </CardHeader>
-
-                <CardContent className="p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 items-end">
-                  <div>
-                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">
-                      1. Select Target Department
-                    </label>
-                    <select
-                      value={checklistDept}
-                      onChange={(e) => {
-                        setChecklistDept(e.target.value);
-                        setChecklistCostCenter("");
-                      }}
-                      className="w-full bg-white border border-slate-200 text-xs font-bold rounded-lg p-2 uppercase text-slate-800 focus:ring-1 focus:ring-blue-500"
-                    >
-                      <option value="">-- Choose Workspace --</option>
-                      {departmentMetrics.map((d) => (
-                        <option key={d.name} value={d.name}>
-                          {d.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">
-                      2. Select Cost Center Workspace
-                    </label>
-                    <select
-                      value={checklistCostCenter}
-                      disabled={!checklistDept}
-                      onChange={(e) => setChecklistCostCenter(e.target.value)}
-                      className="w-full bg-white border border-slate-200 text-xs font-bold rounded-lg p-2 uppercase text-slate-800 disabled:opacity-50 disabled:bg-slate-50 focus:ring-1 focus:ring-blue-500"
-                    >
-                      <option value="">-- Select Cost Center --</option>
-                      {availableCostCenters.map((cc) => (
-                        <option key={cc} value={cc}>
-                          {cc}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setChecklistDept("");
-                        setChecklistCostCenter("");
-                      }}
-                      className="h-9 text-xs font-bold uppercase rounded-lg border-slate-200 w-full"
-                    >
-                      Reset Workspace Selection
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {checklistDept &&
-                checklistCostCenter &&
-                (() => {
-                  const subsetWorkers = systemProcessedDataset.filter(
-                    (emp) =>
-                      emp.department === checklistDept &&
-                      emp.costCenter === checklistCostCenter,
+            <DailyChecklist
+              employees={mappedEmployees}
+              attendanceRecords={mappedAttendanceRecords}
+              departments={departmentsList}
+              costCenters={costCentersList}
+              onRefreshDashboard={async () => {
+                try {
+                  const response = await fetch(
+                    `/api/attendance?page=0&size=2500`,
                   );
-
-                  const groups = {
-                    onsite: [] as typeof subsetWorkers,
-                    onTime: [] as typeof subsetWorkers,
-                    late: [] as typeof subsetWorkers,
-                    absent: [] as typeof subsetWorkers,
-                  };
-
-                  subsetWorkers.forEach((emp) => {
-                    const daySwipes = rawSwipesBuffer.filter(
-                      (s) => s.id === emp.staffCode && s.date === selectedDate,
-                    );
-
-                    if (daySwipes.length > 0) {
-                      groups.onsite.push(emp);
-                      const checkIns = daySwipes
-                        .filter((s) => s.type.toLowerCase().includes("in"))
-                        .sort((a, b) => a.time.localeCompare(b.time));
-
-                      const clockIn =
-                        checkIns.length > 0
-                          ? checkIns[0].time
-                          : daySwipes[0].time;
-
-                      if (clockIn <= "07:30") {
-                        groups.onTime.push(emp);
-                      } else {
-                        groups.late.push(emp);
-                      }
-                    } else {
-                      groups.absent.push(emp);
-                    }
-                  });
-
-                  const downloadGroupPDF = (
-                    title: string,
-                    list: typeof subsetWorkers,
-                  ) => {
-                    try {
-                      const doc = new jsPDF();
-
-                      try {
-                        doc.addImage(
-                          "/gofresh_logo.jpg",
-                          "JPEG",
-                          14,
-                          12,
-                          25,
-                          25,
-                        );
-                      } catch (logoErr) {
-                        console.warn("Logo image could not be loaded, skipping render.", logoErr);
-                      }
-
-                      doc.setFont("helvetica", "bold");
-                      doc.setFontSize(16);
-                      doc.setTextColor(37, 99, 235);
-                      doc.text(`CHECKLIST EXCEPTION REPORT: ${title.toUpperCase()}`, 44, 20);
-
-                      doc.setFontSize(9);
-                      doc.setFont("helvetica", "normal");
-                      doc.setTextColor(71, 85, 105);
-                      doc.text(`Department: ${checklistDept}  |  Cost Center: ${checklistCostCenter}`, 44, 27);
-                      doc.text(`Target Date: ${selectedDate}  |  Generated: ${new Date().toLocaleTimeString()}`, 44, 33);
-
-                      doc.setDrawColor(226, 232, 240);
-                      doc.line(14, 42, 196, 42);
-
-                      const tableRows = list.map((emp) => {
-                        const daySwipes = rawSwipesBuffer.filter(
-                          (s) => s.id === emp.staffCode && s.date === selectedDate,
-                        );
-                        const checkIns = daySwipes
-                          .filter((s) => s.type.toLowerCase().includes("in"))
-                          .sort((a, b) => a.time.localeCompare(b.time));
-                        const checkOuts = daySwipes
-                          .filter((s) => s.type.toLowerCase().includes("out"))
-                          .sort((a, b) => a.time.localeCompare(b.time));
-                        return [
-                          emp.staffCode,
-                          emp.fullName,
-                          emp.designation,
-                          checkIns.length > 0 ? checkIns[0].time : "—",
-                          checkOuts.length > 0 ? checkOuts[checkOuts.length - 1].time : "—",
-                        ];
-                      });
-
-                      autoTable(doc, {
-                        startY: 48,
-                        head: [["Staff ID", "Employee Full Name", "Designation", "Clock In", "Clock Out"]],
-                        body: tableRows,
-                        theme: "striped",
-                        headStyles: { fillColor: [37, 99, 235] },
-                        styles: { fontSize: 9, cellPadding: 3 },
-                      });
-
-                      doc.save(`Checklist_${title.replace(/\s+/g, "_")}_${selectedDate}.pdf`);
-                      addLog(`Successfully generated and downloaded ${title} metrics document context.`);
-                    } catch (err) {
-                      console.error("PDF generation block failure", err);
-                    }
-                  };
-
-                  return (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                      <Card
-                        onClick={() => downloadGroupPDF("Fully Clocked Onsite", groups.onsite)}
-                        className="bg-white border border-slate-200 rounded-xl border-l-4 border-l-blue-600 shadow-xs cursor-pointer hover:bg-slate-50 hover:scale-[1.01] active:scale-95 transition-all select-none"
-                      >
-                        <CardHeader className="p-4">
-                          <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between">
-                            <span>Fully Onsite</span>
-                            <Download className="w-3.5 h-3.5 text-blue-600" />
-                          </CardDescription>
-                          <CardTitle className="text-xl font-black text-slate-900 mt-1">
-                            {groups.onsite.length} Workers
-                          </CardTitle>
-                          <span className="text-[9px] text-slate-400 font-semibold uppercase block mt-1">
-                            In & Out Punches Found (Print PDF)
-                          </span>
-                        </CardHeader>
-                      </Card>
-
-                      <Card
-                        onClick={() => downloadGroupPDF("On Time Roster", groups.onTime)}
-                        className="bg-white border border-slate-200 rounded-xl border-l-4 border-l-emerald-500 shadow-xs cursor-pointer hover:bg-slate-50 hover:scale-[1.01] active:scale-95 transition-all select-none"
-                      >
-                        <CardHeader className="p-4">
-                          <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between">
-                            <span>On Time (&lt; 7:30)</span>
-                            <Download className="w-3.5 h-3.5 text-emerald-500" />
-                          </CardDescription>
-                          <CardTitle className="text-xl font-black text-emerald-600 mt-1">
-                            {groups.onTime.length} Workers
-                          </CardTitle>
-                          <span className="text-[9px] text-slate-400 font-semibold uppercase block mt-1">
-                            Arrived Before 7:30 AM (Print PDF)
-                          </span>
-                        </CardHeader>
-                      </Card>
-
-                      <Card
-                        onClick={() => downloadGroupPDF("Late Arrivals", groups.late)}
-                        className="bg-white border border-slate-200 rounded-xl border-l-4 border-l-amber-500 shadow-xs cursor-pointer hover:bg-slate-50 hover:scale-[1.01] active:scale-95 transition-all select-none"
-                      >
-                        <CardHeader className="p-4">
-                          <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between">
-                            <span>Late Arrivals</span>
-                            <Download className="w-3.5 h-3.5 text-amber-500" />
-                          </CardDescription>
-                          <CardTitle className="text-xl font-black text-amber-600 mt-1">
-                            {groups.late.length} Workers
-                          </CardTitle>
-                          <span className="text-[9px] text-slate-400 font-semibold uppercase block mt-1">
-                            Arrived After 7:30 AM (Print PDF)
-                          </span>
-                        </CardHeader>
-                      </Card>
-
-                      <Card
-                        onClick={() => downloadGroupPDF("Absenteeism and Missed Shifts", groups.absent)}
-                        className="bg-white border border-slate-200 rounded-xl border-l-4 border-l-rose-500 shadow-xs cursor-pointer hover:bg-slate-50 hover:scale-[1.01] active:scale-95 transition-all select-none"
-                      >
-                        <CardHeader className="p-4">
-                          <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between">
-                            <span>Absent / Incomplete</span>
-                            <Download className="w-3.5 h-3.5 text-rose-500" />
-                          </CardDescription>
-                          <CardTitle className="text-xl font-black text-rose-600 mt-1">
-                            {groups.absent.length} Workers
-                          </CardTitle>
-                          <span className="text-[9px] text-slate-400 font-semibold uppercase block mt-1">
-                            Missing In/Out Punches (Print PDF)
-                          </span>
-                        </CardHeader>
-                      </Card>
-                    </div>
-                  );
-                })()}
-
-              <Card className="bg-white border border-slate-200 shadow-xs rounded-xl overflow-hidden">
-                <CardContent className="p-0">
-                  {!checklistDept || !checklistCostCenter ? (
-                    <div className="p-12 text-center text-xs font-bold uppercase tracking-wider text-slate-400">
-                      ⚠️ Please specify an operational Department and secondary
-                      Cost Center parameters to fetch roster checklist.
-                    </div>
-                  ) : (
-                    (() => {
-                      const matchingEmployees = systemProcessedDataset.filter(
-                        (emp) =>
-                          emp.department === checklistDept &&
-                          emp.costCenter === checklistCostCenter,
-                      );
-
-                      if (matchingEmployees.length === 0) {
-                        return (
-                          <div className="p-12 text-center text-xs font-bold uppercase tracking-wider text-slate-400">
-                            No personnel indices registered under this
-                            combination matrix.
-                          </div>
-                        );
-                      }
-
-                      return (
-                        <Table>
-                          <TableHeader className="bg-slate-50">
-                            <TableRow className="border-b border-slate-200">
-                              <TableHead className="text-[10px] font-black uppercase text-slate-500 w-32">
-                                Staff Code
-                              </TableHead>
-                              <TableHead className="text-[10px] font-black uppercase text-slate-500">
-                                Employee Full Name
-                              </TableHead>
-                              <TableHead className="text-[10px] font-black uppercase text-slate-500">
-                                Designation Assignment
-                              </TableHead>
-                              <TableHead className="text-[10px] font-black uppercase text-slate-500 text-center w-40">
-                                Presence Status
-                              </TableHead>
-                              <TableHead className="text-[10px] font-black uppercase text-slate-500 text-right w-44">
-                                Checklist Action
-                              </TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {matchingEmployees.map((worker) => {
-                              const workerTodayRecord = rawSwipesBuffer.filter(
-                                (s) =>
-                                  s.id === worker.staffCode &&
-                                  s.date === selectedDate,
-                              );
-                              const isPresent = workerTodayRecord.length > 0;
-                              const isPending =
-                                isSubmittingManualAttendance ===
-                                worker.staffCode;
-
-                              return (
-                                <TableRow
-                                  key={worker.staffCode}
-                                  className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors"
-                                >
-                                  <TableCell className="font-mono text-xs font-bold text-slate-600">
-                                    {worker.staffCode}
-                                  </TableCell>
-                                  <TableCell className="text-xs font-extrabold text-slate-900 uppercase">
-                                    {worker.fullName}
-                                  </TableCell>
-                                  <TableCell className="text-xs font-medium text-slate-500 uppercase">
-                                    {worker.designation}
-                                  </TableCell>
-                                  <TableCell className="text-center">
-                                    <Badge
-                                      className="text-[9px] font-black tracking-wide"
-                                      variant={
-                                        isPresent ? "secondary" : "destructive"
-                                      }
-                                    >
-                                      {isPresent
-                                        ? "CLOCKED / ONSITE"
-                                        : "NOT CLOCKED"}
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell className="text-right">
-                                    {isPresent ? (
-                                      <div className="inline-flex items-center gap-1.5 text-emerald-600 bg-emerald-50 text-[10px] font-black uppercase px-2.5 py-1 rounded-md border border-emerald-200">
-                                        <CheckCircle2 className="w-3.5 h-3.5" />{" "}
-                                        Present Lock
-                                      </div>
-                                    ) : (
-                                      <label className="inline-flex items-center gap-2 cursor-pointer hover:bg-slate-100 p-1.5 px-3 rounded-lg border border-slate-200 select-none bg-white transition-all active:scale-95">
-                                        {isPending ? (
-                                          <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
-                                        ) : (
-                                          <input
-                                            type="checkbox"
-                                            checked={false}
-                                            onChange={() =>
-                                              handleMarkManualAttendance(
-                                                worker.staffCode,
-                                                worker.fullName,
-                                              )
-                                            }
-                                            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
-                                          />
-                                        )}
-                                        <span className="text-[10px] font-black text-slate-700 uppercase tracking-wide">
-                                          {isPending
-                                            ? "Syncing..."
-                                            : "Mark Present"}
-                                        </span>
-                                      </label>
-                                    )}
-                                  </TableCell>
-                                </TableRow>
-                              );
-                            })}
-                          </TableBody>
-                        </Table>
-                      );
-                    })()
-                  )}
-                </CardContent>
-              </Card>
-            </div>
+                  if (response.ok) {
+                    const payload = await response.json();
+                    setRawSwipesBuffer(payload.swipes || []);
+                    addLog("Refreshed daily checklist attendance records.");
+                  }
+                } catch (err) {
+                  console.error("Failed to refresh attendance records:", err);
+                }
+              }}
+            />
           )}
 
           {activeTab === "STAFF_PANEL" && (
@@ -2263,7 +1949,8 @@ export default function EMSDashboard() {
                           Add Employee
                         </CardTitle>
                         <CardDescription className="text-[11px] font-medium text-slate-400 uppercase mt-0.5">
-                          Manually enroll a new team member directly into the workspace registry directory pipeline.
+                          Manually enroll a new team member directly into the
+                          workspace registry directory pipeline.
                         </CardDescription>
                       </div>
                       <Button
@@ -2311,7 +1998,9 @@ export default function EMSDashboard() {
                           <Input
                             required
                             value={newStaffDesignation}
-                            onChange={(e) => setNewStaffDesignation(e.target.value)}
+                            onChange={(e) =>
+                              setNewStaffDesignation(e.target.value)
+                            }
                             placeholder="e.g. Field Enforcement Officer"
                             className="h-9 text-xs font-bold uppercase"
                           />
@@ -2328,7 +2017,9 @@ export default function EMSDashboard() {
                               className="w-full bg-white border border-slate-200 text-xs font-bold rounded-lg p-2 h-9 uppercase text-slate-800 focus:ring-1 focus:ring-blue-500"
                             >
                               <option value="Operations">Operations</option>
-                              <option value="Administration">Administration</option>
+                              <option value="Administration">
+                                Administration
+                              </option>
                               <option value="Engineering">Engineering</option>
                               <option value="Design">Design</option>
                             </select>
@@ -2339,7 +2030,9 @@ export default function EMSDashboard() {
                             </label>
                             <select
                               value={newStaffCostCenter}
-                              onChange={(e) => setNewStaffCostCenter(e.target.value)}
+                              onChange={(e) =>
+                                setNewStaffCostCenter(e.target.value)
+                              }
                               className="w-full bg-white border border-slate-200 text-xs font-bold rounded-lg p-2 h-9 uppercase text-slate-800 focus:ring-1 focus:ring-blue-500"
                             >
                               <option value="Main Barn">Main Barn</option>
@@ -2400,10 +2093,12 @@ export default function EMSDashboard() {
               <Card className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
                 <CardHeader className="p-4 bg-slate-50 border-b border-slate-200">
                   <CardTitle className="text-xs font-black text-slate-700 uppercase tracking-widest flex items-center gap-2">
-                    <Settings className="w-4 h-4 text-blue-600" /> Administrative Access Configuration Layer
+                    <Settings className="w-4 h-4 text-blue-600" />{" "}
+                    Administrative Access Configuration Layer
                   </CardTitle>
                   <CardDescription className="text-[10px] font-semibold text-slate-400 uppercase mt-0.5">
-                    Provision secure workspace system access, update credentials, and audit operators.
+                    Provision secure workspace system access, update
+                    credentials, and audit operators.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="p-6 space-y-8">
@@ -2428,7 +2123,10 @@ export default function EMSDashboard() {
                             raw_password_string: newPassword,
                             role_tier: newRole,
                             is_superuser: isSuper,
-                            permission_flags: { chrono: rightChrono, roster: rightRoster },
+                            permission_flags: {
+                              chrono: rightChrono,
+                              roster: rightRoster,
+                            },
                           };
 
                           const res = await fetch("/api/auth/register", {
@@ -2439,13 +2137,19 @@ export default function EMSDashboard() {
                           const data = await res.json();
 
                           if (res.ok && data.success) {
-                            setProvisionStatus(`[SUCCESS]: Authorized account created for ${data.user.email}`);
-                            addLog(`Provisioned access keys for operator agent: ${data.user.email}`);
+                            setProvisionStatus(
+                              `[SUCCESS]: Authorized account created for ${data.user.email}`,
+                            );
+                            addLog(
+                              `Provisioned access keys for operator agent: ${data.user.email}`,
+                            );
                             setNewEmail("");
                             setNewPassword("");
                             fetchSystemUsers();
                           } else {
-                            setProvisionStatus(`[FAILURE]: ${data.error || "Transaction rejected."}`);
+                            setProvisionStatus(
+                              `[FAILURE]: ${data.error || "Transaction rejected."}`,
+                            );
                           }
                         } catch (err: any) {
                           setProvisionStatus(`[ERROR]: ${err.message}`);
@@ -2492,7 +2196,9 @@ export default function EMSDashboard() {
                             onChange={(e) => setNewRole(e.target.value)}
                             className="w-full bg-white border border-slate-200 text-xs font-bold rounded-lg p-2 h-9 uppercase text-slate-700 focus:ring-1 focus:ring-blue-500"
                           >
-                            <option value="operator">System Operator Agent</option>
+                            <option value="operator">
+                              System Operator Agent
+                            </option>
                             <option value="manager">Operations Manager</option>
                             <option value="auditor">Compliance Auditor</option>
                           </select>
@@ -2532,41 +2238,68 @@ export default function EMSDashboard() {
                       <Table>
                         <TableHeader>
                           <TableRow className="bg-slate-50 border-b border-slate-200">
-                            <TableHead className="text-[10px] font-black uppercase text-slate-500">System Identity Account</TableHead>
-                            <TableHead className="text-[10px] font-black uppercase text-slate-500">Database Prim Key ID</TableHead>
-                            <TableHead className="text-[10px] font-black uppercase text-slate-500">Role Authority Level</TableHead>
-                            <TableHead className="text-[10px] font-black uppercase text-slate-500 text-right">Revoke Access Control</TableHead>
+                            <TableHead className="text-[10px] font-black uppercase text-slate-500">
+                              System Identity Account
+                            </TableHead>
+                            <TableHead className="text-[10px] font-black uppercase text-slate-500">
+                              Database Prim Key ID
+                            </TableHead>
+                            <TableHead className="text-[10px] font-black uppercase text-slate-500">
+                              Role Authority Level
+                            </TableHead>
+                            <TableHead className="text-[10px] font-black uppercase text-slate-500 text-right">
+                              Revoke Access Control
+                            </TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {isLoadingUsers ? (
                             <TableRow>
-                              <TableCell colSpan={4} className="text-center p-4 text-xs font-bold uppercase text-slate-400">
+                              <TableCell
+                                colSpan={4}
+                                className="text-center p-4 text-xs font-bold uppercase text-slate-400"
+                              >
                                 Synchronizing system user tables...
                               </TableCell>
                             </TableRow>
                           ) : systemUsers.length === 0 ? (
                             <TableRow>
-                              <TableCell colSpan={4} className="text-center p-4 text-xs font-bold uppercase text-slate-400">
-                                No secondary operator keys found in the system registry cluster.
+                              <TableCell
+                                colSpan={4}
+                                className="text-center p-4 text-xs font-bold uppercase text-slate-400"
+                              >
+                                No secondary operator keys found in the system
+                                registry cluster.
                               </TableCell>
                             </TableRow>
                           ) : (
                             systemUsers.map((su) => (
-                              <TableRow key={su.id} className="border-b border-slate-100 hover:bg-slate-50/50 text-xs">
+                              <TableRow
+                                key={su.id}
+                                className="border-b border-slate-100 hover:bg-slate-50/50 text-xs"
+                              >
                                 <TableCell>
-                                  <div className="font-bold text-slate-900">{su.email}</div>
+                                  <div className="font-bold text-slate-900">
+                                    {su.email}
+                                  </div>
                                   {su.isSuperuser && (
                                     <Badge className="bg-blue-600 text-[8px] tracking-widest font-black uppercase px-1.5 py-0 mt-0.5 rounded">
                                       SUPERUSER ROOT
                                     </Badge>
                                   )}
                                 </TableCell>
-                                <td className="p-3 font-mono font-bold text-slate-400">{su.id}</td>
+                                <td className="p-3 font-mono font-bold text-slate-400">
+                                  {su.id}
+                                </td>
                                 <TableCell>
                                   <select
                                     value={su.roleTier}
-                                    onChange={(e) => handleUpdateUserRole(su.id, e.target.value)}
+                                    onChange={(e) =>
+                                      handleUpdateUserRole(
+                                        su.id,
+                                        e.target.value,
+                                      )
+                                    }
                                     className="bg-white border border-slate-200 text-[11px] font-bold rounded-md p-1 px-2 uppercase text-slate-700 outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
                                   >
                                     <option value="operator">operator</option>
@@ -2576,7 +2309,9 @@ export default function EMSDashboard() {
                                 </TableCell>
                                 <TableCell className="text-right">
                                   <Button
-                                    onClick={() => handleDeleteSystemUser(su.id)}
+                                    onClick={() =>
+                                      handleDeleteSystemUser(su.id)
+                                    }
                                     variant="outline"
                                     className="h-7 border-rose-200 hover:bg-rose-50 text-rose-600 hover:text-rose-700 font-bold text-[10px] uppercase rounded-md tracking-wider shadow-2xs"
                                   >
@@ -2601,7 +2336,8 @@ export default function EMSDashboard() {
         <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
           <div className="flex items-center gap-4 bg-slate-50 border border-slate-100 p-2 rounded-xl w-full sm:w-auto overflow-hidden">
             <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 shrink-0 flex items-center gap-1">
-              <Terminal className="w-3.5 h-3.5 text-blue-600" /> Active Console Logs:
+              <Terminal className="w-3.5 h-3.5 text-blue-600" /> Active Console
+              Logs:
             </span>
             <div className="flex items-center gap-3 overflow-x-auto whitespace-nowrap scrollbar-none font-mono text-[11px] text-slate-600 font-bold uppercase tracking-tight">
               {systemLogs.map((log, index) => (
