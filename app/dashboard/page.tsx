@@ -1551,7 +1551,7 @@ export default function EMSDashboard() {
               onClick={() => setActiveTab("CHECKLIST")}
               className={`px-4 py-2 rounded-lg flex items-center gap-1.5 transition-all ${activeTab === "CHECKLIST" ? "bg-white text-blue-600 shadow-xs" : "text-slate-600 hover:text-slate-900"}`}
             >
-              <UserCheck className="w-4 h-4" /> Checklist
+              <UserCheck className="w-4 h-4" /> Manual Checklist
             </button>
             <button
               onClick={() => setActiveTab("STAFF_PANEL")}
