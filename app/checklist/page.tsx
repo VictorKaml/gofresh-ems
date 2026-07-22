@@ -110,18 +110,15 @@ const DailyChecklist: React.FC<Props> = ({
   const [showPreviewModal, setShowPreviewModal] = useState<boolean>(false);
 
   // Available Cost Centers based on selected department
-  const availableCostCenters = useMemo(() => {
-    if (!selectedDept) return costCenters;
-    const filteredCCs = employees
-      .filter((emp) => emp.department === selectedDept && emp.costCenter)
-      .map((emp) => emp.costCenter as string);
-    return Array.from(new Set(filteredCCs));
-  }, [selectedDept, employees, costCenters]);
-
-  const handleDepartmentChange = (dept: string) => {
-    setSelectedDept(dept);
-    setSelectedCostCenter("");
-  };
+const availableCostCenters = useMemo(() => {
+  if (!selectedDept) return costCenters || []; // Added safe fallback array
+  
+  // Added optional chaining (?.) before filter
+  const filteredCCs = employees?.filter((emp) => emp.department === selectedDept && emp.costCenter)
+    .map((emp) => emp.costCenter as string) || []; // Added safe fallback array
+    
+  return Array.from(new Set(filteredCCs));
+}, [selectedDept, employees, costCenters]);
 
   // Calendar & Punch Form States
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
