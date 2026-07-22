@@ -29,6 +29,7 @@ export async function POST(request: Request) {
     const response = NextResponse.json({
       success: true,
       user: {
+        id: user.id,
         email: user.email,
         role: user.role_tier,
         superuser: user.is_superuser,
@@ -36,6 +37,7 @@ export async function POST(request: Request) {
     });
 
     response.cookies.set("gofresh_session", JSON.stringify({
+        id: user.id,
         email: user.email,
         role: user.role_tier,
         isSuperuser: user.is_superuser,

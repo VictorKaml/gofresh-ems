@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Search,
   Calendar as CalendarIcon,
@@ -20,6 +20,9 @@ import {
   AlertTriangle,
   Filter,
   UserX,
+  Loader2,
+  PartyPopper,
+  Mail,
 } from "lucide-react";
 
 interface Employee {
@@ -54,6 +57,17 @@ interface AttendanceRecord {
   [key: string]: any;
 }
 
+interface PublicHoliday {
+  date: string; // YYYY-MM-DD
+  name: string;
+}
+
+interface SystemUserLite {
+  id?: string;
+  email: string;
+  [key: string]: any;
+}
+
 interface Props {
   employees: Employee[];
   attendanceRecords: AttendanceRecord[];
@@ -63,6 +77,8 @@ interface Props {
   onRefreshDashboard: () => void;
   onDownloadExceptionReport?: (group: string) => void;
   onDownloadOverallAnalytics?: (dept: string, costCenter: string) => void;
+  publicHolidays?: PublicHoliday[];
+  systemUsers?: SystemUserLite[];
 }
 
 const OVERRIDE_REASONS = [
@@ -84,7 +100,40 @@ const DailyChecklist: React.FC<Props> = ({
   onRefreshDashboard,
   onDownloadExceptionReport,
   onDownloadOverallAnalytics,
+  publicHolidays = [],
+  systemUsers = [],
 }) => {
+  // Session User Email State
+  const [sessionUserEmail, setSessionUserEmail] = useState<string>("");
+
+  // Fetch logged-in user email on mount
+  useEffect(() => {
+    let isMounted = true;
+    const fetchLoggedInUser = async () => {
+      try {
+        const response = await fetch("/api/auth/me");
+        if (response.ok) {
+          const data = await response.json();
+          if (isMounted && data?.user?.email) {
+            setSessionUserEmail(data.user.email);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch logged-in user session:", error);
+      }
+    };
+
+    fetchLoggedInUser();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Determine active operator email with fallback order: Session Email -> Prop -> Default
+  const activeOperatorEmail = useMemo(() => {
+    return sessionUserEmail || operatorEmail || "OPERATOR_CHECKLIST_OVERRIDE";
+  }, [sessionUserEmail, operatorEmail]);
+
   // Local ISO date formatter helper (YYYY-MM-DD)
   const formatLocalDate = (d: Date) => {
     const year = d.getFullYear();
@@ -93,7 +142,44 @@ const DailyChecklist: React.FC<Props> = ({
     return `${year}-${month}-${day}`;
   };
 
-  const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
+  const todayStr = useMemo(() => formatLocalDate(new Date()), []);
+
+  // Public Holidays lookup map, keyed by YYYY-MM-DD for O(1) access in the grid
+  const holidaysByDate = useMemo(() => {
+    const map = new Map<string, PublicHoliday>();
+    (publicHolidays || []).forEach((h) => {
+      if (h && h.date) map.set(h.date, h);
+    });
+    return map;
+  }, [publicHolidays]);
+
+  // Resolve a stored "confirmed by" value with robust fallbacks
+  const resolveConfirmedByEmail = (rawValue: string | undefined | null) => {
+    if (!rawValue) return "System / Biometric Reader";
+
+    const trimmed = String(rawValue).trim();
+    if (!trimmed || trimmed === "null" || trimmed === "undefined") {
+      return "System / Biometric Reader";
+    }
+
+    // 1. If it's already an email format, return it directly
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      return trimmed;
+    }
+
+    // 2. Try to match rawValue against systemUsers by ID or Email (case-insensitive)
+    if (Array.isArray(systemUsers) && systemUsers.length > 0) {
+      const matchedUser = systemUsers.find(
+        (su) =>
+          String(su.id).toLowerCase() === trimmed.toLowerCase() ||
+          String(su.email).toLowerCase() === trimmed.toLowerCase(),
+      );
+      if (matchedUser?.email) return matchedUser.email;
+    }
+
+    // 3. Fallback: If it's a raw non-email ID string that wasn't matched in systemUsers
+    return trimmed;
+  };
 
   // Filter States
   const [selectedDept, setSelectedDept] = useState<string>("");
@@ -119,7 +205,6 @@ const DailyChecklist: React.FC<Props> = ({
     return Array.from(new Set(filteredCCs));
   }, [selectedDept, employees, costCenters]);
 
-  // ADD THIS BACK IN:
   const handleDepartmentChange = (dept: string) => {
     setSelectedDept(dept);
     setSelectedCostCenter("");
@@ -197,7 +282,6 @@ const DailyChecklist: React.FC<Props> = ({
   const employeesWithCompleteRecords = useMemo(() => {
     if (!selectedDate || selectedEmployeeIds.size === 0) return [];
 
-    // Added optional chaining (?.) and fallback array (|| [])
     const dateRecords =
       attendanceRecords?.filter((rec) => {
         const recDate = rec.date || rec.swipe_date;
@@ -206,7 +290,6 @@ const DailyChecklist: React.FC<Props> = ({
 
     const conflicts: Array<{ employee: Employee; confirmedBy: string }> = [];
 
-    // Added optional chaining (?.) before forEach
     selectedEmployeeList?.forEach((emp) => {
       const empId = String(emp.staffCode || emp.id);
 
@@ -220,25 +303,31 @@ const DailyChecklist: React.FC<Props> = ({
 
       // Complete record has both IN and OUT
       if (hasIn && hasOut) {
-        // Retrieve who confirmed/adjusted the record
-        const recordWithOperator = empRecords.find(
-          (r) =>
+        // Find any non-empty operator field across all matching records for this employee
+        const recordWithOperator = empRecords.find((r) => {
+          const val =
             r.adjusted_by ||
             r.adjustedBy ||
             r.operatorEmail ||
             r.operator_email ||
             r.created_by ||
-            r.updated_by,
-        );
+            r.updated_by;
+          return (
+            val &&
+            String(val).trim() !== "" &&
+            String(val) !== "SYSTEM_INGEST_CHRONO"
+          );
+        });
 
-        const confirmedBy =
+        const confirmedByRaw =
           recordWithOperator?.adjusted_by ||
           recordWithOperator?.adjustedBy ||
           recordWithOperator?.operatorEmail ||
           recordWithOperator?.operator_email ||
           recordWithOperator?.created_by ||
-          recordWithOperator?.updated_by ||
-          "System / Biometric Reader";
+          recordWithOperator?.updated_by;
+
+        const confirmedBy = resolveConfirmedByEmail(confirmedByRaw);
 
         conflicts.push({
           employee: emp,
@@ -253,6 +342,7 @@ const DailyChecklist: React.FC<Props> = ({
     selectedEmployeeList,
     attendanceRecords,
     selectedEmployeeIds,
+    systemUsers,
   ]);
 
   const hasConflictingRecords = employeesWithCompleteRecords.length > 0;
@@ -318,9 +408,8 @@ const DailyChecklist: React.FC<Props> = ({
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth();
 
-    // First day of the target month
     const firstDay = new Date(year, month, 1);
-    const dayOfWeekIndex = firstDay.getDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
+    const dayOfWeekIndex = firstDay.getDay();
 
     const days = [];
     const tempDate = new Date(year, month, 1);
@@ -380,7 +469,6 @@ const DailyChecklist: React.FC<Props> = ({
       checkInTime.length === 5 ? `${checkInTime}:00` : checkInTime;
     const formattedOutTime =
       checkOutTime.length === 5 ? `${checkOutTime}:00` : checkOutTime;
-    const activeOperator = operatorEmail || "OPERATOR_CHECKLIST_OVERRIDE";
 
     const batchRecords: any[] = [];
     selectedEmployeeList.forEach((emp) => {
@@ -394,7 +482,7 @@ const DailyChecklist: React.FC<Props> = ({
         time: formattedInTime,
         type: "IN",
         isManualOverride: true,
-        adjusted_by: activeOperator,
+        adjusted_by: activeOperatorEmail,
         reason: `${auditReason.trim()} (Check-In)`,
       });
 
@@ -406,13 +494,13 @@ const DailyChecklist: React.FC<Props> = ({
         time: formattedOutTime,
         type: "OUT",
         isManualOverride: true,
-        adjusted_by: activeOperator,
+        adjusted_by: activeOperatorEmail,
         reason: `${auditReason.trim()} (Check-Out)`,
       });
     });
 
     const payload = {
-      operatorEmail: activeOperator,
+      operatorEmail: activeOperatorEmail,
       records: batchRecords,
     };
 
@@ -454,24 +542,28 @@ const DailyChecklist: React.FC<Props> = ({
   return (
     <div className="flex flex-col gap-6 p-6 bg-gray-50 min-h-screen relative">
       {/* Header Bar */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-4 rounded-lg shadow-sm border border-gray-200 gap-4">
-        <div>
-          <h2 className="text-xl font-bold text-gray-800">
-            Daily Attendance Checklist
-          </h2>
-          <p className="text-sm text-gray-500">
-            Batch manage daily workspace attendance for multiple employees
-          </p>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-4 rounded-lg shadow-sm border border-gray-200 gap-4 transition-shadow hover:shadow-md">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center flex-shrink-0">
+            <CalendarIcon className="w-5 h-5 text-blue-600" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-gray-800">
+              Daily Attendance Checklist
+            </h2>
+            <p className="text-sm text-gray-500">
+              Batch manage daily workspace attendance for multiple employees
+            </p>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
           <select
             value={selectedDept}
             onChange={(e) => handleDepartmentChange(e.target.value)}
-            className="px-3 py-2 border rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 cursor-pointer"
+            className="px-3 py-2 border rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 cursor-pointer transition-all hover:border-blue-300"
           >
             <option value="">All Departments</option>
-            {/* Add ?. right here */}
             {departments?.map((dept) => (
               <option key={dept} value={dept}>
                 {dept}
@@ -482,7 +574,7 @@ const DailyChecklist: React.FC<Props> = ({
           <select
             value={selectedCostCenter}
             onChange={(e) => setSelectedCostCenter(e.target.value)}
-            className="px-3 py-2 border rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 cursor-pointer"
+            className="px-3 py-2 border rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 cursor-pointer transition-all hover:border-blue-300"
           >
             <option value="">All Cost Centers</option>
             {availableCostCenters.map((cc) => (
@@ -497,7 +589,7 @@ const DailyChecklist: React.FC<Props> = ({
               onDownloadExceptionReport &&
               onDownloadExceptionReport("Late Arrivals")
             }
-            className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-md text-sm font-medium border border-amber-200"
+            className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-md text-sm font-medium border border-amber-200 transition-all hover:shadow-sm active:scale-95"
           >
             <FileText className="w-4 h-4" /> Exceptions
           </button>
@@ -507,7 +599,7 @@ const DailyChecklist: React.FC<Props> = ({
               onDownloadOverallAnalytics &&
               onDownloadOverallAnalytics(selectedDept, selectedCostCenter)
             }
-            className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-md text-sm font-medium border border-blue-200"
+            className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-md text-sm font-medium border border-blue-200 transition-all hover:shadow-sm active:scale-95"
           >
             <BarChart3 className="w-4 h-4" /> Analytics PDF
           </button>
@@ -517,7 +609,8 @@ const DailyChecklist: React.FC<Props> = ({
       {/* Notification Banner */}
       {notification && (
         <div
-          className={`p-4 rounded-md flex items-center gap-2 ${notification.type === "success" ? "bg-green-50 text-green-800 border border-green-200" : "bg-red-50 text-red-800 border border-red-200"}`}
+          key={notification.message}
+          className={`p-4 rounded-md flex items-center gap-2 border animate-in fade-in slide-in-from-top-2 duration-300 ${notification.type === "success" ? "bg-green-50 text-green-800 border-green-200" : "bg-red-50 text-red-800 border-red-200"}`}
         >
           {notification.type === "success" ? (
             <CheckCircle2 className="w-5 h-5 text-green-600" />
@@ -531,7 +624,7 @@ const DailyChecklist: React.FC<Props> = ({
       {/* Main Grid Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Multi-Select Employee List */}
-        <div className="lg:col-span-5 bg-white rounded-lg shadow-sm border border-gray-200 flex flex-col h-[700px]">
+        <div className="lg:col-span-5 bg-white rounded-lg shadow-sm border border-gray-200 flex flex-col h-[700px] transition-shadow hover:shadow-md">
           <div className="p-4 border-b border-gray-100 space-y-3">
             <div className="flex justify-between items-center">
               <label className="block text-xs font-semibold uppercase text-gray-500">
@@ -542,7 +635,7 @@ const DailyChecklist: React.FC<Props> = ({
                 {selectedEmployeeIds.size > 0 && (
                   <button
                     onClick={handleClearAllSelections}
-                    className="text-xs text-red-600 hover:underline font-medium"
+                    className="text-xs text-red-600 hover:underline font-medium transition-colors animate-in fade-in duration-200"
                   >
                     Clear
                   </button>
@@ -550,7 +643,7 @@ const DailyChecklist: React.FC<Props> = ({
                 <button
                   onClick={toggleSelectAllFiltered}
                   disabled={searchMatchedEmployees.length === 0}
-                  className="text-xs text-blue-600 font-medium hover:underline flex items-center gap-1 disabled:opacity-40 disabled:no-underline"
+                  className="text-xs text-blue-600 font-medium hover:underline flex items-center gap-1 disabled:opacity-40 disabled:no-underline transition-colors"
                 >
                   {isAllFilteredSelected ? (
                     <CheckSquare className="w-3.5 h-3.5" />
@@ -564,12 +657,12 @@ const DailyChecklist: React.FC<Props> = ({
               </div>
             </div>
 
-            {/* Filter Toggle Button to Strictly Show Selected Only */}
+            {/* Filter Toggle Button */}
             <div className="flex items-center justify-between gap-2 pt-1">
               <button
                 onClick={() => setShowOnlySelected(!showOnlySelected)}
                 disabled={selectedEmployeeIds.size === 0 && !showOnlySelected}
-                className={`w-full text-xs font-semibold py-1.5 px-3 rounded-md border flex items-center justify-center gap-1.5 transition-all ${
+                className={`w-full text-xs font-semibold py-1.5 px-3 rounded-md border flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] ${
                   showOnlySelected
                     ? "bg-blue-600 text-white border-blue-600 shadow-sm"
                     : "bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -583,31 +676,31 @@ const DailyChecklist: React.FC<Props> = ({
             </div>
 
             <div className="relative">
-              <Search className="w-4 h-4 absolute left-3 top-3 text-gray-400" />
+              <Search className="w-4 h-4 absolute left-3 top-3 text-gray-400 transition-colors peer-focus:text-blue-500" />
               <input
                 type="text"
                 placeholder="Search by name or employee ID..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="peer w-full pl-9 pr-4 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
               />
             </div>
           </div>
 
           <div className="flex-1 overflow-y-auto divide-y divide-gray-100">
             {displayedEmployees.length === 0 ? (
-              <div className="p-6 text-center text-gray-400 text-sm">
+              <div className="p-8 text-center text-gray-400 text-sm flex flex-col items-center gap-2 animate-in fade-in duration-300">
+                <Users className="w-8 h-8 text-gray-300" />
                 {showOnlySelected
                   ? "No checked employees found."
                   : "No employees found matching filter."}
               </div>
             ) : (
-              displayedEmployees.map((employee) => {
+              displayedEmployees.map((employee, idx) => {
                 const empId = String(employee.staffCode || employee.id);
                 const empName = employee.fullName || employee.name;
                 const isChecked = selectedEmployeeIds.has(empId);
 
-                // Check if employee has duplicate record
                 const conflictObj = employeesWithCompleteRecords.find(
                   (c) =>
                     String(c.employee.staffCode || c.employee.id) === empId,
@@ -617,12 +710,13 @@ const DailyChecklist: React.FC<Props> = ({
                   <div
                     key={empId}
                     onClick={() => toggleEmployeeSelection(empId)}
-                    className={`p-4 cursor-pointer transition-colors flex items-center justify-between hover:bg-gray-50 ${
+                    style={{ animationDelay: `${Math.min(idx, 20) * 20}ms` }}
+                    className={`p-4 cursor-pointer transition-all duration-200 flex items-center justify-between hover:bg-gray-50 animate-in fade-in slide-in-from-left-1 ${
                       conflictObj
                         ? "bg-red-50/90 border-l-4 border-red-600"
                         : isChecked
                           ? "bg-blue-50/80 border-l-4 border-blue-600"
-                          : ""
+                          : "border-l-4 border-transparent"
                     }`}
                   >
                     <div className="flex items-center gap-3">
@@ -630,7 +724,7 @@ const DailyChecklist: React.FC<Props> = ({
                         type="checkbox"
                         checked={isChecked}
                         onChange={() => {}}
-                        className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
+                        className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer transition-transform checked:scale-110"
                       />
                       <div>
                         <div className="flex items-center gap-2">
@@ -638,12 +732,12 @@ const DailyChecklist: React.FC<Props> = ({
                             {empName}
                           </h4>
                           {conflictObj && (
-                            <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold">
+                            <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold animate-pulse">
                               Complete Record Exists
                             </span>
                           )}
                           {isChecked && !conflictObj && (
-                            <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-medium">
+                            <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-medium animate-in fade-in zoom-in-95 duration-200">
                               Checked
                             </span>
                           )}
@@ -652,9 +746,22 @@ const DailyChecklist: React.FC<Props> = ({
                           ID: {empId} • {employee.department || "N/A"}
                         </p>
                         {conflictObj ? (
-                          <p className="text-[11px] text-red-700 font-medium mt-0.5">
+                          <p className="text-[11px] text-red-700 font-medium mt-0.5 flex items-center gap-1">
+                            <Mail className="w-3 h-3 flex-shrink-0" />
                             Confirmed By:{" "}
-                            <strong>{conflictObj.confirmedBy}</strong>
+                            {/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+                              conflictObj.confirmedBy,
+                            ) ? (
+                              <a
+                                href={`mailto:${conflictObj.confirmedBy}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="font-bold underline hover:text-red-900 transition-colors"
+                              >
+                                {conflictObj.confirmedBy}
+                              </a>
+                            ) : (
+                              <strong>{conflictObj.confirmedBy}</strong>
+                            )}
                           </p>
                         ) : (
                           <span className="inline-block mt-1 text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
@@ -671,7 +778,7 @@ const DailyChecklist: React.FC<Props> = ({
         </div>
 
         {/* Right Column: Calendar & Target Log Date Controls */}
-        <div className="lg:col-span-7 bg-white rounded-lg shadow-sm border border-gray-200 p-6 flex flex-col justify-between h-[700px] overflow-y-auto">
+        <div className="lg:col-span-7 bg-white rounded-lg shadow-sm border border-gray-200 p-6 flex flex-col justify-between h-[700px] overflow-y-auto transition-shadow hover:shadow-md">
           <div className="flex flex-col gap-5">
             {/* Multi-Selection Counter Header */}
             <div className="flex justify-between items-center pb-4 border-b border-gray-100">
@@ -679,7 +786,7 @@ const DailyChecklist: React.FC<Props> = ({
                 <span className="text-xs text-blue-600 font-semibold uppercase tracking-wider flex items-center gap-1.5">
                   <Users className="w-4 h-4" /> Batch Target Group
                 </span>
-                <h3 className="text-lg font-bold text-gray-800">
+                <h3 className="text-lg font-bold text-gray-800 transition-all">
                   {selectedEmployeeIds.size} Employee(s) Selected
                 </h3>
               </div>
@@ -695,7 +802,7 @@ const DailyChecklist: React.FC<Props> = ({
 
             {/* Existing Complete Record Warning Banner */}
             {hasConflictingRecords && (
-              <div className="p-4 bg-red-50 border border-red-200 rounded-md text-red-800 space-y-2">
+              <div className="p-4 bg-red-50 border border-red-200 rounded-md text-red-800 space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
                 <div className="flex items-start gap-2">
                   <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
                   <div>
@@ -719,7 +826,7 @@ const DailyChecklist: React.FC<Props> = ({
                     return (
                       <div
                         key={cId}
-                        className="p-2 flex justify-between items-center text-red-900"
+                        className="p-2 flex justify-between items-center text-red-900 transition-colors hover:bg-red-50/60"
                       >
                         <div>
                           <span className="font-semibold">
@@ -731,9 +838,18 @@ const DailyChecklist: React.FC<Props> = ({
                           <span className="text-[11px] text-gray-600 block">
                             Confirmed By:
                           </span>
-                          <span className="font-medium text-red-800">
-                            {c.confirmedBy}
-                          </span>
+                          {/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.confirmedBy) ? (
+                            <a
+                              href={`mailto:${c.confirmedBy}`}
+                              className="font-medium text-red-800 underline hover:text-red-900 transition-colors"
+                            >
+                              {c.confirmedBy}
+                            </a>
+                          ) : (
+                            <span className="font-medium text-red-800">
+                              {c.confirmedBy}
+                            </span>
+                          )}
                         </div>
                       </div>
                     );
@@ -743,7 +859,7 @@ const DailyChecklist: React.FC<Props> = ({
                 <div className="flex justify-end pt-1">
                   <button
                     onClick={handleRemoveConflictingEmployees}
-                    className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-semibold flex items-center gap-1.5 shadow-sm"
+                    className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all active:scale-95 hover:shadow"
                   >
                     <UserX className="w-3.5 h-3.5" />
                     Remove Blocked Employees from Batch
@@ -762,11 +878,11 @@ const DailyChecklist: React.FC<Props> = ({
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handlePrevMonth}
-                    className="p-1 hover:bg-gray-100 rounded"
+                    className="p-1 hover:bg-gray-100 rounded transition-all active:scale-90"
                   >
                     <ChevronLeft className="w-4 h-4 text-gray-600" />
                   </button>
-                  <span className="text-sm font-medium text-gray-600">
+                  <span className="text-sm font-medium text-gray-600 min-w-[110px] text-center">
                     {currentMonth.toLocaleString("default", {
                       month: "long",
                       year: "numeric",
@@ -774,7 +890,7 @@ const DailyChecklist: React.FC<Props> = ({
                   </span>
                   <button
                     onClick={handleNextMonth}
-                    className="p-1 hover:bg-gray-100 rounded"
+                    className="p-1 hover:bg-gray-100 rounded transition-all active:scale-90"
                   >
                     <ChevronRight className="w-4 h-4 text-gray-600" />
                   </button>
@@ -782,8 +898,10 @@ const DailyChecklist: React.FC<Props> = ({
               </div>
 
               {/* Days Grid */}
-              {/* Days Grid */}
-              <div className="grid grid-cols-7 gap-2 text-center">
+              <div
+                key={`${currentMonth.getFullYear()}-${currentMonth.getMonth()}`}
+                className="grid grid-cols-7 gap-2 text-center animate-in fade-in duration-200"
+              >
                 {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
                   (day) => (
                     <span
@@ -806,6 +924,8 @@ const DailyChecklist: React.FC<Props> = ({
                   const isSelected = selectedDate === formattedDate;
                   const isToday = todayStr === formattedDate;
                   const isFutureDate = formattedDate > todayStr;
+                  const holiday = holidaysByDate.get(formattedDate);
+                  const isHoliday = !!holiday;
 
                   let dayStyle = "hover:bg-gray-100 text-gray-700";
 
@@ -814,10 +934,13 @@ const DailyChecklist: React.FC<Props> = ({
                       "opacity-40 cursor-not-allowed bg-gray-50 text-gray-400";
                   } else if (isSelected) {
                     dayStyle =
-                      "bg-blue-600 text-white shadow-sm ring-2 ring-blue-300";
+                      "bg-blue-600 text-white shadow-sm ring-2 ring-blue-300 scale-105";
                   } else if (isToday) {
                     dayStyle =
                       "bg-blue-50 text-blue-600 border border-blue-200 font-semibold";
+                  } else if (isHoliday) {
+                    dayStyle =
+                      "bg-purple-50 text-purple-700 border border-purple-200 font-semibold hover:bg-purple-100";
                   }
 
                   return (
@@ -825,18 +948,45 @@ const DailyChecklist: React.FC<Props> = ({
                       key={formattedDate}
                       disabled={isFutureDate}
                       onClick={() => setSelectedDate(formattedDate)}
-                      className={`py-2 text-sm rounded-md transition-all flex items-center justify-center ${dayStyle}`}
+                      title={isHoliday ? holiday!.name : undefined}
+                      className={`relative py-2 text-sm rounded-md transition-all duration-150 flex items-center justify-center ${!isFutureDate ? "hover:scale-105 active:scale-95" : ""} ${dayStyle}`}
                     >
                       <span>{day.getDate()}</span>
+                      {isHoliday && (
+                        <span
+                          className={`absolute bottom-0.5 w-1.5 h-1.5 rounded-full ${
+                            isSelected ? "bg-white" : "bg-purple-500"
+                          }`}
+                        />
+                      )}
                     </button>
                   );
                 })}
               </div>
+
+              {/* Holiday Legend */}
+              {holidaysByDate.size > 0 && (
+                <div className="flex items-center gap-1.5 mt-3 text-[11px] text-purple-700 animate-in fade-in duration-300">
+                  <span className="w-2 h-2 rounded-full bg-purple-500 inline-block" />
+                  Public Holiday
+                </div>
+              )}
             </div>
+
+            {/* Selected Date Public Holiday Notice */}
+            {holidaysByDate.has(selectedDate) && (
+              <div className="p-3 bg-purple-50 border border-purple-200 text-purple-800 rounded-md text-xs font-medium flex items-center gap-2 animate-in fade-in slide-in-from-top-1 duration-300">
+                <PartyPopper className="w-4 h-4 text-purple-600 flex-shrink-0" />
+                <span>
+                  <strong>{selectedDate}</strong> is marked as a public holiday:{" "}
+                  <strong>{holidaysByDate.get(selectedDate)!.name}</strong>
+                </span>
+              </div>
+            )}
 
             {/* Future Date Alert */}
             {isSelectedDateInFuture && (
-              <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-md text-xs font-medium flex items-center gap-2">
+              <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-md text-xs font-medium flex items-center gap-2 animate-in fade-in slide-in-from-top-1 duration-300">
                 <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
                 <span>
                   Attendance cannot be logged for future dates ({selectedDate}).
@@ -860,7 +1010,7 @@ const DailyChecklist: React.FC<Props> = ({
                   }
                   value={checkInTime}
                   onChange={(e) => setCheckInTime(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  className="w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100 disabled:cursor-not-allowed transition-all"
                 />
               </div>
               <div>
@@ -876,7 +1026,7 @@ const DailyChecklist: React.FC<Props> = ({
                   }
                   value={checkOutTime}
                   onChange={(e) => setCheckOutTime(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  className="w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100 disabled:cursor-not-allowed transition-all"
                 />
               </div>
             </div>
@@ -895,7 +1045,7 @@ const DailyChecklist: React.FC<Props> = ({
                 }
                 value={auditReason}
                 onChange={(e) => setAuditReason(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white cursor-pointer disabled:bg-gray-100 disabled:cursor-not-allowed"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white cursor-pointer disabled:bg-gray-100 disabled:cursor-not-allowed transition-all"
               >
                 {OVERRIDE_REASONS.map((reasonOption) => (
                   <option key={reasonOption} value={reasonOption}>
@@ -914,7 +1064,7 @@ const DailyChecklist: React.FC<Props> = ({
                   isSelectedDateInFuture ||
                   hasConflictingRecords
                 }
-                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-md shadow-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-md shadow-sm transition-all active:scale-[0.98] hover:shadow-md flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-sm"
               >
                 <UserCheck className="w-5 h-5" />
                 Preview & Confirm Batch ({selectedEmployeeIds.size} Selected)
@@ -926,8 +1076,8 @@ const DailyChecklist: React.FC<Props> = ({
 
       {/* Confirmation Modal */}
       {showPreviewModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl border border-gray-200 max-w-lg w-full p-6 flex flex-col gap-4 animate-in fade-in zoom-in-95">
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-lg shadow-xl border border-gray-200 max-w-lg w-full p-6 flex flex-col gap-4 animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-250 ease-out">
             <div className="flex justify-between items-center border-b pb-3">
               <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                 <UserCheck className="w-5 h-5 text-blue-600" />
@@ -935,7 +1085,7 @@ const DailyChecklist: React.FC<Props> = ({
               </h3>
               <button
                 onClick={() => setShowPreviewModal(false)}
-                className="p-1 text-gray-400 hover:text-gray-600 rounded-md"
+                className="p-1 text-gray-400 hover:text-gray-600 rounded-md transition-all hover:rotate-90 hover:bg-gray-100"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -955,8 +1105,7 @@ const DailyChecklist: React.FC<Props> = ({
                 <strong>Override Reason:</strong> {auditReason}
               </p>
               <p>
-                <strong>Adjusted By Operator:</strong>{" "}
-                {operatorEmail || "System Admin"}
+                <strong>Adjusted By Operator:</strong> {activeOperatorEmail}
               </p>
             </div>
 
@@ -968,7 +1117,7 @@ const DailyChecklist: React.FC<Props> = ({
                 {selectedEmployeeList.map((emp) => (
                   <div
                     key={emp.staffCode || emp.id}
-                    className="p-2.5 flex justify-between items-center text-xs"
+                    className="p-2.5 flex justify-between items-center text-xs transition-colors hover:bg-gray-50"
                   >
                     <div>
                       <span className="font-semibold text-gray-800">
@@ -990,15 +1139,16 @@ const DailyChecklist: React.FC<Props> = ({
               <button
                 onClick={() => setShowPreviewModal(false)}
                 disabled={isSubmitting}
-                className="px-4 py-2 border rounded-md text-sm font-medium text-gray-600 hover:bg-gray-50"
+                className="px-4 py-2 border rounded-md text-sm font-medium text-gray-600 hover:bg-gray-50 transition-all active:scale-95 disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleBatchConfirmAttendance}
                 disabled={isSubmitting || hasConflictingRecords}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-md shadow-sm flex items-center gap-2 disabled:opacity-50"
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-md shadow-sm flex items-center gap-2 disabled:opacity-50 transition-all active:scale-95 hover:shadow-md"
               >
+                {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
                 {isSubmitting
                   ? "Posting Records..."
                   : "Confirm & Submit Attendance"}
