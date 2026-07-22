@@ -1078,6 +1078,19 @@ export default function EMSDashboard() {
     }));
   }, [rawSwipesBuffer]);
 
+  const handleRefresh = async () => {
+    try {
+      const response = await fetch(`/api/attendance?page=0&size=2500`);
+      if (response.ok) {
+        const payload = await response.json();
+        setRawSwipesBuffer(payload.swipes || []);
+        addLog("Refreshed daily checklist attendance records.");
+      }
+    } catch (err) {
+      console.error("Failed to refresh attendance records:", err);
+    }
+  };
+
   return (
     <div className="bg-slate-50 text-slate-900 min-h-screen flex flex-col font-sans antialiased">
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-xs">
@@ -1217,20 +1230,7 @@ export default function EMSDashboard() {
               attendanceRecords={mappedAttendanceRecords || []}
               departments={departmentsList || []}
               costCenters={costCentersList || []}
-              onRefreshDashboard={async () => {
-                try {
-                  const response = await fetch(
-                    `/api/attendance?page=0&size=2500`,
-                  );
-                  if (response.ok) {
-                    const payload = await response.json();
-                    setRawSwipesBuffer(payload.swipes || []);
-                    addLog("Refreshed daily checklist attendance records.");
-                  }
-                } catch (err) {
-                  console.error("Failed to refresh attendance records:", err);
-                }
-              }}
+              onRefreshDashboard={handleRefresh}
             />
           )}
 

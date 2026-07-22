@@ -157,21 +157,23 @@ const DailyChecklist: React.FC<Props> = ({
 
   // List of employees matching search criteria
   const searchMatchedEmployees = useMemo(() => {
-    return employees.filter(matchesFilter);
+    return employees?.filter(matchesFilter) || [];
   }, [employees, selectedDept, selectedCostCenter, searchQuery]);
 
   // Displayed Employees List
   const displayedEmployees = useMemo(() => {
-    return employees.filter((emp) => {
-      const empId = String(emp.staffCode || emp.id);
-      const isChecked = selectedEmployeeIds.has(empId);
+    return (
+      employees?.filter((emp) => {
+        const empId = String(emp.staffCode || emp.id);
+        const isChecked = selectedEmployeeIds.has(empId);
 
-      if (showOnlySelected) {
-        return isChecked && matchesFilter(emp);
-      }
+        if (showOnlySelected) {
+          return isChecked && matchesFilter(emp);
+        }
 
-      return matchesFilter(emp);
-    });
+        return matchesFilter(emp);
+      }) || []
+    );
   }, [
     employees,
     selectedEmployeeIds,
@@ -183,10 +185,12 @@ const DailyChecklist: React.FC<Props> = ({
 
   // Selected Employee Objects Array
   const selectedEmployeeList = useMemo(() => {
-    return employees.filter((emp) => {
-      const id = String(emp.staffCode || emp.id);
-      return selectedEmployeeIds.has(id);
-    });
+    return (
+      employees?.filter((emp) => {
+        const id = String(emp.staffCode || emp.id);
+        return selectedEmployeeIds.has(id);
+      }) || []
+    );
   }, [employees, selectedEmployeeIds]);
 
   // Check existing attendance for selected employees on selected target date
@@ -467,7 +471,8 @@ const DailyChecklist: React.FC<Props> = ({
             className="px-3 py-2 border rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 cursor-pointer"
           >
             <option value="">All Departments</option>
-            {departments.map((dept) => (
+            {/* Add ?. right here */}
+            {departments?.map((dept) => (
               <option key={dept} value={dept}>
                 {dept}
               </option>
