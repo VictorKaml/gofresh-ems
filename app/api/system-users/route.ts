@@ -1,6 +1,7 @@
 // src/app/api/system-users/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import bcrypt from "bcryptjs";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,73 @@ export async function GET() {
     console.error("🔴 [SYSTEM USERS GET FAULT]:", error);
     return NextResponse.json(
       { success: false, error: "Internal Database Server Error" },
+      { status: 500 }
+    );
+  }
+}
+
+// POST: Provision a brand new system user account
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const {
+      email,
+      password,
+      roleTier,
+      isSuperuser,
+      canIngestChrono,
+      canModifyRoster,
+    } = body;
+
+    if (!email || !password) {
+      return NextResponse.json(
+        { success: false, error: "Email and password are required" },
+        { status: 400 }
+      );
+    }
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+
+    const existing = await prisma.systemUser.findUnique({
+      where: { email: normalizedEmail },
+    });
+    if (existing) {
+      return NextResponse.json(
+        { success: false, error: "A system user with this email already exists" },
+        { status: 409 }
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const newUser = await prisma.systemUser.create({
+      data: {
+        email: normalizedEmail,
+        passwordHash,
+        roleTier: roleTier ?? "operator",
+        isSuperuser: isSuperuser ?? false,
+        canIngestChrono: canIngestChrono ?? true,
+        canModifyRoster: canModifyRoster ?? false,
+      },
+      select: {
+        id: true,
+        email: true,
+        roleTier: true,
+        isSuperuser: true,
+        canIngestChrono: true,
+        canModifyRoster: true,
+        createdAt: true,
+      },
+    });
+
+    return NextResponse.json(
+      { success: true, user: newUser },
+      { status: 201 }
+    );
+  } catch (error: any) {
+    console.error("🔴 [SYSTEM USERS POST FAULT]:", error);
+    return NextResponse.json(
+      { success: false, error: "Failed to provision new system user" },
       { status: 500 }
     );
   }
@@ -59,6 +127,9 @@ export async function PATCH(req: NextRequest) {
         id: true,
         email: true,
         roleTier: true,
+        isSuperuser: true,
+        canIngestChrono: true,
+        canModifyRoster: true,
       }
     });
 

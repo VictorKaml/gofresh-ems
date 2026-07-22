@@ -136,7 +136,7 @@ export default function EMSDashboard() {
   const [newPassword, setNewPassword] = useState("");
   const [newRole, setNewRole] = useState("operator");
   const [isSuper, setIsSuper] = useState(false);
-  const [rightChrono, setRightChrono] = useState(false); // If referenced by your form
+  const [rightChrono, setRightChrono] = useState(true); // If referenced by your form
   const [rightRoster, setRightRoster] = useState(false); // If referenced by your form
   const [provisionStatus, setProvisionStatus] = useState<string | null>(null);
 
@@ -226,7 +226,7 @@ export default function EMSDashboard() {
       const res = await fetch("/api/system-users", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, role_tier: role }),
+        body: JSON.stringify({ id, roleTier: role }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -234,6 +234,30 @@ export default function EMSDashboard() {
         fetchSystemUsers(); // Refresh the list
       } else {
         alert(data.error || "Failed to update role");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Toggle a single permission flag (isSuperuser / canIngestChrono / canModifyRoster) on a user
+  const handleToggleUserRight = async (
+    id: string,
+    field: "isSuperuser" | "canIngestChrono" | "canModifyRoster",
+    value: boolean,
+  ) => {
+    try {
+      const res = await fetch("/api/system-users", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, [field]: value }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        addLog(`Updated ${field} to ${value} for system user`);
+        fetchSystemUsers(); // Refresh the list
+      } else {
+        alert(data.error || "Failed to update permission");
       }
     } catch (err) {
       console.error(err);
@@ -445,35 +469,6 @@ export default function EMSDashboard() {
   const [workersDataset, setWorkersDataset] = useState<EmployeeProfile[]>([]);
 
   // Helper logic to get the full week range matching a specific date anchor string
-  const targetWeekDays = useMemo(() => {
-    const current = new Date(selectedDate);
-    const day = current.getDay();
-    const distanceToMonday = day === 0 ? -6 : 1 - day;
-    const monday = new Date(current);
-    monday.setDate(current.getDate() + distanceToMonday);
-
-    const daysList = [];
-    const weekdayNames = [
-      "Sunday",
-      "Monday",
-      "Tuesday",
-      "Wednesday",
-      "Thursday",
-      "Friday",
-      "Saturday",
-    ];
-
-    for (let i = 0; i < 7; i++) {
-      const nextDay = new Date(monday);
-      nextDay.setDate(monday.getDate() + i);
-      const isoString = nextDay.toISOString().split("T")[0];
-      daysList.push({
-        dateStr: isoString,
-        dayName: weekdayNames[nextDay.getDay()],
-      });
-    }
-    return daysList;
-  }, [selectedDate]);
 
   const handleCreateStaffSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -811,68 +806,7 @@ export default function EMSDashboard() {
   }, [employeeDirectory, rawSwipesBuffer, monthFilter, selectedDate]);
 
   // Derive dynamic list of Cost Centers based on selected department to avoid dead-ends
-  const availableCostCenters = useMemo(() => {
-    if (!checklistDept) return [];
-    const uniqueCCs = new Set(
-      systemProcessedDataset
-        .filter((emp) => emp.department === checklistDept)
-        .map((emp) => emp.costCenter),
-    );
-    return Array.from(uniqueCCs);
-  }, [checklistDept, systemProcessedDataset]);
 
-  const handleMarkManualAttendance = async (
-    staffCode: string,
-    fullName: string,
-  ) => {
-    setIsSubmittingManualAttendance(staffCode);
-
-    // Structure a standard manual "In" punch format
-    const manualRecord = {
-      id: staffCode,
-      date: selectedDate, // Logs to the active date filter
-      weekDay: new Date(selectedDate).toLocaleDateString("en-US", {
-        weekday: "long",
-      }),
-      time: new Date()
-        .toLocaleTimeString("en-US", { hour12: false })
-        .slice(0, 5), // "HH:MM" format
-      type: "Manual In",
-      isManualOverride: true,
-      reason: "Remote Shop / Offsite Manual Checklist Synchronization",
-    };
-
-    try {
-      const response = await fetch("/api/attendance/batch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          records: [manualRecord],
-          operatorEmail: user?.email || "CHECKLIST_MANAGER_AGENT",
-        }),
-      });
-
-      const result = await response.json();
-      if (response.ok && result.success) {
-        addLog(
-          `[MANUAL OVERRIDE] Marked ${fullName} (${staffCode}) as Present at Remote Shop.`,
-        );
-
-        // Update the local attendance cache when the setter is available.
-        if (typeof setRawSwipesBuffer === "function") {
-          setRawSwipesBuffer((prev) => [...prev, manualRecord]);
-        } else {
-          window.location.reload();
-        }
-      } else {
-        alert(result.error || "Failed to log override.");
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsSubmittingManualAttendance(null);
-    }
-  };
 
   // Handle logging out the user
   const handleSignOut = async () => {
@@ -892,175 +826,10 @@ export default function EMSDashboard() {
 
   // 2️⃣ PLACE THIS SECOND (liveMetricsRollup)
   // Computes base operational counts strictly dynamic to selected Department & Cost Center selection
-  const liveMetricsRollup = useMemo(() => {
-    let onsite = 0;
-    let onTime = 0;
-    let late = 0;
-    let absent = 0;
-
-    const departmentFilteredEmployees = employeeDirectory.filter((emp) => {
-      if (reportDept !== "ALL" && emp.department !== reportDept) return false;
-      if (reportCC !== "ALL" && emp.costCenter !== reportCC) return false;
-      return true;
-    });
-
-    departmentFilteredEmployees.forEach((emp) => {
-      const daySwipes = rawSwipesBuffer.filter(
-        (s) => s.id === emp.staffCode && s.date === selectedDate,
-      );
-
-      const ins = daySwipes
-        .filter((s) => s.type.toLowerCase().includes("in"))
-        .sort((a, b) => a.time.localeCompare(b.time));
-      const outs = daySwipes
-        .filter((s) => s.type.toLowerCase().includes("out"))
-        .sort((a, b) => a.time.localeCompare(b.time));
-
-      const clockIn = ins.length > 0 ? ins[0].time : "—";
-      const clockOut = outs.length > 0 ? outs[outs.length - 1].time : "—";
-
-      if (clockIn !== "—" || clockOut !== "—") {
-        onsite++;
-        if (clockIn !== "—" && clockIn <= "07:30") {
-          onTime++;
-        } else {
-          late++;
-        }
-        if (clockIn === "—" || clockOut === "—") {
-          absent++;
-        }
-      } else {
-        absent++;
-      }
-    });
-
-    return {
-      onsite,
-      onTime,
-      late,
-      absent,
-      total: departmentFilteredEmployees.length,
-    };
-  }, [rawSwipesBuffer, employeeDirectory, selectedDate, reportDept, reportCC]);
 
   // Comprehensive analytics parsing utilizing standard 8.5 hour shift caps across entire calendar week row structures
-  const processedRosterDataset = useMemo(() => {
-    const departmentFilteredEmployees = employeeDirectory.filter((emp) => {
-      if (reportDept !== "ALL" && emp.department !== reportDept) return false;
-      if (reportCC !== "ALL" && emp.costCenter !== reportCC) return false;
-      return true;
-    });
-
-    return departmentFilteredEmployees.map((emp) => {
-      let grandRegularTotal = 0;
-      let grandOvertimeTotal = 0;
-      let isEmployeeOnsiteOnSelectedDate = false;
-      let isEmployeeAbsentOnSelectedDate = false;
-      let isEmployeeOnTimeOnSelectedDate = false;
-      let isEmployeeLateOnSelectedDate = false;
-
-      const weeklyDayBreakdowns = targetWeekDays.map((day) => {
-        const daySwipes = rawSwipesBuffer.filter(
-          (s) => s.id === emp.staffCode && s.date === day.dateStr,
-        );
-
-        const ins = daySwipes
-          .filter((s) => s.type.toLowerCase().includes("in"))
-          .sort((a, b) => a.time.localeCompare(b.time));
-        const outs = daySwipes
-          .filter((s) => s.type.toLowerCase().includes("out"))
-          .sort((a, b) => a.time.localeCompare(b.time));
-
-        const clockIn = ins.length > 0 ? ins[0].time : "—";
-        const clockOut = outs.length > 0 ? outs[outs.length - 1].time : "—";
-
-        let regularHours = 0;
-        let overtimeHours = 0;
-        let isAbsent = true;
-
-        if (clockIn !== "—" || clockOut !== "—") {
-          if (day.dateStr === selectedDate)
-            isEmployeeOnsiteOnSelectedDate = true;
-
-          if (clockIn !== "—" && clockOut !== "—") {
-            isAbsent = false;
-            const [inH, inM] = clockIn.split(":").map(Number);
-            const [outH, outM] = clockOut.split(":").map(Number);
-            const duration = parseFloat(
-              ((outH * 60 + outM - (inH * 60 + inM)) / 60).toFixed(2),
-            );
-
-            if (duration > 8.5) {
-              regularHours = 8.5;
-              overtimeHours = parseFloat((duration - 8.5).toFixed(2));
-            } else {
-              regularHours = duration > 0 ? duration : 0;
-              overtimeHours = 0;
-            }
-          }
-        }
-
-        if (day.dateStr === selectedDate) {
-          isEmployeeAbsentOnSelectedDate = isAbsent;
-          if (clockIn !== "—") {
-            if (clockIn <= "07:30") isEmployeeOnTimeOnSelectedDate = true;
-            else isEmployeeLateOnSelectedDate = true;
-          }
-        }
-
-        grandRegularTotal += regularHours;
-        grandOvertimeTotal += overtimeHours;
-
-        return {
-          dateStr: day.dateStr,
-          regularHours,
-          overtimeHours,
-          clockIn,
-          clockOut,
-        };
-      });
-
-      return {
-        ...emp,
-        weeklyDayBreakdowns,
-        metricsSummary: {
-          regularTotal: parseFloat(grandRegularTotal.toFixed(2)),
-          overtimeTotal: parseFloat(grandOvertimeTotal.toFixed(2)),
-          combinedTotal: parseFloat(
-            (grandRegularTotal + grandOvertimeTotal).toFixed(2),
-          ),
-        },
-        selectedDateFlags: {
-          onsite: isEmployeeOnsiteOnSelectedDate,
-          absent: isEmployeeAbsentOnSelectedDate,
-          onTime: isEmployeeOnTimeOnSelectedDate,
-          late: isEmployeeLateOnSelectedDate,
-        },
-      };
-    });
-  }, [
-    employeeDirectory,
-    rawSwipesBuffer,
-    targetWeekDays,
-    selectedDate,
-    reportDept,
-    reportCC,
-  ]);
 
   // Master layout structural logic dynamic to selected interactive metrics indicators
-  const filteredViewDataset = useMemo(() => {
-    return processedRosterDataset.filter((emp) => {
-      if (selectedMetricFilter === "ALL") return true;
-      if (selectedMetricFilter === "ONSITE")
-        return emp.selectedDateFlags.onsite;
-      if (selectedMetricFilter === "ABSENT")
-        return emp.selectedDateFlags.absent;
-      if (selectedMetricFilter === "ON_TIME")
-        return emp.selectedDateFlags.onTime;
-      if (selectedMetricFilter === "LATE") return emp.selectedDateFlags.late;
-      return true;
-    });
-  }, [processedRosterDataset, selectedMetricFilter]);
 
   const staffModuleDataset = useMemo(() => {
     return systemProcessedDataset.filter((row) => {
@@ -1093,13 +862,6 @@ export default function EMSDashboard() {
     );
   }, [rawSwipesBuffer]);
 
-  const dynamicFilterMenus = useMemo(() => {
-    const monthsSet = new Set<string>();
-    rawSwipesBuffer.forEach((swipe) => {
-      if (swipe.date) monthsSet.add(swipe.date.substring(0, 7));
-    });
-    return Array.from(monthsSet).sort();
-  }, [rawSwipesBuffer]);
 
   const handleFileUploadDispatch = async (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -1291,206 +1053,6 @@ export default function EMSDashboard() {
     }
   };
 
-  const downloadOverallAnalyticsPDF = () => {
-    if (!checklistDept || !checklistCostCenter) {
-      alert("Please select a Department and Cost Center first.");
-      return;
-    }
-
-    const parseTimeToMinutes = (timeStr: string): number => {
-      if (!timeStr || timeStr === "—") return 0;
-      const [hours, minutes] = timeStr.split(":").map(Number);
-      return hours * 60 + minutes;
-    };
-
-    try {
-      const doc = new jsPDF();
-      const dateObj = new Date(selectedDate);
-      const dayOfWeek = dateObj.getDay();
-      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-
-      const lunchDeductionMins = 60;
-      let standardShiftMins = 0;
-      let dayTypeText = "";
-
-      if (isWeekend) {
-        standardShiftMins = 5.5 * 60 - lunchDeductionMins;
-        dayTypeText = "Weekend Rules Apply (4.5h Regular Benchmark)";
-      } else {
-        standardShiftMins = 9.5 * 60 - lunchDeductionMins;
-        dayTypeText = "Weekday Rules Apply (8.5h Regular Benchmark)";
-      }
-
-      try {
-        doc.addImage("/gofresh_logo.jpg", "JPEG", 14, 12, 25, 25);
-      } catch (logoErr) {
-        console.warn(
-          "Logo image could not be loaded, skipping render.",
-          logoErr,
-        );
-      }
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(16);
-      doc.setTextColor(37, 99, 235);
-      doc.text("OVERALL OPERATIONAL ANALTICS REPORT", 44, 20);
-
-      doc.setFontSize(9);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(71, 85, 105);
-      doc.text(
-        `Department: ${checklistDept}  |  Cost Center: ${checklistCostCenter}`,
-        44,
-        27,
-      );
-      doc.text(
-        `Target Date: ${selectedDate} (${dayTypeText})  |  Generated: ${new Date().toLocaleTimeString()}`,
-        44,
-        33,
-      );
-
-      doc.setDrawColor(226, 232, 240);
-      doc.line(14, 42, 196, 42);
-
-      const subsetWorkers = systemProcessedDataset.filter(
-        (emp) =>
-          emp.department === checklistDept &&
-          emp.costCenter === checklistCostCenter,
-      );
-
-      let onsiteCount = 0;
-      let onTimeCount = 0;
-      let lateCount = 0;
-      let absentCount = 0;
-
-      const tableRows = subsetWorkers.map((emp) => {
-        const daySwipes = rawSwipesBuffer.filter(
-          (s) => s.id === emp.staffCode && s.date === selectedDate,
-        );
-
-        const checkIns = daySwipes
-          .filter((s) => s.type.toLowerCase().includes("in"))
-          .sort((a, b) => a.time.localeCompare(b.time));
-
-        const checkOuts = daySwipes
-          .filter((s) => s.type.toLowerCase().includes("out"))
-          .sort((a, b) => a.time.localeCompare(b.time));
-
-        const clockIn = checkIns.length > 0 ? checkIns[0].time : "—";
-        const clockOut =
-          checkOuts.length > 0 ? checkOuts[checkOuts.length - 1].time : "—";
-
-        let status = "ABSENT";
-        let regularHoursStr = "0.00";
-        let overtimeStr = "0.00";
-
-        if (clockIn !== "—" && clockOut !== "—") {
-          onsiteCount++;
-
-          if (clockIn <= "07:30") {
-            onTimeCount++;
-            status = "ON TIME";
-          } else {
-            lateCount++;
-            status = "LATE";
-          }
-
-          const startMins = parseTimeToMinutes(clockIn);
-          const endMins = parseTimeToMinutes(clockOut);
-
-          const totalMinsWorked = Math.max(
-            0,
-            endMins - startMins - lunchDeductionMins,
-          );
-
-          if (totalMinsWorked > standardShiftMins) {
-            regularHoursStr = (standardShiftMins / 60).toFixed(2);
-            const otMins = totalMinsWorked - standardShiftMins;
-            overtimeStr = (otMins / 60).toFixed(2);
-          } else {
-            regularHoursStr = (totalMinsWorked / 60).toFixed(2);
-            overtimeStr = "0.00";
-          }
-        } else {
-          absentCount++;
-        }
-
-        return [
-          emp.staffCode,
-          emp.fullName,
-          clockIn,
-          clockOut,
-          status,
-          regularHoursStr,
-          overtimeStr,
-        ];
-      });
-
-      doc.setFont("helvetica", "bold");
-      doc.setFillColor(248, 250, 252);
-      doc.rect(14, 46, 182, 12, "F");
-      doc.setFontSize(9);
-      doc.setTextColor(51, 65, 85);
-      doc.text(
-        `Summary Matrix -> Total Headcount: ${subsetWorkers.length}  |  Fully Onsite: ${onsiteCount}  |  On Time: ${onTimeCount}  |  Late: ${lateCount}  |  Absent/Incomplete: ${absentCount}`,
-        18,
-        54,
-      );
-
-      autoTable(doc, {
-        startY: 64,
-        head: [
-          [
-            "Staff ID",
-            "Employee Full Name",
-            "Clock In",
-            "Clock Out",
-            "Status",
-            "Reg Hours",
-            "OT Hours",
-          ],
-        ],
-        body: tableRows,
-        theme: "striped",
-        headStyles: { fillColor: [79, 70, 229] },
-        styles: { fontSize: 8.5, cellPadding: 2.5 },
-        columnStyles: {
-          5: { halign: "right" },
-          6: { halign: "right" },
-        },
-        didParseCell: (data) => {
-          if (data.section === "body" && data.column.index === 4) {
-            if (data.cell.raw === "ON TIME")
-              data.cell.styles.textColor = [16, 185, 129];
-            if (data.cell.raw === "LATE")
-              data.cell.styles.textColor = [245, 158, 11];
-            if (data.cell.raw === "ABSENT")
-              data.cell.styles.textColor = [244, 63, 94];
-          }
-          if (
-            data.section === "body" &&
-            data.column.index === 6 &&
-            data.cell.raw !== "0.00"
-          ) {
-            data.cell.styles.fontStyle = "bold";
-            data.cell.styles.textColor = [79, 70, 229];
-          }
-        },
-      });
-
-      doc.save(
-        `Overall_Analytics_${checklistDept.replace(/\s+/g, "_")}_${selectedDate}.pdf`,
-      );
-
-      if (typeof addLog === "function") {
-        addLog(
-          `Master analytics report successfully compiled for ${checklistDept} on date ${selectedDate}.`,
-        );
-      }
-    } catch (err) {
-      console.error("Master PDF generation block failure", err);
-    }
-  };
 
   const departmentsList = useMemo(() => {
     return Array.from(
@@ -2119,17 +1681,15 @@ export default function EMSDashboard() {
                         setProvisionStatus("Configuring system access keys...");
                         try {
                           const payload = {
-                            email_address: newEmail.trim().toLowerCase(),
-                            raw_password_string: newPassword,
-                            role_tier: newRole,
-                            is_superuser: isSuper,
-                            permission_flags: {
-                              chrono: rightChrono,
-                              roster: rightRoster,
-                            },
+                            email: newEmail.trim().toLowerCase(),
+                            password: newPassword,
+                            roleTier: newRole,
+                            isSuperuser: isSuper,
+                            canIngestChrono: rightChrono,
+                            canModifyRoster: rightRoster,
                           };
 
-                          const res = await fetch("/api/auth/register", {
+                          const res = await fetch("/api/system-users", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify(payload),
@@ -2145,6 +1705,9 @@ export default function EMSDashboard() {
                             );
                             setNewEmail("");
                             setNewPassword("");
+                            setIsSuper(false);
+                            setRightChrono(true);
+                            setRightRoster(false);
                             fetchSystemUsers();
                           } else {
                             setProvisionStatus(
@@ -2167,7 +1730,7 @@ export default function EMSDashboard() {
                             type="email"
                             value={newEmail}
                             onChange={(e) => setNewEmail(e.target.value)}
-                            placeholder="operator@gofresh.com"
+                            placeholder="operator@gofreshmw.com"
                             className="h-9 text-xs font-bold"
                           />
                         </div>
@@ -2197,8 +1760,9 @@ export default function EMSDashboard() {
                             className="w-full bg-white border border-slate-200 text-xs font-bold rounded-lg p-2 h-9 uppercase text-slate-700 focus:ring-1 focus:ring-blue-500"
                           >
                             <option value="operator">
-                              System Operator Agent
+                              System Operator
                             </option>
+                            <option value="admin">System Admin</option>
                             <option value="manager">Operations Manager</option>
                             <option value="auditor">Compliance Auditor</option>
                           </select>
@@ -2217,6 +1781,31 @@ export default function EMSDashboard() {
                             </span>
                           </label>
                         </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4 items-center pt-2">
+                        <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={rightChrono}
+                            onChange={(e) => setRightChrono(e.target.checked)}
+                            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
+                          />
+                          <span className="text-[10px] font-black text-slate-600 uppercase tracking-wide">
+                            Can Ingest Chrono
+                          </span>
+                        </label>
+                        <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={rightRoster}
+                            onChange={(e) => setRightRoster(e.target.checked)}
+                            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
+                          />
+                          <span className="text-[10px] font-black text-slate-600 uppercase tracking-wide">
+                            Can Modify Roster
+                          </span>
+                        </label>
                       </div>
 
                       <div className="pt-3">
@@ -2247,6 +1836,15 @@ export default function EMSDashboard() {
                             <TableHead className="text-[10px] font-black uppercase text-slate-500">
                               Role Authority Level
                             </TableHead>
+                            <TableHead className="text-[10px] font-black uppercase text-slate-500 text-center">
+                              Superuser
+                            </TableHead>
+                            <TableHead className="text-[10px] font-black uppercase text-slate-500 text-center">
+                              Ingest Chrono
+                            </TableHead>
+                            <TableHead className="text-[10px] font-black uppercase text-slate-500 text-center">
+                              Modify Roster
+                            </TableHead>
                             <TableHead className="text-[10px] font-black uppercase text-slate-500 text-right">
                               Revoke Access Control
                             </TableHead>
@@ -2256,7 +1854,7 @@ export default function EMSDashboard() {
                           {isLoadingUsers ? (
                             <TableRow>
                               <TableCell
-                                colSpan={4}
+                                colSpan={7}
                                 className="text-center p-4 text-xs font-bold uppercase text-slate-400"
                               >
                                 Synchronizing system user tables...
@@ -2265,7 +1863,7 @@ export default function EMSDashboard() {
                           ) : systemUsers.length === 0 ? (
                             <TableRow>
                               <TableCell
-                                colSpan={4}
+                                colSpan={7}
                                 className="text-center p-4 text-xs font-bold uppercase text-slate-400"
                               >
                                 No secondary operator keys found in the system
@@ -2306,6 +1904,48 @@ export default function EMSDashboard() {
                                     <option value="manager">manager</option>
                                     <option value="auditor">auditor</option>
                                   </select>
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={!!su.isSuperuser}
+                                    onChange={(e) =>
+                                      handleToggleUserRight(
+                                        su.id,
+                                        "isSuperuser",
+                                        e.target.checked,
+                                      )
+                                    }
+                                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                                  />
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={!!su.canIngestChrono}
+                                    onChange={(e) =>
+                                      handleToggleUserRight(
+                                        su.id,
+                                        "canIngestChrono",
+                                        e.target.checked,
+                                      )
+                                    }
+                                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                                  />
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={!!su.canModifyRoster}
+                                    onChange={(e) =>
+                                      handleToggleUserRight(
+                                        su.id,
+                                        "canModifyRoster",
+                                        e.target.checked,
+                                      )
+                                    }
+                                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                                  />
                                 </TableCell>
                                 <TableCell className="text-right">
                                   <Button
