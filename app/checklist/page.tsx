@@ -75,7 +75,7 @@ const OVERRIDE_REASONS = [
   "Management Override / Special Approval",
 ];
 
-export const DailyChecklist: React.FC<Props> = ({
+const DailyChecklist: React.FC<Props> = ({
   employees,
   attendanceRecords,
   departments,
@@ -1000,3 +1000,5 @@ export const DailyChecklist: React.FC<Props> = ({
     </div>
   );
 };
+
+export default DailyChecklist;

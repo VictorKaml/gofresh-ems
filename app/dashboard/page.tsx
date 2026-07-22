@@ -24,10 +24,7 @@ import {
   UploadCloud,
   Users,
   LayoutDashboard,
-  Clock,
-  AlertTriangle,
   Building2,
-  CheckCircle2,
   Terminal,
   UserPlus,
   CalendarDays,
@@ -37,10 +34,7 @@ import {
   UserX,
   History,
   FileText,
-  Download,
   Loader2,
-  BarChart3,
-  Filter,
   LogOut,
 } from "lucide-react";
 import * as XLSX from "xlsx";
@@ -49,7 +43,7 @@ import autoTable from "jspdf-autotable";
 import AttendanceReportPage from "../overall/page";
 import AttendanceDashboard from "../reports/page";
 import Overview from "../overview/page";
-import { DailyChecklist } from "../checklist/page";
+import DailyChecklist from "../checklist/page";
 
 interface EmployeeProfile {
   staffCode: string;
