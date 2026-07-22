@@ -1,4 +1,5 @@
 "use client";
+
 import { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +16,8 @@ import {
   FileSpreadsheet,
   AlertTriangle,
   Calendar,
-  Fingerprint
+  Fingerprint,
+  RotateCcw
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -60,16 +62,16 @@ export default function Overview() {
   const subItemsList = ["All", "Fillets", "Mixed Portion", "Drumsticks", "Cutlets", "Wings"];
   const isSubItemApplicable = (subCenter: string) => subCenter === "Processing";
   
-  const [fromDate, setFromDate] = useState<string>(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - d.getDay() + 1);
+  // Date Helpers: Default fromDate is set to 7 days behind toDate
+  const getTodayStr = () => new Date().toISOString().split("T")[0];
+  const getSevenDaysAgoStr = (referenceDateStr?: string) => {
+    const d = referenceDateStr ? new Date(referenceDateStr) : new Date();
+    d.setDate(d.getDate() - 7);
     return d.toISOString().split("T")[0];
-  });
-  const [toDate, setToDate] = useState<string>(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - d.getDay() + 7);
-    return d.toISOString().split("T")[0];
-  });
+  };
+
+  const [toDate, setToDate] = useState<string>(() => getTodayStr());
+  const [fromDate, setFromDate] = useState<string>(() => getSevenDaysAgoStr());
 
   const [selectedMetricFilter, setSelectedMetricFilter] = useState<MetricFilterMode>("ALL");
   const [reportDept, setReportDept] = useState<string>("ALL");
@@ -87,6 +89,13 @@ export default function Overview() {
   const [, setIsLoadingOnsite] = useState<boolean>(true);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState<boolean>(false);
   const [isDownloadingAllPdf, setIsDownloadingAllPdf] = useState<boolean>(false);
+
+  // Quick Action Handler for Last 7 Days Button
+  const handleSelectLast7Days = () => {
+    const today = getTodayStr();
+    setToDate(today);
+    setFromDate(getSevenDaysAgoStr(today));
+  };
 
   const targetWeekDays = useMemo(() => {
     const days: { dayName: string; dateStr: string }[] = [];
@@ -348,7 +357,7 @@ export default function Overview() {
           const [outH, outM] = lastOutTime.split(":").map(Number);
 
           if (isNaN(inH) || isNaN(outH)) {
-            // Also treat unexpected structural formatting errors as zero-hour outputs
+            // Treat unexpected structural formatting errors as zero-hour outputs
             return {
               dateStr: day.dateStr,
               clockIn: firstInTime,
@@ -632,8 +641,24 @@ export default function Overview() {
               </p>
             </div>
             
-            <div className="flex flex-wrap items-center gap-3 bg-white border border-slate-200 p-2.5 rounded-xl shadow-xs shrink-0">
-              <div className="flex items-center gap-1.5 border-r pr-3">
+            {/* Header Controls Container */}
+            <div className="flex flex-wrap items-center gap-2.5 bg-white border border-slate-200 p-2 rounded-xl shadow-xs shrink-0">
+              {/* Last 7 Days Quick Filter Button */}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleSelectLast7Days}
+                className="h-8 text-xs font-bold border-blue-200 text-blue-700 bg-blue-50/50 hover:bg-blue-100/70 hover:text-blue-800 flex items-center gap-1.5 transition-all active:scale-95 shadow-2xs"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-blue-600" />
+                <span>Last 7 Days</span>
+              </Button>
+
+              <div className="h-4 w-px bg-slate-200" />
+
+              {/* Logs Start Date Input */}
+              <div className="flex items-center gap-1.5 pr-2">
                 <Calendar className="w-3.5 h-3.5 text-slate-400" />
                 <label htmlFor="from-date-filter" className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
                   Logs Start:
@@ -643,10 +668,13 @@ export default function Overview() {
                   type="date"
                   value={fromDate}
                   onChange={(e) => setFromDate(e.target.value)}
-                  className="h-7 text-xs font-bold border-none shadow-none focus-visible:ring-0 w-[115px] p-0 text-slate-800 bg-transparent uppercase"
+                  className="h-7 text-xs font-bold border-none shadow-none focus-visible:ring-0 w-[115px] p-0 text-slate-800 bg-transparent uppercase cursor-pointer"
                 />
               </div>
 
+              <div className="h-4 w-px bg-slate-200" />
+
+              {/* Logs End Date Input */}
               <div className="flex items-center gap-1.5 pl-1">
                 <Calendar className="w-3.5 h-3.5 text-slate-400" />
                 <label htmlFor="to-date-filter" className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
@@ -656,8 +684,12 @@ export default function Overview() {
                   id="to-date-filter"
                   type="date"
                   value={toDate}
-                  onChange={(e) => setToDate(e.target.value)}
-                  className="h-7 text-xs font-bold border-none shadow-none focus-visible:ring-0 w-[115px] p-0 text-slate-800 bg-transparent uppercase"
+                  onChange={(e) => {
+                    const newToDate = e.target.value;
+                    setToDate(newToDate);
+                    setFromDate(getSevenDaysAgoStr(newToDate));
+                  }}
+                  className="h-7 text-xs font-bold border-none shadow-none focus-visible:ring-0 w-[115px] p-0 text-slate-800 bg-transparent uppercase cursor-pointer"
                 />
               </div>
             </div>

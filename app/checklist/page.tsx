@@ -23,6 +23,8 @@ import {
   Loader2,
   PartyPopper,
   Mail,
+  CalendarDays,
+  RotateCcw,
 } from "lucide-react";
 
 interface Employee {
@@ -144,7 +146,7 @@ const DailyChecklist: React.FC<Props> = ({
 
   const todayStr = useMemo(() => formatLocalDate(new Date()), []);
 
-  // Public Holidays lookup map, keyed by YYYY-MM-DD for O(1) access in the grid
+  // Public Holidays lookup map, keyed by YYYY-MM-DD
   const holidaysByDate = useMemo(() => {
     const map = new Map<string, PublicHoliday>();
     (publicHolidays || []).forEach((h) => {
@@ -162,12 +164,10 @@ const DailyChecklist: React.FC<Props> = ({
       return "System / Biometric Reader";
     }
 
-    // 1. If it's already an email format, return it directly
     if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
       return trimmed;
     }
 
-    // 2. Try to match rawValue against systemUsers by ID or Email (case-insensitive)
     if (Array.isArray(systemUsers) && systemUsers.length > 0) {
       const matchedUser = systemUsers.find(
         (su) =>
@@ -177,7 +177,6 @@ const DailyChecklist: React.FC<Props> = ({
       if (matchedUser?.email) return matchedUser.email;
     }
 
-    // 3. Fallback: If it's a raw non-email ID string that wasn't matched in systemUsers
     return trimmed;
   };
 
@@ -190,6 +189,11 @@ const DailyChecklist: React.FC<Props> = ({
   // Multi-Employee Selection Set
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<string>>(
     new Set(),
+  );
+
+  // Multi-Date Selection Set (Array stored in Set)
+  const [selectedDates, setSelectedDates] = useState<Set<string>>(
+    new Set([todayStr]),
   );
 
   // Modal State for Previewing
@@ -212,7 +216,6 @@ const DailyChecklist: React.FC<Props> = ({
 
   // Calendar & Punch Form States
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
-  const [selectedDate, setSelectedDate] = useState<string>(todayStr);
   const [checkInTime, setCheckInTime] = useState<string>("07:30");
   const [checkOutTime, setCheckOutTime] = useState<string>("16:30");
   const [auditReason, setAuditReason] = useState<string>(OVERRIDE_REASONS[0]);
@@ -223,9 +226,17 @@ const DailyChecklist: React.FC<Props> = ({
     message: string;
   } | null>(null);
 
-  const isSelectedDateInFuture = useMemo(() => {
-    return selectedDate > todayStr;
-  }, [selectedDate, todayStr]);
+  // Check if any selected date is in the future
+  const selectedFutureDates = useMemo(() => {
+    return Array.from(selectedDates).filter((d) => d > todayStr);
+  }, [selectedDates, todayStr]);
+
+  const hasFutureDateSelected = selectedFutureDates.length > 0;
+
+  // Selected dates sorted chronologically
+  const sortedSelectedDates = useMemo(() => {
+    return Array.from(selectedDates).sort();
+  }, [selectedDates]);
 
   // Base Match Function for Search and Dept/CostCenter filters
   const matchesFilter = (emp: Employee) => {
@@ -240,7 +251,7 @@ const DailyChecklist: React.FC<Props> = ({
     return matchesDept && matchesCC && matchesSearch;
   };
 
-  // List of employees matching search criteria
+  // Search-matched employees list
   const searchMatchedEmployees = useMemo(() => {
     return employees?.filter(matchesFilter) || [];
   }, [employees, selectedDept, selectedCostCenter, searchQuery]);
@@ -278,67 +289,74 @@ const DailyChecklist: React.FC<Props> = ({
     );
   }, [employees, selectedEmployeeIds]);
 
-  // Check existing attendance for selected employees on selected target date
+  // Multi-date Attendance Record Conflict Checking
   const employeesWithCompleteRecords = useMemo(() => {
-    if (!selectedDate || selectedEmployeeIds.size === 0) return [];
+    if (selectedDates.size === 0 || selectedEmployeeIds.size === 0) return [];
 
-    const dateRecords =
-      attendanceRecords?.filter((rec) => {
-        const recDate = rec.date || rec.swipe_date;
-        return recDate === selectedDate;
-      }) || [];
-
-    const conflicts: Array<{ employee: Employee; confirmedBy: string }> = [];
+    const conflicts: Array<{
+      employee: Employee;
+      confirmedBy: string;
+      date: string;
+    }> = [];
 
     selectedEmployeeList?.forEach((emp) => {
       const empId = String(emp.staffCode || emp.id);
 
-      const empRecords = dateRecords.filter((rec) => {
-        const rEmpId = String(rec.staffCode || rec.employeeId || rec.id);
-        return rEmpId === empId;
+      selectedDates.forEach((targetDate) => {
+        const dateRecords =
+          attendanceRecords?.filter((rec) => {
+            const recDate = rec.date || rec.swipe_date;
+            return recDate === targetDate;
+          }) || [];
+
+        const empRecords = dateRecords.filter((rec) => {
+          const rEmpId = String(rec.staffCode || rec.employeeId || rec.id);
+          return rEmpId === empId;
+        });
+
+        const hasIn = empRecords.some((r) => (r.type || r.swipe_type) === "IN");
+        const hasOut = empRecords.some(
+          (r) => (r.type || r.swipe_type) === "OUT",
+        );
+
+        if (hasIn && hasOut) {
+          const recordWithOperator = empRecords.find((r) => {
+            const val =
+              r.adjusted_by ||
+              r.adjustedBy ||
+              r.operatorEmail ||
+              r.operator_email ||
+              r.created_by ||
+              r.updated_by;
+            return (
+              val &&
+              String(val).trim() !== "" &&
+              String(val) !== "SYSTEM_INGEST_CHRONO"
+            );
+          });
+
+          const confirmedByRaw =
+            recordWithOperator?.adjusted_by ||
+            recordWithOperator?.adjustedBy ||
+            recordWithOperator?.operatorEmail ||
+            recordWithOperator?.operator_email ||
+            recordWithOperator?.created_by ||
+            recordWithOperator?.updated_by;
+
+          const confirmedBy = resolveConfirmedByEmail(confirmedByRaw);
+
+          conflicts.push({
+            employee: emp,
+            confirmedBy,
+            date: targetDate,
+          });
+        }
       });
-
-      const hasIn = empRecords.some((r) => (r.type || r.swipe_type) === "IN");
-      const hasOut = empRecords.some((r) => (r.type || r.swipe_type) === "OUT");
-
-      // Complete record has both IN and OUT
-      if (hasIn && hasOut) {
-        // Find any non-empty operator field across all matching records for this employee
-        const recordWithOperator = empRecords.find((r) => {
-          const val =
-            r.adjusted_by ||
-            r.adjustedBy ||
-            r.operatorEmail ||
-            r.operator_email ||
-            r.created_by ||
-            r.updated_by;
-          return (
-            val &&
-            String(val).trim() !== "" &&
-            String(val) !== "SYSTEM_INGEST_CHRONO"
-          );
-        });
-
-        const confirmedByRaw =
-          recordWithOperator?.adjusted_by ||
-          recordWithOperator?.adjustedBy ||
-          recordWithOperator?.operatorEmail ||
-          recordWithOperator?.operator_email ||
-          recordWithOperator?.created_by ||
-          recordWithOperator?.updated_by;
-
-        const confirmedBy = resolveConfirmedByEmail(confirmedByRaw);
-
-        conflicts.push({
-          employee: emp,
-          confirmedBy,
-        });
-      }
     });
 
     return conflicts;
   }, [
-    selectedDate,
+    selectedDates,
     selectedEmployeeList,
     attendanceRecords,
     selectedEmployeeIds,
@@ -357,6 +375,41 @@ const DailyChecklist: React.FC<Props> = ({
       });
       return next;
     });
+  };
+
+  // Toggle multi-date selection
+  const toggleDateSelection = (dateStr: string) => {
+    if (dateStr > todayStr) return; // Disallow selecting future dates
+
+    setSelectedDates((prev) => {
+      const next = new Set(prev);
+      if (next.has(dateStr)) {
+        if (next.size > 1) {
+          next.delete(dateStr);
+        }
+      } else {
+        next.add(dateStr);
+      }
+      return next;
+    });
+  };
+
+  // Select all past workdays in current month
+  const handleSelectPastWorkdaysInMonth = () => {
+    const next = new Set<string>();
+    daysInMonth.forEach((day) => {
+      const dateStr = formatLocalDate(day);
+      const dayOfWeek = day.getDay(); // 0: Sun, 6: Sat
+      if (dateStr <= todayStr && dayOfWeek !== 0 && dayOfWeek !== 6) {
+        next.add(dateStr);
+      }
+    });
+    if (next.size > 0) setSelectedDates(next);
+  };
+
+  // Clear extra selected dates back to today
+  const handleResetDatesToToday = () => {
+    setSelectedDates(new Set([todayStr]));
   };
 
   // Check if all search-matched employees are selected
@@ -433,16 +486,16 @@ const DailyChecklist: React.FC<Props> = ({
     );
   };
 
-  // Batch Submit Punch Logic
+  // Batch Submit Multi-Date & Multi-Employee Attendance
   const handleBatchConfirmAttendance = async () => {
     if (
       selectedEmployeeList.length === 0 ||
-      !selectedDate ||
+      selectedDates.size === 0 ||
       hasConflictingRecords
     )
       return;
 
-    if (isSelectedDateInFuture) {
+    if (hasFutureDateSelected) {
       setNotification({
         type: "error",
         message: "Future dates cannot be logged.",
@@ -461,41 +514,46 @@ const DailyChecklist: React.FC<Props> = ({
     setIsSubmitting(true);
     setNotification(null);
 
-    const dateObj = new Date(`${selectedDate}T00:00:00`);
-    const weekDayName = dateObj.toLocaleDateString("en-US", {
-      weekday: "long",
-    });
     const formattedInTime =
       checkInTime.length === 5 ? `${checkInTime}:00` : checkInTime;
     const formattedOutTime =
       checkOutTime.length === 5 ? `${checkOutTime}:00` : checkOutTime;
 
     const batchRecords: any[] = [];
-    selectedEmployeeList.forEach((emp) => {
-      const staffId = emp.staffCode || emp.id;
 
-      batchRecords.push({
-        id: staffId,
-        staffCode: staffId,
-        date: selectedDate,
-        weekday: weekDayName,
-        time: formattedInTime,
-        type: "IN",
-        isManualOverride: true,
-        adjusted_by: activeOperatorEmail,
-        reason: `${auditReason.trim()} (Check-In)`,
+    // Loop through ALL selected dates AND ALL selected employees
+    sortedSelectedDates.forEach((targetDate) => {
+      const dateObj = new Date(`${targetDate}T00:00:00`);
+      const weekDayName = dateObj.toLocaleDateString("en-US", {
+        weekday: "long",
       });
 
-      batchRecords.push({
-        id: staffId,
-        staffCode: staffId,
-        date: selectedDate,
-        weekday: weekDayName,
-        time: formattedOutTime,
-        type: "OUT",
-        isManualOverride: true,
-        adjusted_by: activeOperatorEmail,
-        reason: `${auditReason.trim()} (Check-Out)`,
+      selectedEmployeeList.forEach((emp) => {
+        const staffId = emp.staffCode || emp.id;
+
+        batchRecords.push({
+          id: staffId,
+          staffCode: staffId,
+          date: targetDate,
+          weekday: weekDayName,
+          time: formattedInTime,
+          type: "IN",
+          isManualOverride: true,
+          adjusted_by: activeOperatorEmail,
+          reason: `${auditReason.trim()} (Check-In)`,
+        });
+
+        batchRecords.push({
+          id: staffId,
+          staffCode: staffId,
+          date: targetDate,
+          weekday: weekDayName,
+          time: formattedOutTime,
+          type: "OUT",
+          isManualOverride: true,
+          adjusted_by: activeOperatorEmail,
+          reason: `${auditReason.trim()} (Check-Out)`,
+        });
       });
     });
 
@@ -521,7 +579,7 @@ const DailyChecklist: React.FC<Props> = ({
 
       setNotification({
         type: "success",
-        message: `Attendance logged successfully for ${selectedEmployeeList.length} employee(s) on ${selectedDate}.`,
+        message: `Attendance logged successfully for ${selectedEmployeeList.length} employee(s) across ${selectedDates.size} date(s). Total entries: ${batchRecords.length / 2}`,
       });
 
       setShowPreviewModal(false);
@@ -553,6 +611,7 @@ const DailyChecklist: React.FC<Props> = ({
             </h2>
             <p className="text-sm text-gray-500">
               Batch manage daily workspace attendance for multiple employees
+              across multiple dates
             </p>
           </div>
         </div>
@@ -733,7 +792,7 @@ const DailyChecklist: React.FC<Props> = ({
                           </h4>
                           {conflictObj && (
                             <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold animate-pulse">
-                              Complete Record Exists
+                              Complete Record on {conflictObj.date}
                             </span>
                           )}
                           {isChecked && !conflictObj && (
@@ -777,7 +836,7 @@ const DailyChecklist: React.FC<Props> = ({
           </div>
         </div>
 
-        {/* Right Column: Calendar & Target Log Date Controls */}
+        {/* Right Column: Multi-Date Calendar Controls */}
         <div className="lg:col-span-7 bg-white rounded-lg shadow-sm border border-gray-200 p-6 flex flex-col justify-between h-[700px] overflow-y-auto transition-shadow hover:shadow-md">
           <div className="flex flex-col gap-5">
             {/* Multi-Selection Counter Header */}
@@ -792,10 +851,10 @@ const DailyChecklist: React.FC<Props> = ({
               </div>
               <div className="text-right">
                 <span className="text-xs text-gray-400 block">
-                  Target Log Date
+                  Target Log Date(s)
                 </span>
-                <span className="text-sm font-semibold text-gray-700">
-                  {selectedDate}
+                <span className="text-sm font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 inline-block">
+                  {selectedDates.size} Date(s) Selected
                 </span>
               </div>
             </div>
@@ -811,21 +870,18 @@ const DailyChecklist: React.FC<Props> = ({
                       {employeesWithCompleteRecords.length})
                     </h4>
                     <p className="text-xs text-red-700 mt-0.5">
-                      The following employee(s) already have a complete IN/OUT
-                      attendance record on <strong>{selectedDate}</strong> and
-                      cannot be updated again in this batch. Please remove them
-                      from the selection list to proceed.
+                      The following employee(s) already have complete attendance records on selected dates. Please remove them to proceed.
                     </p>
                   </div>
                 </div>
 
-                {/* Conflicting Employees Table / List */}
+                {/* Conflicting Employees List */}
                 <div className="max-h-28 overflow-y-auto divide-y divide-red-200 border border-red-200 rounded bg-white text-xs">
-                  {employeesWithCompleteRecords.map((c) => {
+                  {employeesWithCompleteRecords.map((c, idx) => {
                     const cId = String(c.employee.staffCode || c.employee.id);
                     return (
                       <div
-                        key={cId}
+                        key={`${cId}-${c.date}-${idx}`}
                         className="p-2 flex justify-between items-center text-red-900 transition-colors hover:bg-red-50/60"
                       >
                         <div>
@@ -833,6 +889,9 @@ const DailyChecklist: React.FC<Props> = ({
                             {c.employee.fullName || c.employee.name}
                           </span>
                           <span className="text-gray-500 ml-1">({cId})</span>
+                          <span className="ml-2 font-bold text-red-700 bg-red-100 px-1.5 py-0.5 rounded text-[10px]">
+                            {c.date}
+                          </span>
                         </div>
                         <div className="text-right">
                           <span className="text-[11px] text-gray-600 block">
@@ -868,12 +927,12 @@ const DailyChecklist: React.FC<Props> = ({
               </div>
             )}
 
-            {/* Calendar Controls */}
+            {/* Calendar Controls & Multi-Date Quick Actions */}
             <div>
               <div className="flex justify-between items-center mb-3">
                 <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                   <CalendarIcon className="w-4 h-4 text-blue-600" />
-                  Select Attendance Date
+                  Select Attendance Date(s)
                 </h4>
                 <div className="flex items-center gap-2">
                   <button
@@ -897,6 +956,29 @@ const DailyChecklist: React.FC<Props> = ({
                 </div>
               </div>
 
+              {/* Quick Multi-Date Selection Bar */}
+              <div className="flex items-center justify-between gap-2 mb-3 bg-gray-50 p-2 rounded-md border border-gray-200">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleSelectPastWorkdaysInMonth}
+                    className="text-xs bg-white text-blue-700 hover:bg-blue-50 border border-blue-200 font-medium px-2.5 py-1 rounded shadow-xs flex items-center gap-1 transition-all"
+                  >
+                    <CalendarDays className="w-3.5 h-3.5" />
+                    Select Workdays (Mon-Fri)
+                  </button>
+                  <button
+                    onClick={handleResetDatesToToday}
+                    className="text-xs bg-white text-gray-700 hover:bg-gray-100 border border-gray-200 font-medium px-2.5 py-1 rounded shadow-xs flex items-center gap-1 transition-all"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Reset to Today
+                  </button>
+                </div>
+                <span className="text-[11px] text-gray-500 font-medium hidden sm:inline">
+                  Click dates to toggle selection
+                </span>
+              </div>
+
               {/* Days Grid */}
               <div
                 key={`${currentMonth.getFullYear()}-${currentMonth.getMonth()}`}
@@ -913,15 +995,15 @@ const DailyChecklist: React.FC<Props> = ({
                   ),
                 )}
 
-                {/* Render Empty Spacer Cells for Offset Before Day 1 */}
+                {/* Empty Spacer Cells */}
                 {Array.from({ length: firstDayOfWeek }).map((_, idx) => (
                   <div key={`empty-${idx}`} className="py-2" />
                 ))}
 
-                {/* Render Actual Month Days */}
+                {/* Actual Month Days */}
                 {daysInMonth.map((day) => {
                   const formattedDate = formatLocalDate(day);
-                  const isSelected = selectedDate === formattedDate;
+                  const isSelected = selectedDates.has(formattedDate);
                   const isToday = todayStr === formattedDate;
                   const isFutureDate = formattedDate > todayStr;
                   const holiday = holidaysByDate.get(formattedDate);
@@ -934,7 +1016,7 @@ const DailyChecklist: React.FC<Props> = ({
                       "opacity-40 cursor-not-allowed bg-gray-50 text-gray-400";
                   } else if (isSelected) {
                     dayStyle =
-                      "bg-blue-600 text-white shadow-sm ring-2 ring-blue-300 scale-105";
+                      "bg-blue-600 text-white font-bold shadow-sm ring-2 ring-blue-300 scale-105";
                   } else if (isToday) {
                     dayStyle =
                       "bg-blue-50 text-blue-600 border border-blue-200 font-semibold";
@@ -947,7 +1029,7 @@ const DailyChecklist: React.FC<Props> = ({
                     <button
                       key={formattedDate}
                       disabled={isFutureDate}
-                      onClick={() => setSelectedDate(formattedDate)}
+                      onClick={() => toggleDateSelection(formattedDate)}
                       title={isHoliday ? holiday!.name : undefined}
                       className={`relative py-2 text-sm rounded-md transition-all duration-150 flex items-center justify-center ${!isFutureDate ? "hover:scale-105 active:scale-95" : ""} ${dayStyle}`}
                     >
@@ -964,36 +1046,27 @@ const DailyChecklist: React.FC<Props> = ({
                 })}
               </div>
 
-              {/* Holiday Legend */}
-              {holidaysByDate.size > 0 && (
-                <div className="flex items-center gap-1.5 mt-3 text-[11px] text-purple-700 animate-in fade-in duration-300">
-                  <span className="w-2 h-2 rounded-full bg-purple-500 inline-block" />
-                  Public Holiday
-                </div>
-              )}
+              {/* Selected Dates Badges Summary */}
+              <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                <span className="text-xs font-semibold text-gray-500">
+                  Selected Dates:
+                </span>
+                {sortedSelectedDates.map((d) => (
+                  <span
+                    key={d}
+                    className="text-xs bg-blue-100 text-blue-800 font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 border border-blue-200"
+                  >
+                    {d}
+                    {selectedDates.size > 1 && (
+                      <X
+                        className="w-3 h-3 cursor-pointer hover:text-red-600 transition-colors"
+                        onClick={() => toggleDateSelection(d)}
+                      />
+                    )}
+                  </span>
+                ))}
+              </div>
             </div>
-
-            {/* Selected Date Public Holiday Notice */}
-            {holidaysByDate.has(selectedDate) && (
-              <div className="p-3 bg-purple-50 border border-purple-200 text-purple-800 rounded-md text-xs font-medium flex items-center gap-2 animate-in fade-in slide-in-from-top-1 duration-300">
-                <PartyPopper className="w-4 h-4 text-purple-600 flex-shrink-0" />
-                <span>
-                  <strong>{selectedDate}</strong> is marked as a public holiday:{" "}
-                  <strong>{holidaysByDate.get(selectedDate)!.name}</strong>
-                </span>
-              </div>
-            )}
-
-            {/* Future Date Alert */}
-            {isSelectedDateInFuture && (
-              <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-md text-xs font-medium flex items-center gap-2 animate-in fade-in slide-in-from-top-1 duration-300">
-                <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
-                <span>
-                  Attendance cannot be logged for future dates ({selectedDate}).
-                  Please select today or a past date.
-                </span>
-              </div>
-            )}
 
             {/* Time Configuration */}
             <div className="grid grid-cols-2 gap-4">
@@ -1004,7 +1077,7 @@ const DailyChecklist: React.FC<Props> = ({
                 <input
                   type="time"
                   disabled={
-                    isSelectedDateInFuture ||
+                    hasFutureDateSelected ||
                     selectedEmployeeIds.size === 0 ||
                     hasConflictingRecords
                   }
@@ -1020,7 +1093,7 @@ const DailyChecklist: React.FC<Props> = ({
                 <input
                   type="time"
                   disabled={
-                    isSelectedDateInFuture ||
+                    hasFutureDateSelected ||
                     selectedEmployeeIds.size === 0 ||
                     hasConflictingRecords
                   }
@@ -1039,7 +1112,7 @@ const DailyChecklist: React.FC<Props> = ({
               </label>
               <select
                 disabled={
-                  isSelectedDateInFuture ||
+                  hasFutureDateSelected ||
                   selectedEmployeeIds.size === 0 ||
                   hasConflictingRecords
                 }
@@ -1061,13 +1134,14 @@ const DailyChecklist: React.FC<Props> = ({
                 onClick={() => setShowPreviewModal(true)}
                 disabled={
                   selectedEmployeeIds.size === 0 ||
-                  isSelectedDateInFuture ||
+                  selectedDates.size === 0 ||
+                  hasFutureDateSelected ||
                   hasConflictingRecords
                 }
                 className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-md shadow-sm transition-all active:scale-[0.98] hover:shadow-md flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-sm"
               >
                 <UserCheck className="w-5 h-5" />
-                Preview & Confirm Batch ({selectedEmployeeIds.size} Selected)
+                Preview & Confirm Batch ({selectedEmployeeIds.size} Employees × {selectedDates.size} Days)
               </button>
             </div>
           </div>
@@ -1081,7 +1155,7 @@ const DailyChecklist: React.FC<Props> = ({
             <div className="flex justify-between items-center border-b pb-3">
               <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                 <UserCheck className="w-5 h-5 text-blue-600" />
-                Confirm Attendance Preview
+                Confirm Multi-Date Batch Preview
               </h3>
               <button
                 onClick={() => setShowPreviewModal(false)}
@@ -1093,7 +1167,8 @@ const DailyChecklist: React.FC<Props> = ({
 
             <div className="bg-gray-50 p-3 rounded-md border border-gray-200 text-xs text-gray-700 space-y-1">
               <p>
-                <strong>Target Date:</strong> {selectedDate}
+                <strong>Target Dates ({selectedDates.size}):</strong>{" "}
+                {sortedSelectedDates.join(", ")}
               </p>
               <p>
                 <strong>Check-In Time:</strong> {checkInTime}
@@ -1107,13 +1182,17 @@ const DailyChecklist: React.FC<Props> = ({
               <p>
                 <strong>Adjusted By Operator:</strong> {activeOperatorEmail}
               </p>
+              <p className="font-bold text-blue-700 pt-1">
+                Total Attendance Swipes to Create:{" "}
+                {selectedEmployeeList.length * selectedDates.size * 2} records
+              </p>
             </div>
 
             <div>
               <label className="text-xs font-semibold uppercase text-gray-500 mb-2 block">
                 Target Employees ({selectedEmployeeList.length})
               </label>
-              <div className="max-h-48 overflow-y-auto divide-y border rounded-md divide-gray-100 bg-white">
+              <div className="max-h-40 overflow-y-auto divide-y border rounded-md divide-gray-100 bg-white">
                 {selectedEmployeeList.map((emp) => (
                   <div
                     key={emp.staffCode || emp.id}
@@ -1151,7 +1230,7 @@ const DailyChecklist: React.FC<Props> = ({
                 {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
                 {isSubmitting
                   ? "Posting Records..."
-                  : "Confirm & Submit Attendance"}
+                  : "Confirm & Submit Batch"}
               </button>
             </div>
           </div>
