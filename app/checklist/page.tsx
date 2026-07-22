@@ -1,4 +1,4 @@
-"use client"
+"use client";
 
 import React, { useState, useMemo } from "react";
 import {
@@ -109,11 +109,13 @@ const DailyChecklist: React.FC<Props> = ({
   // Modal State for Previewing
   const [showPreviewModal, setShowPreviewModal] = useState<boolean>(false);
 
- // Available Cost Centers based on selected department
+  // Available Cost Centers based on selected department
   const availableCostCenters = useMemo(() => {
     if (!selectedDept) return costCenters || [];
-    const filteredCCs = employees?.filter((emp) => emp.department === selectedDept && emp.costCenter)
-      .map((emp) => emp.costCenter as string) || [];
+    const filteredCCs =
+      employees
+        ?.filter((emp) => emp.department === selectedDept && emp.costCenter)
+        .map((emp) => emp.costCenter as string) || [];
     return Array.from(new Set(filteredCCs));
   }, [selectedDept, employees, costCenters]);
 
@@ -192,10 +194,11 @@ const DailyChecklist: React.FC<Props> = ({
     if (!selectedDate || selectedEmployeeIds.size === 0) return [];
 
     // Added optional chaining (?.) and fallback array (|| [])
-    const dateRecords = attendanceRecords?.filter((rec) => {
-      const recDate = rec.date || rec.swipe_date;
-      return recDate === selectedDate;
-    }) || [];
+    const dateRecords =
+      attendanceRecords?.filter((rec) => {
+        const recDate = rec.date || rec.swipe_date;
+        return recDate === selectedDate;
+      }) || [];
 
     const conflicts: Array<{ employee: Employee; confirmedBy: string }> = [];
 
@@ -247,7 +250,6 @@ const DailyChecklist: React.FC<Props> = ({
     attendanceRecords,
     selectedEmployeeIds,
   ]);
-
 
   const hasConflictingRecords = employeesWithCompleteRecords.length > 0;
 

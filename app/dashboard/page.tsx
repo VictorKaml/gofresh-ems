@@ -1213,10 +1213,10 @@ export default function EMSDashboard() {
 
           {activeTab === "CHECKLIST" && (
             <DailyChecklist
-              employees={mappedEmployees}
-              attendanceRecords={mappedAttendanceRecords}
-              departments={departmentsList}
-              costCenters={costCentersList}
+              employees={mappedEmployees || []}
+              attendanceRecords={mappedAttendanceRecords || []}
+              departments={departmentsList || []}
+              costCenters={costCentersList || []}
               onRefreshDashboard={async () => {
                 try {
                   const response = await fetch(
