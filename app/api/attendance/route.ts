@@ -42,14 +42,22 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Remap database columns to frontend keys
+    // Remap database columns to frontend keys (INCLUDING adjusted_by & change_reason)
     const mappedSwipes = (records || []).map((row: any) => ({
       id: row.staff_code,
+      staffCode: row.staff_code,
       date: row.swipe_date,
+      swipe_date: row.swipe_date,
       weekDay: row.weekday || "Unknown",
       time: row.swipe_time,
+      swipe_time: row.swipe_time,
       type: row.swipe_type,
-      isManualOverride: row.is_manual_override
+      swipe_type: row.swipe_type,
+      isManualOverride: row.is_manual_override,
+      adjusted_by: row.adjusted_by,
+      adjustedBy: row.adjusted_by,
+      reason: row.change_reason,
+      change_reason: row.change_reason
     }));
 
     // Determine if more records exist in this specific range
