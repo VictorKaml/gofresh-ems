@@ -191,14 +191,16 @@ const DailyChecklist: React.FC<Props> = ({
   const employeesWithCompleteRecords = useMemo(() => {
     if (!selectedDate || selectedEmployeeIds.size === 0) return [];
 
-    const dateRecords = attendanceRecords.filter((rec) => {
+    // Added optional chaining (?.) and fallback array (|| [])
+    const dateRecords = attendanceRecords?.filter((rec) => {
       const recDate = rec.date || rec.swipe_date;
       return recDate === selectedDate;
-    });
+    }) || [];
 
     const conflicts: Array<{ employee: Employee; confirmedBy: string }> = [];
 
-    selectedEmployeeList.forEach((emp) => {
+    // Added optional chaining (?.) before forEach
+    selectedEmployeeList?.forEach((emp) => {
       const empId = String(emp.staffCode || emp.id);
 
       const empRecords = dateRecords.filter((rec) => {
@@ -245,6 +247,7 @@ const DailyChecklist: React.FC<Props> = ({
     attendanceRecords,
     selectedEmployeeIds,
   ]);
+
 
   const hasConflictingRecords = employeesWithCompleteRecords.length > 0;
 
