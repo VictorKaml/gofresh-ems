@@ -458,6 +458,37 @@ export default function EMSDashboard() {
     syncAttendanceData();
   }, [user]);
 
+  // Session User Email State
+  const [sessionUserEmail, setSessionUserEmail] = useState<string>("");
+
+  // Fetch logged-in user email on mount
+  useEffect(() => {
+    let isMounted = true;
+    const fetchLoggedInUser = async () => {
+      try {
+        const response = await fetch("/api/auth/me");
+        if (response.ok) {
+          const data = await response.json();
+          if (isMounted && data?.user?.email) {
+            setSessionUserEmail(data.user.email);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch logged-in user session:", error);
+      }
+    };
+
+    fetchLoggedInUser();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Determine active operator email with fallback order: Session Email -> Prop -> Default
+  const activeOperatorEmail = useMemo(() => {
+    return sessionUserEmail;
+  }, [sessionUserEmail]);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [workersDataset, setWorkersDataset] = useState<EmployeeProfile[]>([]);
@@ -801,7 +832,6 @@ export default function EMSDashboard() {
 
   // Derive dynamic list of Cost Centers based on selected department to avoid dead-ends
 
-
   // Handle logging out the user
   const handleSignOut = async () => {
     try {
@@ -855,7 +885,6 @@ export default function EMSDashboard() {
       (a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time),
     );
   }, [rawSwipesBuffer]);
-
 
   const handleFileUploadDispatch = async (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -912,16 +941,18 @@ export default function EMSDashboard() {
             `Sending ${dynamicSwipes.length} clean biometric entries to database cluster...`,
           );
 
+          const payload = {
+            operatorEmail: activeOperatorEmail,
+            records: dynamicSwipes,
+          };
+
           // 🚀 CONNECTED PIPELINE: Sync with your new Prisma Batch route
           const response = await fetch("/api/attendance/batch", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({
-              records: dynamicSwipes,
-              operatorEmail: "DASHBOARD_EXCEL_INGEST",
-            }),
+            body: JSON.stringify({ payload }),
           });
 
           const result = await response.json();
@@ -1046,7 +1077,6 @@ export default function EMSDashboard() {
       console.error("PDF engine failure", e);
     }
   };
-
 
   const departmentsList = useMemo(() => {
     return Array.from(
@@ -1753,9 +1783,7 @@ export default function EMSDashboard() {
                             onChange={(e) => setNewRole(e.target.value)}
                             className="w-full bg-white border border-slate-200 text-xs font-bold rounded-lg p-2 h-9 uppercase text-slate-700 focus:ring-1 focus:ring-blue-500"
                           >
-                            <option value="operator">
-                              System Operator
-                            </option>
+                            <option value="operator">System Operator</option>
                             <option value="admin">System Admin</option>
                             <option value="manager">Operations Manager</option>
                             <option value="auditor">Compliance Auditor</option>
