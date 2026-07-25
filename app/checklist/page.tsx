@@ -44,8 +44,8 @@ interface EmployeeProfile {
   costCenter: string;
   subCenter: string;
   subItem: string;
-  id?: string;   // 👈 Added
-  name?: string; // 👈 Added
+  id?: string;
+  name?: string;
 }
 
 interface AttendanceRecord {
@@ -91,10 +91,10 @@ interface OperatorScope {
 }
 
 interface Props {
-  employees: Employee[];
-  attendanceRecords: AttendanceRecord[];
-  departments: string[];
-  costCenters: string[];
+  employees?: Employee[];
+  attendanceRecords?: AttendanceRecord[];
+  departments?: string[];
+  costCenters?: string[];
   operatorEmail?: string;
   onRefreshDashboard: () => void;
   onDownloadExceptionReport?: (group: string) => void;
@@ -106,30 +106,25 @@ interface Props {
 const OVERRIDE_REASONS = [
   "Biometric / Card Reader Failure",
   "Approved Field Duty / Onsite Work",
-  "System Outage / Offline Portal",
   "Manual Attendance Form Approved",
-  "Badge Forgotten / Misplaced",
   "Official Travel / Duty Out of Station",
   "Management Override / Special Approval",
 ];
 
 const DailyChecklist: React.FC<Props> = ({
-  employees,
-  attendanceRecords,
-  departments,
-  costCenters,
+  employees = [],
+  attendanceRecords = [],
+  departments = [],
+  costCenters = [],
   operatorEmail,
   onRefreshDashboard,
-  onDownloadExceptionReport,
-  onDownloadOverallAnalytics,
   publicHolidays = [],
   systemUsers = [],
 }) => {
   // Session User Email State
   const [sessionUserEmail, setSessionUserEmail] = useState<string>("");
 
-  // Live operator scope (department / cost center / superuser status),
-  // resolved server-side and never trusted from local state alone.
+  // Live operator scope (department / cost center / superuser status)
   const [operatorScope, setOperatorScope] = useState<OperatorScope | null>(
     null,
   );
@@ -189,7 +184,7 @@ const DailyChecklist: React.FC<Props> = ({
     };
   }, []);
 
-  // Determine active operator email with fallback order: Session Email -> Prop -> Default
+  // Determine active operator email with fallback order
   const activeOperatorEmail = useMemo(() => {
     return sessionUserEmail || operatorEmail || "OPERATOR_CHECKLIST_OVERRIDE";
   }, [sessionUserEmail, operatorEmail]);
@@ -241,7 +236,7 @@ const DailyChecklist: React.FC<Props> = ({
   // Filter States
   const [selectedDept, setSelectedDept] = useState<string>("");
   const [selectedCostCenter, setSelectedCostCenter] = useState<string>("");
-    const [selectedSubCenter, setSelectedSubCenter] = useState<string>("");
+  const [selectedSubCenter, setSelectedSubCenter] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [showOnlySelected, setShowOnlySelected] = useState<boolean>(false);
 
@@ -250,7 +245,7 @@ const DailyChecklist: React.FC<Props> = ({
     new Set(),
   );
 
-  // Multi-Date Selection Set (Array stored in Set)
+  // Multi-Date Selection Set
   const [selectedDates, setSelectedDates] = useState<Set<string>>(
     new Set([todayStr]),
   );
@@ -258,41 +253,43 @@ const DailyChecklist: React.FC<Props> = ({
   // Modal State for Previewing
   const [showPreviewModal, setShowPreviewModal] = useState<boolean>(false);
 
-  // Available Cost Centers based on selected department
+  // Safely memoize source list across directory and employees prop
+  const activeEmployeeSource = useMemo(() => {
+    return employeeDirectory && employeeDirectory.length > 0
+      ? employeeDirectory
+      : employees || [];
+  }, [employeeDirectory, employees]);
+
+  // Available Cost Centers based on selected department (SAFE FROM UNDEFINED)
   const availableCostCenters = useMemo(() => {
     if (!selectedDept) return costCenters || [];
-    const filteredCCs =
-      employees
-        ?.filter((emp) => emp.department === selectedDept && emp.costCenter)
-        .map((emp) => emp.costCenter as string) || [];
+    const filteredCCs = activeEmployeeSource
+      .filter((emp: any) => emp?.department === selectedDept && emp?.costCenter)
+      .map((emp: any) => emp.costCenter as string);
     return Array.from(new Set(filteredCCs));
-  }, [selectedDept, employees, costCenters]);
+  }, [selectedDept, activeEmployeeSource, costCenters]);
 
-// Available Subcenters based on selected department and/or cost center
-const availableSubcenters = useMemo(() => {
-  const sourceList = employeeDirectory.length > 0 ? employeeDirectory : employees;
+  // Available Subcenters based on selected department and/or cost center
+  const availableSubcenters = useMemo(() => {
+    const filteredSubcenters = activeEmployeeSource
+      .filter((emp: any) => {
+        const matchesDept = !selectedDept || emp?.department === selectedDept;
+        const matchesCC =
+          !selectedCostCenter || emp?.costCenter === selectedCostCenter;
+        const subCenterVal = emp?.subCenter || emp?.subcenter;
+        return matchesDept && matchesCC && subCenterVal;
+      })
+      .map((emp: any) => (emp.subCenter || emp.subcenter) as string);
 
-  const filteredSubcenters = sourceList
-    ?.filter((emp: any) => {
-      const matchesDept = !selectedDept || emp.department === selectedDept;
-      const matchesCC = !selectedCostCenter || emp.costCenter === selectedCostCenter;
-      const subCenterVal = emp.subCenter || emp.subcenter;
-      return matchesDept && matchesCC && subCenterVal;
-    })
-    .map((emp: any) => (emp.subCenter || emp.subcenter) as string) || [];
+    return Array.from(new Set(filteredSubcenters));
+  }, [selectedDept, selectedCostCenter, activeEmployeeSource]);
 
-  return Array.from(new Set(filteredSubcenters));
-}, [selectedDept, selectedCostCenter, employeeDirectory, employees]);
+  const handleDepartmentChange = (dept: string) => {
+    setSelectedDept(dept);
+    setSelectedCostCenter("");
+    setSelectedSubCenter("");
+  };
 
- const handleDepartmentChange = (dept: string) => {
-  setSelectedDept(dept);
-  setSelectedCostCenter("");
-  setSelectedSubCenter(""); // Clear subcenter selection when dept changes
-};
-
-  // Once the operator's live scope resolves, non-superusers get pinned to
-  // their own department / cost center — the underlying `employees` prop is
-  // already server-scoped, this just keeps the UI filters consistent with it.
   useEffect(() => {
     if (operatorScope && !operatorScope.isSuperuser) {
       setSelectedDept(operatorScope.department || "");
@@ -326,50 +323,60 @@ const availableSubcenters = useMemo(() => {
     return Array.from(selectedDates).sort();
   }, [selectedDates]);
 
-// Base Match Function for Search, Dept, CostCenter, and SubCenter filters
-const matchesFilter = (emp: any) => {
-  const matchesDept = !selectedDept || emp.department === selectedDept;
-  const matchesCC = !selectedCostCenter || emp.costCenter === selectedCostCenter;
-  
-  // Check both property name variants
-  const empSubCenter = emp.subCenter || emp.subcenter;
-  const matchesSubCenter = !selectedSubCenter || empSubCenter === selectedSubCenter;
+  // Base Match Function for Search, Dept, CostCenter, and SubCenter filters
+  const matchesFilter = (emp: any) => {
+    if (!emp) return false;
+    const matchesDept = !selectedDept || emp.department === selectedDept;
+    const matchesCC =
+      !selectedCostCenter || emp.costCenter === selectedCostCenter;
 
-  const name = (emp.fullName || emp.name || "").toString();
-  const id = (emp.staffCode || emp.id || "").toString();
-  const matchesSearch =
-    name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    id.toLowerCase().includes(searchQuery.toLowerCase());
+    // Check both property name variants
+    const empSubCenter = emp.subCenter || emp.subcenter;
+    const matchesSubCenter =
+      !selectedSubCenter || empSubCenter === selectedSubCenter;
 
-  return matchesDept && matchesCC && matchesSubCenter && matchesSearch;
-};
+    const name = (emp.fullName || emp.name || "").toString();
+    const id = (emp.staffCode || emp.id || "").toString();
+    const matchesSearch =
+      name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      id.toLowerCase().includes(searchQuery.toLowerCase());
+
+    const matchesSelection =
+      !showOnlySelected || selectedEmployeeIds.has(id);
+
+    return (
+      matchesDept &&
+      matchesCC &&
+      matchesSubCenter &&
+      matchesSearch &&
+      matchesSelection
+    );
+  };
 
   // Search-matched employees list
   const searchMatchedEmployees = useMemo(() => {
-    return employees?.filter(matchesFilter) || [];
-  }, [employees, selectedDept, selectedCostCenter, searchQuery]);
+    return activeEmployeeSource.filter(matchesFilter);
+  }, [activeEmployeeSource, selectedDept, selectedCostCenter, selectedSubCenter, searchQuery, showOnlySelected, selectedEmployeeIds]);
 
-const displayedEmployees = useMemo(() => {
-  const sourceList = employeeDirectory.length > 0 ? employeeDirectory : employees;
-  return sourceList.filter(matchesFilter);
-}, [
-  employeeDirectory, 
-  employees, 
-  selectedDept, 
-  selectedCostCenter, 
-  selectedSubCenter, // <--- Make sure this is present!
-  searchQuery
-]);
+  const displayedEmployees = useMemo(() => {
+    return activeEmployeeSource.filter(matchesFilter);
+  }, [
+    activeEmployeeSource,
+    selectedDept,
+    selectedCostCenter,
+    selectedSubCenter,
+    searchQuery,
+    showOnlySelected,
+    selectedEmployeeIds,
+  ]);
 
   // Selected Employee Objects Array
   const selectedEmployeeList = useMemo(() => {
-    return (
-      employees?.filter((emp) => {
-        const id = String(emp.staffCode || emp.id);
-        return selectedEmployeeIds.has(id);
-      }) || []
-    );
-  }, [employees, selectedEmployeeIds]);
+    return activeEmployeeSource.filter((emp: any) => {
+      const id = String(emp.staffCode || emp.id);
+      return selectedEmployeeIds.has(id);
+    });
+  }, [activeEmployeeSource, selectedEmployeeIds]);
 
   // Multi-date Attendance Record Conflict Checking
   const employeesWithCompleteRecords = useMemo(() => {
@@ -386,7 +393,7 @@ const displayedEmployees = useMemo(() => {
 
       selectedDates.forEach((targetDate) => {
         const dateRecords =
-          attendanceRecords?.filter((rec) => {
+          (attendanceRecords || []).filter((rec) => {
             const recDate = rec.date || rec.swipe_date;
             return recDate === targetDate;
           }) || [];
@@ -461,7 +468,7 @@ const displayedEmployees = useMemo(() => {
 
   // Toggle multi-date selection
   const toggleDateSelection = (dateStr: string) => {
-    if (dateStr > todayStr) return; // Disallow selecting future dates
+    if (dateStr > todayStr) return;
 
     setSelectedDates((prev) => {
       const next = new Set(prev);
@@ -481,7 +488,7 @@ const displayedEmployees = useMemo(() => {
     const next = new Set<string>();
     daysInMonth.forEach((day) => {
       const dateStr = formatLocalDate(day);
-      const dayOfWeek = day.getDay(); // 0: Sun, 6: Sat
+      const dayOfWeek = day.getDay();
       if (dateStr <= todayStr && dayOfWeek !== 0 && dayOfWeek !== 6) {
         next.add(dateStr);
       }
@@ -603,7 +610,6 @@ const displayedEmployees = useMemo(() => {
 
     const batchRecords: any[] = [];
 
-    // Loop through ALL selected dates AND ALL selected employees
     sortedSelectedDates.forEach((targetDate) => {
       const dateObj = new Date(`${targetDate}T00:00:00`);
       const weekDayName = dateObj.toLocaleDateString("en-US", {
@@ -679,10 +685,7 @@ const displayedEmployees = useMemo(() => {
     }
   };
 
-  // ─────────────────────────────────────────────────────────────
-  // "Operators Missing Attendance" section
-  // ─────────────────────────────────────────────────────────────
-
+  // Missing Section State
   const [missingSectionDate, setMissingSectionDate] =
     useState<string>(todayStr);
   const [showMissingSection, setShowMissingSection] = useState<boolean>(true);
@@ -700,11 +703,10 @@ const displayedEmployees = useMemo(() => {
     Record<string, MissingEntry>
   >({});
 
-  // Does this employee already have BOTH an IN and OUT punch on the given date?
   const getPunchStatusForDate = (emp: Employee, dateStr: string) => {
     const empId = String(emp.staffCode || emp.id);
     const dateRecords =
-      attendanceRecords?.filter((rec) => {
+      (attendanceRecords || []).filter((rec) => {
         const recDate = rec.date || rec.swipe_date;
         return recDate === dateStr;
       }) || [];
@@ -719,14 +721,13 @@ const displayedEmployees = useMemo(() => {
 
   const isMissingSectionFutureDate = missingSectionDate > todayStr;
 
-  // Superuser view: group missing employees by their assigned operator
   const operatorMissingGroups = useMemo(() => {
     if (!operatorScope?.isSuperuser || isMissingSectionFutureDate) return [];
 
     return (systemUsers || [])
       .filter((su) => !su.isSuperuser && (su.department || su.costCenter))
       .map((su) => {
-        const opEmployees = (employees || []).filter((emp) => {
+        const opEmployees = activeEmployeeSource.filter((emp: any) => {
           const deptMatch = su.department
             ? emp.department === su.department
             : true;
@@ -737,7 +738,7 @@ const displayedEmployees = useMemo(() => {
         });
 
         const missing = opEmployees.filter(
-          (emp) => !getPunchStatusForDate(emp, missingSectionDate).isComplete,
+          (emp: any) => !getPunchStatusForDate(emp, missingSectionDate).isComplete,
         );
 
         return { operator: su, missing };
@@ -745,15 +746,13 @@ const displayedEmployees = useMemo(() => {
       .filter((g) => g.missing.length > 0);
   }, [
     systemUsers,
-    employees,
+    activeEmployeeSource,
     attendanceRecords,
     missingSectionDate,
     operatorScope,
     isMissingSectionFutureDate,
   ]);
 
-  // Non-superuser view: `employees` prop is already server-scoped to this
-  // operator's own department / cost center
   const ownMissingEmployees = useMemo(() => {
     if (
       !operatorScope ||
@@ -761,11 +760,11 @@ const displayedEmployees = useMemo(() => {
       isMissingSectionFutureDate
     )
       return [];
-    return (employees || []).filter(
-      (emp) => !getPunchStatusForDate(emp, missingSectionDate).isComplete,
+    return activeEmployeeSource.filter(
+      (emp: any) => !getPunchStatusForDate(emp, missingSectionDate).isComplete,
     );
   }, [
-    employees,
+    activeEmployeeSource,
     attendanceRecords,
     missingSectionDate,
     operatorScope,
@@ -800,9 +799,6 @@ const displayedEmployees = useMemo(() => {
     }));
   };
 
-  // Log a single employee's check-in and/or check-out for the selected day.
-  // Either field can be left blank — only the punches actually filled in
-  // (and not already present) get submitted.
   const handleLogSingleEmployeeAttendance = async (
     emp: Employee,
     dateStr: string,
@@ -921,8 +917,6 @@ const displayedEmployees = useMemo(() => {
     }
   };
 
-  // Renders one employee's inline check-in / check-out entry row for the
-  // Missing Attendance section. Disables whichever punch already exists.
   const renderMissingEmployeeRow = (emp: Employee, dateStr: string) => {
     const empId = String(emp.staffCode || emp.id);
     const key = `${empId}-${dateStr}`;
@@ -1052,13 +1046,17 @@ const displayedEmployees = useMemo(() => {
                 className="px-3 py-2 border rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 cursor-pointer transition-all hover:border-blue-300"
               >
                 <option value="">All Departments</option>
-                {Array.from(new Set(employeeDirectory.map((e) => e.department)))
-                  .filter(Boolean)
-                  .map((dept) => (
-                    <option key={dept} value={dept}>
-                      {dept.toUpperCase()}
-                    </option>
-                  ))}
+                {Array.from(
+                  new Set(
+                    activeEmployeeSource
+                      .map((e: any) => e.department)
+                      .filter(Boolean),
+                  ),
+                ).map((dept: any) => (
+                  <option key={dept} value={dept}>
+                    {dept.toUpperCase()}
+                  </option>
+                ))}
               </select>
 
               <select
@@ -1181,10 +1179,11 @@ const displayedEmployees = useMemo(() => {
                   : "No employees found matching filter."}
               </div>
             ) : (
-              displayedEmployees.map((employee, idx) => {
+              displayedEmployees.map((employee: any, idx) => {
                 const empId = String(employee.staffCode || employee.id);
                 const empName = employee.fullName || employee.name;
                 const isChecked = selectedEmployeeIds.has(empId);
+                const empSubCenter = employee.subCenter || employee.subcenter;
 
                 const conflictObj = employeesWithCompleteRecords.find(
                   (c) =>
@@ -1249,9 +1248,16 @@ const displayedEmployees = useMemo(() => {
                             )}
                           </p>
                         ) : (
-                          <span className="inline-block mt-1 text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
-                            CC: {employee.costCenter || "N/A"}
-                          </span>
+                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                            <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                              CC: {employee.costCenter || "N/A"}
+                            </span>
+                            {empSubCenter && (
+                              <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded font-medium">
+                                Sub: {empSubCenter}
+                              </span>
+                            )}
+                          </div>
                         )}
                       </div>
                     </div>
