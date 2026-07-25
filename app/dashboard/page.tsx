@@ -458,36 +458,39 @@ export default function EMSDashboard() {
     syncAttendanceData();
   }, [user]);
 
-  // Session User Email State
-  const [sessionUserEmail, setSessionUserEmail] = useState<string>("");
+   // Session User Email State
+    const [sessionUserEmail, setSessionUserEmail] = useState<string>("");
+
+     // Oparator User Email State
+    const [operatorEmail, setOperatorEmail] = useState<string>("");
 
   // Fetch logged-in user email on mount
-  useEffect(() => {
-    let isMounted = true;
-    const fetchLoggedInUser = async () => {
-      try {
-        const response = await fetch("/api/auth/me");
-        if (response.ok) {
-          const data = await response.json();
-          if (isMounted && data?.user?.email) {
-            setSessionUserEmail(data.user.email);
-          }
-        }
-      } catch (error) {
-        console.error("Failed to fetch logged-in user session:", error);
-      }
-    };
-
-    fetchLoggedInUser();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  // Determine active operator email with fallback order: Session Email -> Prop -> Default
-  const activeOperatorEmail = useMemo(() => {
-    return sessionUserEmail;
-  }, [sessionUserEmail]);
+   useEffect(() => {
+     let isMounted = true;
+     const fetchLoggedInUser = async () => {
+       try {
+         const response = await fetch("/api/auth/me");
+         if (response.ok) {
+           const data = await response.json();
+           if (isMounted && data?.user?.email) {
+             setSessionUserEmail(data.user.email);
+           }
+         }
+       } catch (error) {
+         console.error("Failed to fetch logged-in user session:", error);
+       }
+     };
+ 
+     fetchLoggedInUser();
+     return () => {
+       isMounted = false;
+     };
+   }, []);
+ 
+   // Determine active operator email with fallback order: Session Email -> Prop -> Default
+   const activeOperatorEmail = useMemo(() => {
+     return sessionUserEmail || operatorEmail || "OPERATOR_CHECKLIST_OVERRIDE";
+   }, [sessionUserEmail, operatorEmail]);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -952,7 +955,7 @@ export default function EMSDashboard() {
             headers: {
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ payload }),
+            body: JSON.stringify(payload),
           });
 
           const result = await response.json();
