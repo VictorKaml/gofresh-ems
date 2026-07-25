@@ -129,6 +129,8 @@ export default function EMSDashboard() {
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newRole, setNewRole] = useState("operator");
+  const [newOperatorDept, setNewOperatorDept] = useState("");
+  const [newOperatorCostCenter, setNewOperatorCostCenter] = useState("");
   const [isSuper, setIsSuper] = useState(false);
   const [rightChrono, setRightChrono] = useState(true); // If referenced by your form
   const [rightRoster, setRightRoster] = useState(false); // If referenced by your form
@@ -228,6 +230,32 @@ export default function EMSDashboard() {
         fetchSystemUsers(); // Refresh the list
       } else {
         alert(data.error || "Failed to update role");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Update an operator's department / cost center assignment (PATCH)
+  const handleUpdateUserScope = async (
+    id: string,
+    field: "department" | "costCenter",
+    value: string,
+  ) => {
+    try {
+      const res = await fetch("/api/system-users", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, [field]: value || null }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        addLog(
+          `Updated ${field === "department" ? "department" : "cost center"} assignment for system user`,
+        );
+        fetchSystemUsers(); // Refresh the list
+      } else {
+        alert(data.error || "Failed to update assignment");
       }
     } catch (err) {
       console.error(err);
@@ -1093,6 +1121,15 @@ export default function EMSDashboard() {
     ).filter(Boolean);
   }, [employeeDirectory]);
 
+  // Cost centers scoped to a given department, for operator dept/CC assignment dropdowns
+  const getCostCentersForDepartment = (dept: string) => {
+    if (!dept) return costCentersList;
+    const scoped = employeeDirectory
+      .filter((emp) => emp.department === dept)
+      .map((emp) => emp.costCenter);
+    return Array.from(new Set(scoped)).filter(Boolean);
+  };
+
   // Map EmployeeProfile[] -> Employee[]
   const mappedEmployees = useMemo(() => {
     return employeeDirectory.map((emp) => ({
@@ -1714,6 +1751,8 @@ export default function EMSDashboard() {
                             isSuperuser: isSuper,
                             canIngestChrono: rightChrono,
                             canModifyRoster: rightRoster,
+                            department: newOperatorDept || null,
+                            costCenter: newOperatorCostCenter || null,
                           };
 
                           const res = await fetch("/api/system-users", {
@@ -1735,6 +1774,8 @@ export default function EMSDashboard() {
                             setIsSuper(false);
                             setRightChrono(true);
                             setRightRoster(false);
+                            setNewOperatorDept("");
+                            setNewOperatorCostCenter("");
                             fetchSystemUsers();
                           } else {
                             setProvisionStatus(
@@ -1809,6 +1850,58 @@ export default function EMSDashboard() {
                       </div>
 
                       <div className="grid grid-cols-2 gap-4 items-center pt-2">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase text-slate-400 pl-0.5">
+                            Assigned Department
+                          </label>
+                          <select
+                            value={newOperatorDept}
+                            onChange={(e) => {
+                              setNewOperatorDept(e.target.value);
+                              setNewOperatorCostCenter("");
+                            }}
+                            disabled={isSuper}
+                            className="w-full bg-white border border-slate-200 text-xs font-bold rounded-lg p-2 h-9 uppercase text-slate-700 focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                          >
+                            <option value="">— Unassigned —</option>
+                            {departmentsList.map((dept) => (
+                              <option key={dept} value={dept}>
+                                {dept}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase text-slate-400 pl-0.5">
+                            Assigned Cost Center
+                          </label>
+                          <select
+                            value={newOperatorCostCenter}
+                            onChange={(e) =>
+                              setNewOperatorCostCenter(e.target.value)
+                            }
+                            disabled={isSuper}
+                            className="w-full bg-white border border-slate-200 text-xs font-bold rounded-lg p-2 h-9 uppercase text-slate-700 focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                          >
+                            <option value="">— Unassigned —</option>
+                            {getCostCentersForDepartment(newOperatorDept).map(
+                              (cc) => (
+                                <option key={cc} value={cc}>
+                                  {cc}
+                                </option>
+                              ),
+                            )}
+                          </select>
+                        </div>
+                      </div>
+                      {!isSuper && !newOperatorDept && (
+                        <p className="text-[10px] font-semibold text-amber-600 uppercase pl-0.5">
+                          Unassigned operators will not see any employees
+                          until a department is assigned.
+                        </p>
+                      )}
+
+                      <div className="grid grid-cols-2 gap-4 items-center pt-2">
                         <label className="inline-flex items-center gap-2 cursor-pointer select-none">
                           <input
                             type="checkbox"
@@ -1861,6 +1954,12 @@ export default function EMSDashboard() {
                             <TableHead className="text-[10px] font-black uppercase text-slate-500">
                               Role Authority Level
                             </TableHead>
+                            <TableHead className="text-[10px] font-black uppercase text-slate-500">
+                              Department
+                            </TableHead>
+                            <TableHead className="text-[10px] font-black uppercase text-slate-500">
+                              Cost Center
+                            </TableHead>
                             <TableHead className="text-[10px] font-black uppercase text-slate-500 text-center">
                               Superuser
                             </TableHead>
@@ -1879,7 +1978,7 @@ export default function EMSDashboard() {
                           {isLoadingUsers ? (
                             <TableRow>
                               <TableCell
-                                colSpan={7}
+                                colSpan={9}
                                 className="text-center p-4 text-xs font-bold uppercase text-slate-400"
                               >
                                 Synchronizing system user tables...
@@ -1888,7 +1987,7 @@ export default function EMSDashboard() {
                           ) : systemUsers.length === 0 ? (
                             <TableRow>
                               <TableCell
-                                colSpan={7}
+                                colSpan={9}
                                 className="text-center p-4 text-xs font-bold uppercase text-slate-400"
                               >
                                 No secondary operator keys found in the system
@@ -1928,6 +2027,50 @@ export default function EMSDashboard() {
                                     <option value="operator">operator</option>
                                     <option value="manager">manager</option>
                                     <option value="auditor">auditor</option>
+                                  </select>
+                                </TableCell>
+                                <TableCell>
+                                  <select
+                                    value={su.department || ""}
+                                    onChange={(e) =>
+                                      handleUpdateUserScope(
+                                        su.id,
+                                        "department",
+                                        e.target.value,
+                                      )
+                                    }
+                                    disabled={!!su.isSuperuser}
+                                    className="bg-white border border-slate-200 text-[11px] font-bold rounded-md p-1 px-2 text-slate-700 outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer disabled:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-400"
+                                  >
+                                    <option value="">— Unassigned —</option>
+                                    {departmentsList.map((dept) => (
+                                      <option key={dept} value={dept}>
+                                        {dept}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </TableCell>
+                                <TableCell>
+                                  <select
+                                    value={su.costCenter || ""}
+                                    onChange={(e) =>
+                                      handleUpdateUserScope(
+                                        su.id,
+                                        "costCenter",
+                                        e.target.value,
+                                      )
+                                    }
+                                    disabled={!!su.isSuperuser}
+                                    className="bg-white border border-slate-200 text-[11px] font-bold rounded-md p-1 px-2 text-slate-700 outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer disabled:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-400"
+                                  >
+                                    <option value="">— Unassigned —</option>
+                                    {getCostCentersForDepartment(
+                                      su.department || "",
+                                    ).map((cc) => (
+                                      <option key={cc} value={cc}>
+                                        {cc}
+                                      </option>
+                                    ))}
                                   </select>
                                 </TableCell>
                                 <TableCell className="text-center">

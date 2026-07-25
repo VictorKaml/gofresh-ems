@@ -37,6 +37,17 @@ interface Employee {
   [key: string]: any;
 }
 
+interface EmployeeProfile {
+  staffCode: string;
+  fullName: string;
+  department: string;
+  costCenter: string;
+  subCenter: string;
+  subItem: string;
+  id?: string;   // 👈 Added
+  name?: string; // 👈 Added
+}
+
 interface AttendanceRecord {
   id?: string;
   staffCode?: string;
@@ -67,7 +78,16 @@ interface PublicHoliday {
 interface SystemUserLite {
   id?: string;
   email: string;
+  isSuperuser?: boolean;
+  department?: string | null;
+  costCenter?: string | null;
   [key: string]: any;
+}
+
+interface OperatorScope {
+  isSuperuser: boolean;
+  department: string | null;
+  costCenter: string | null;
 }
 
 interface Props {
@@ -108,7 +128,38 @@ const DailyChecklist: React.FC<Props> = ({
   // Session User Email State
   const [sessionUserEmail, setSessionUserEmail] = useState<string>("");
 
-  // Fetch logged-in user email on mount
+  // Live operator scope (department / cost center / superuser status),
+  // resolved server-side and never trusted from local state alone.
+  const [operatorScope, setOperatorScope] = useState<OperatorScope | null>(
+    null,
+  );
+
+  const [employeeDirectory, setEmployeeDirectory] = useState<EmployeeProfile[]>(
+    [],
+  );
+  const [isLoadingEmployees, setIsLoadingEmployees] = useState<boolean>(true);
+
+  useEffect(() => {
+    async function fetchEmployees() {
+      setIsLoadingEmployees(true);
+      try {
+        const res = await fetch("/api/employees");
+        if (res.ok) {
+          const data = await res.json();
+          setEmployeeDirectory(
+            Array.isArray(data) ? data : data.employees || [],
+          );
+        }
+      } catch (err) {
+        console.error("Failed fetching employee directory", err);
+      } finally {
+        setIsLoadingEmployees(false);
+      }
+    }
+    fetchEmployees();
+  }, []);
+
+  // Fetch logged-in user email + scope on mount
   useEffect(() => {
     let isMounted = true;
     const fetchLoggedInUser = async () => {
@@ -118,6 +169,13 @@ const DailyChecklist: React.FC<Props> = ({
           const data = await response.json();
           if (isMounted && data?.user?.email) {
             setSessionUserEmail(data.user.email);
+          }
+          if (isMounted && data?.user) {
+            setOperatorScope({
+              isSuperuser: !!data.user.superuser,
+              department: data.user.department ?? null,
+              costCenter: data.user.costCenter ?? null,
+            });
           }
         }
       } catch (error) {
@@ -183,6 +241,7 @@ const DailyChecklist: React.FC<Props> = ({
   // Filter States
   const [selectedDept, setSelectedDept] = useState<string>("");
   const [selectedCostCenter, setSelectedCostCenter] = useState<string>("");
+    const [selectedSubCenter, setSelectedSubCenter] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [showOnlySelected, setShowOnlySelected] = useState<boolean>(false);
 
@@ -209,10 +268,39 @@ const DailyChecklist: React.FC<Props> = ({
     return Array.from(new Set(filteredCCs));
   }, [selectedDept, employees, costCenters]);
 
-  const handleDepartmentChange = (dept: string) => {
-    setSelectedDept(dept);
-    setSelectedCostCenter("");
-  };
+// Available Subcenters based on selected department and/or cost center
+const availableSubcenters = useMemo(() => {
+  const sourceList = employeeDirectory.length > 0 ? employeeDirectory : employees;
+
+  const filteredSubcenters = sourceList
+    ?.filter((emp: any) => {
+      const matchesDept = !selectedDept || emp.department === selectedDept;
+      const matchesCC = !selectedCostCenter || emp.costCenter === selectedCostCenter;
+      const subCenterVal = emp.subCenter || emp.subcenter;
+      return matchesDept && matchesCC && subCenterVal;
+    })
+    .map((emp: any) => (emp.subCenter || emp.subcenter) as string) || [];
+
+  return Array.from(new Set(filteredSubcenters));
+}, [selectedDept, selectedCostCenter, employeeDirectory, employees]);
+
+ const handleDepartmentChange = (dept: string) => {
+  setSelectedDept(dept);
+  setSelectedCostCenter("");
+  setSelectedSubCenter(""); // Clear subcenter selection when dept changes
+};
+
+  // Once the operator's live scope resolves, non-superusers get pinned to
+  // their own department / cost center — the underlying `employees` prop is
+  // already server-scoped, this just keeps the UI filters consistent with it.
+  useEffect(() => {
+    if (operatorScope && !operatorScope.isSuperuser) {
+      setSelectedDept(operatorScope.department || "");
+      setSelectedCostCenter(operatorScope.costCenter || "");
+    }
+  }, [operatorScope]);
+
+  const isScopeLocked = !!operatorScope && !operatorScope.isSuperuser;
 
   // Calendar & Punch Form States
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
@@ -238,46 +326,40 @@ const DailyChecklist: React.FC<Props> = ({
     return Array.from(selectedDates).sort();
   }, [selectedDates]);
 
-  // Base Match Function for Search and Dept/CostCenter filters
-  const matchesFilter = (emp: Employee) => {
-    const matchesDept = !selectedDept || emp.department === selectedDept;
-    const matchesCC =
-      !selectedCostCenter || emp.costCenter === selectedCostCenter;
-    const name = (emp.fullName || emp.name || "").toString();
-    const id = (emp.staffCode || emp.id || "").toString();
-    const matchesSearch =
-      name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      id.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesDept && matchesCC && matchesSearch;
-  };
+// Base Match Function for Search, Dept, CostCenter, and SubCenter filters
+const matchesFilter = (emp: any) => {
+  const matchesDept = !selectedDept || emp.department === selectedDept;
+  const matchesCC = !selectedCostCenter || emp.costCenter === selectedCostCenter;
+  
+  // Check both property name variants
+  const empSubCenter = emp.subCenter || emp.subcenter;
+  const matchesSubCenter = !selectedSubCenter || empSubCenter === selectedSubCenter;
+
+  const name = (emp.fullName || emp.name || "").toString();
+  const id = (emp.staffCode || emp.id || "").toString();
+  const matchesSearch =
+    name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    id.toLowerCase().includes(searchQuery.toLowerCase());
+
+  return matchesDept && matchesCC && matchesSubCenter && matchesSearch;
+};
 
   // Search-matched employees list
   const searchMatchedEmployees = useMemo(() => {
     return employees?.filter(matchesFilter) || [];
   }, [employees, selectedDept, selectedCostCenter, searchQuery]);
 
-  // Displayed Employees List
-  const displayedEmployees = useMemo(() => {
-    return (
-      employees?.filter((emp) => {
-        const empId = String(emp.staffCode || emp.id);
-        const isChecked = selectedEmployeeIds.has(empId);
-
-        if (showOnlySelected) {
-          return isChecked && matchesFilter(emp);
-        }
-
-        return matchesFilter(emp);
-      }) || []
-    );
-  }, [
-    employees,
-    selectedEmployeeIds,
-    showOnlySelected,
-    selectedDept,
-    selectedCostCenter,
-    searchQuery,
-  ]);
+const displayedEmployees = useMemo(() => {
+  const sourceList = employeeDirectory.length > 0 ? employeeDirectory : employees;
+  return sourceList.filter(matchesFilter);
+}, [
+  employeeDirectory, 
+  employees, 
+  selectedDept, 
+  selectedCostCenter, 
+  selectedSubCenter, // <--- Make sure this is present!
+  searchQuery
+]);
 
   // Selected Employee Objects Array
   const selectedEmployeeList = useMemo(() => {
@@ -597,6 +679,335 @@ const DailyChecklist: React.FC<Props> = ({
     }
   };
 
+  // ─────────────────────────────────────────────────────────────
+  // "Operators Missing Attendance" section
+  // ─────────────────────────────────────────────────────────────
+
+  const [missingSectionDate, setMissingSectionDate] =
+    useState<string>(todayStr);
+  const [showMissingSection, setShowMissingSection] = useState<boolean>(true);
+  const [expandedOperatorKeys, setExpandedOperatorKeys] = useState<Set<string>>(
+    new Set(),
+  );
+
+  type MissingEntry = {
+    checkIn: string;
+    checkOut: string;
+    reason: string;
+    submitting: boolean;
+  };
+  const [missingEntryState, setMissingEntryState] = useState<
+    Record<string, MissingEntry>
+  >({});
+
+  // Does this employee already have BOTH an IN and OUT punch on the given date?
+  const getPunchStatusForDate = (emp: Employee, dateStr: string) => {
+    const empId = String(emp.staffCode || emp.id);
+    const dateRecords =
+      attendanceRecords?.filter((rec) => {
+        const recDate = rec.date || rec.swipe_date;
+        return recDate === dateStr;
+      }) || [];
+    const empRecords = dateRecords.filter((rec) => {
+      const rEmpId = String(rec.staffCode || rec.employeeId || rec.id);
+      return rEmpId === empId;
+    });
+    const hasIn = empRecords.some((r) => (r.type || r.swipe_type) === "IN");
+    const hasOut = empRecords.some((r) => (r.type || r.swipe_type) === "OUT");
+    return { hasIn, hasOut, isComplete: hasIn && hasOut };
+  };
+
+  const isMissingSectionFutureDate = missingSectionDate > todayStr;
+
+  // Superuser view: group missing employees by their assigned operator
+  const operatorMissingGroups = useMemo(() => {
+    if (!operatorScope?.isSuperuser || isMissingSectionFutureDate) return [];
+
+    return (systemUsers || [])
+      .filter((su) => !su.isSuperuser && (su.department || su.costCenter))
+      .map((su) => {
+        const opEmployees = (employees || []).filter((emp) => {
+          const deptMatch = su.department
+            ? emp.department === su.department
+            : true;
+          const ccMatch = su.costCenter
+            ? emp.costCenter === su.costCenter
+            : true;
+          return deptMatch && ccMatch;
+        });
+
+        const missing = opEmployees.filter(
+          (emp) => !getPunchStatusForDate(emp, missingSectionDate).isComplete,
+        );
+
+        return { operator: su, missing };
+      })
+      .filter((g) => g.missing.length > 0);
+  }, [
+    systemUsers,
+    employees,
+    attendanceRecords,
+    missingSectionDate,
+    operatorScope,
+    isMissingSectionFutureDate,
+  ]);
+
+  // Non-superuser view: `employees` prop is already server-scoped to this
+  // operator's own department / cost center
+  const ownMissingEmployees = useMemo(() => {
+    if (
+      !operatorScope ||
+      operatorScope.isSuperuser ||
+      isMissingSectionFutureDate
+    )
+      return [];
+    return (employees || []).filter(
+      (emp) => !getPunchStatusForDate(emp, missingSectionDate).isComplete,
+    );
+  }, [
+    employees,
+    attendanceRecords,
+    missingSectionDate,
+    operatorScope,
+    isMissingSectionFutureDate,
+  ]);
+
+  const toggleOperatorExpanded = (key: string) => {
+    setExpandedOperatorKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const getMissingEntry = (key: string): MissingEntry =>
+    missingEntryState[key] || {
+      checkIn: "",
+      checkOut: "",
+      reason: OVERRIDE_REASONS[0],
+      submitting: false,
+    };
+
+  const updateMissingEntry = (
+    key: string,
+    field: "checkIn" | "checkOut" | "reason",
+    value: string,
+  ) => {
+    setMissingEntryState((prev) => ({
+      ...prev,
+      [key]: { ...getMissingEntry(key), [field]: value },
+    }));
+  };
+
+  // Log a single employee's check-in and/or check-out for the selected day.
+  // Either field can be left blank — only the punches actually filled in
+  // (and not already present) get submitted.
+  const handleLogSingleEmployeeAttendance = async (
+    emp: Employee,
+    dateStr: string,
+  ) => {
+    const empId = String(emp.staffCode || emp.id);
+    const key = `${empId}-${dateStr}`;
+    const entry = getMissingEntry(key);
+
+    if (!entry.checkIn && !entry.checkOut) {
+      setNotification({
+        type: "error",
+        message: "Enter a check-in time, check-out time, or both.",
+      });
+      return;
+    }
+    if (!entry.reason.trim()) {
+      setNotification({
+        type: "error",
+        message: "Please select a reason before logging attendance.",
+      });
+      return;
+    }
+
+    const { hasIn, hasOut } = getPunchStatusForDate(emp, dateStr);
+    const dateObj = new Date(`${dateStr}T00:00:00`);
+    const weekDayName = dateObj.toLocaleDateString("en-US", {
+      weekday: "long",
+    });
+
+    const records: any[] = [];
+
+    if (entry.checkIn && !hasIn) {
+      const formattedInTime =
+        entry.checkIn.length === 5 ? `${entry.checkIn}:00` : entry.checkIn;
+      records.push({
+        id: empId,
+        staffCode: empId,
+        date: dateStr,
+        weekday: weekDayName,
+        time: formattedInTime,
+        type: "IN",
+        isManualOverride: true,
+        adjusted_by: activeOperatorEmail,
+        reason: `${entry.reason.trim()} (Check-In)`,
+      });
+    }
+
+    if (entry.checkOut && !hasOut) {
+      const formattedOutTime =
+        entry.checkOut.length === 5 ? `${entry.checkOut}:00` : entry.checkOut;
+      records.push({
+        id: empId,
+        staffCode: empId,
+        date: dateStr,
+        weekday: weekDayName,
+        time: formattedOutTime,
+        type: "OUT",
+        isManualOverride: true,
+        adjusted_by: activeOperatorEmail,
+        reason: `${entry.reason.trim()} (Check-Out)`,
+      });
+    }
+
+    if (records.length === 0) {
+      setNotification({
+        type: "error",
+        message:
+          "The punch(es) you entered already exist for this employee on this date.",
+      });
+      return;
+    }
+
+    setMissingEntryState((prev) => ({
+      ...prev,
+      [key]: { ...entry, submitting: true },
+    }));
+
+    try {
+      const response = await fetch("/api/attendance/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          operatorEmail: activeOperatorEmail,
+          records,
+        }),
+      });
+      const resData = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          resData.error || "Failed to post manual attendance record.",
+        );
+      }
+
+      setNotification({
+        type: "success",
+        message: `Logged ${records.length} punch(es) for ${
+          emp.fullName || emp.name
+        } on ${dateStr}.`,
+      });
+
+      setMissingEntryState((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      onRefreshDashboard();
+    } catch (err: any) {
+      setNotification({
+        type: "error",
+        message: err.message || "An error occurred while logging attendance.",
+      });
+      setMissingEntryState((prev) => ({
+        ...prev,
+        [key]: { ...entry, submitting: false },
+      }));
+    }
+  };
+
+  // Renders one employee's inline check-in / check-out entry row for the
+  // Missing Attendance section. Disables whichever punch already exists.
+  const renderMissingEmployeeRow = (emp: Employee, dateStr: string) => {
+    const empId = String(emp.staffCode || emp.id);
+    const key = `${empId}-${dateStr}`;
+    const entry = getMissingEntry(key);
+    const { hasIn, hasOut } = getPunchStatusForDate(emp, dateStr);
+
+    return (
+      <div
+        key={key}
+        className="p-3 flex flex-col md:flex-row md:items-center gap-2 md:gap-3 border-b border-gray-100 last:border-b-0 hover:bg-gray-50/60 transition-colors"
+      >
+        <div className="md:w-48 flex-shrink-0">
+          <p className="text-sm font-semibold text-gray-800">
+            {emp.fullName || emp.name}
+          </p>
+          <p className="text-[11px] text-gray-500">
+            ID: {empId} • {emp.department || "N/A"}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <Clock className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+          <input
+            type="time"
+            value={entry.checkIn}
+            disabled={hasIn || entry.submitting}
+            onChange={(e) => updateMissingEntry(key, "checkIn", e.target.value)}
+            title={hasIn ? "Check-in already recorded" : "Check-in time"}
+            className="px-2 py-1 border rounded-md text-xs focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed w-28"
+          />
+          {hasIn && (
+            <span className="text-[10px] text-green-700 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded font-semibold">
+              IN OK
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <Clock className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+          <input
+            type="time"
+            value={entry.checkOut}
+            disabled={hasOut || entry.submitting}
+            onChange={(e) =>
+              updateMissingEntry(key, "checkOut", e.target.value)
+            }
+            title={hasOut ? "Check-out already recorded" : "Check-out time"}
+            className="px-2 py-1 border rounded-md text-xs focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed w-28"
+          />
+          {hasOut && (
+            <span className="text-[10px] text-green-700 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded font-semibold">
+              OUT OK
+            </span>
+          )}
+        </div>
+
+        <select
+          value={entry.reason}
+          disabled={entry.submitting}
+          onChange={(e) => updateMissingEntry(key, "reason", e.target.value)}
+          className="flex-1 min-w-[160px] px-2 py-1 border rounded-md text-xs bg-white focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+        >
+          {OVERRIDE_REASONS.map((r) => (
+            <option key={r} value={r}>
+              {r}
+            </option>
+          ))}
+        </select>
+
+        <button
+          onClick={() => handleLogSingleEmployeeAttendance(emp, dateStr)}
+          disabled={entry.submitting || (hasIn && hasOut)}
+          className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-md shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95 flex-shrink-0"
+        >
+          {entry.submitting ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <UserCheck className="w-3.5 h-3.5" />
+          )}
+          {entry.submitting ? "Logging..." : "Log"}
+        </button>
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col gap-6 p-6 bg-gray-50 min-h-screen relative">
       {/* Header Bar */}
@@ -617,51 +1028,66 @@ const DailyChecklist: React.FC<Props> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <select
-            value={selectedDept}
-            onChange={(e) => handleDepartmentChange(e.target.value)}
-            className="px-3 py-2 border rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 cursor-pointer transition-all hover:border-blue-300"
-          >
-            <option value="">All Departments</option>
-            {departments?.map((dept) => (
-              <option key={dept} value={dept}>
-                {dept}
-              </option>
-            ))}
-          </select>
+          {isScopeLocked ? (
+            <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-sm text-gray-600">
+              <Users className="w-3.5 h-3.5 text-gray-400" />
+              {operatorScope?.department ? (
+                <span className="font-medium text-gray-700">
+                  {operatorScope.department}
+                  {operatorScope.costCenter
+                    ? ` • ${operatorScope.costCenter}`
+                    : ""}
+                </span>
+              ) : (
+                <span className="font-medium text-amber-600">
+                  No department assigned — contact an admin
+                </span>
+              )}
+            </div>
+          ) : (
+            <>
+              <select
+                value={selectedDept}
+                onChange={(e) => handleDepartmentChange(e.target.value)}
+                className="px-3 py-2 border rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 cursor-pointer transition-all hover:border-blue-300"
+              >
+                <option value="">All Departments</option>
+                {Array.from(new Set(employeeDirectory.map((e) => e.department)))
+                  .filter(Boolean)
+                  .map((dept) => (
+                    <option key={dept} value={dept}>
+                      {dept.toUpperCase()}
+                    </option>
+                  ))}
+              </select>
 
-          <select
-            value={selectedCostCenter}
-            onChange={(e) => setSelectedCostCenter(e.target.value)}
-            className="px-3 py-2 border rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 cursor-pointer transition-all hover:border-blue-300"
-          >
-            <option value="">All Cost Centers</option>
-            {availableCostCenters.map((cc) => (
-              <option key={cc} value={cc}>
-                {cc}
-              </option>
-            ))}
-          </select>
+              <select
+                value={selectedCostCenter}
+                onChange={(e) => setSelectedCostCenter(e.target.value)}
+                className="px-3 py-2 border rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 cursor-pointer transition-all hover:border-blue-300"
+              >
+                <option value="">All Cost Centers</option>
+                {availableCostCenters.map((cc) => (
+                  <option key={cc} value={cc}>
+                    {cc}
+                  </option>
+                ))}
+              </select>
 
-          <button
-            onClick={() =>
-              onDownloadExceptionReport &&
-              onDownloadExceptionReport("Late Arrivals")
-            }
-            className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-md text-sm font-medium border border-amber-200 transition-all hover:shadow-sm active:scale-95"
-          >
-            <FileText className="w-4 h-4" /> Exceptions
-          </button>
-
-          <button
-            onClick={() =>
-              onDownloadOverallAnalytics &&
-              onDownloadOverallAnalytics(selectedDept, selectedCostCenter)
-            }
-            className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-md text-sm font-medium border border-blue-200 transition-all hover:shadow-sm active:scale-95"
-          >
-            <BarChart3 className="w-4 h-4" /> Analytics PDF
-          </button>
+              <select
+                value={selectedSubCenter}
+                onChange={(e) => setSelectedSubCenter(e.target.value)}
+                className="px-3 py-2 border rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 cursor-pointer transition-all hover:border-blue-300"
+              >
+                <option value="">All Sub Centers</option>
+                {availableSubcenters.map((sc) => (
+                  <option key={sc} value={sc}>
+                    {sc}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
         </div>
       </div>
 
@@ -870,7 +1296,8 @@ const DailyChecklist: React.FC<Props> = ({
                       {employeesWithCompleteRecords.length})
                     </h4>
                     <p className="text-xs text-red-700 mt-0.5">
-                      The following employee(s) already have complete attendance records on selected dates. Please remove them to proceed.
+                      The following employee(s) already have complete attendance
+                      records on selected dates. Please remove them to proceed.
                     </p>
                   </div>
                 </div>
@@ -1141,11 +1568,142 @@ const DailyChecklist: React.FC<Props> = ({
                 className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-md shadow-sm transition-all active:scale-[0.98] hover:shadow-md flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-sm"
               >
                 <UserCheck className="w-5 h-5" />
-                Preview & Confirm Batch ({selectedEmployeeIds.size} Employees × {selectedDates.size} Days)
+                Preview & Confirm Batch ({selectedEmployeeIds.size} Employees ×{" "}
+                {selectedDates.size} Days)
               </button>
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Operators Missing Attendance */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 transition-shadow hover:shadow-md">
+        <div className="p-4 border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <button
+            onClick={() => setShowMissingSection(!showMissingSection)}
+            className="flex items-center gap-2 text-left"
+          >
+            <div className="w-9 h-9 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center flex-shrink-0">
+              <AlertTriangle className="w-4.5 h-4.5 text-amber-600" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-gray-800">
+                {operatorScope?.isSuperuser
+                  ? "Operators Missing Attendance"
+                  : "Your Missing Attendance"}
+              </h3>
+              <p className="text-xs text-gray-500">
+                {operatorScope?.isSuperuser
+                  ? "Employees without a complete check-in/out for the selected day, grouped by assigned operator"
+                  : "Employees in your department/cost center without a complete check-in/out for the selected day"}
+              </p>
+            </div>
+          </button>
+
+          <div className="flex items-center gap-2">
+            <CalendarIcon className="w-4 h-4 text-gray-400" />
+            <input
+              type="date"
+              value={missingSectionDate}
+              max={todayStr}
+              onChange={(e) => setMissingSectionDate(e.target.value)}
+              className="px-2 py-1.5 border rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500"
+            />
+            <button
+              onClick={() => setShowMissingSection(!showMissingSection)}
+              className="p-1.5 hover:bg-gray-100 rounded-md transition-all"
+            >
+              {showMissingSection ? (
+                <ChevronLeft className="w-4 h-4 text-gray-500 rotate-90" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-gray-500 rotate-90" />
+              )}
+            </button>
+          </div>
+        </div>
+
+        {showMissingSection && (
+          <div className="p-4">
+            {isMissingSectionFutureDate ? (
+              <div className="p-6 text-center text-sm text-gray-400">
+                Attendance status isn't available for future dates.
+              </div>
+            ) : operatorScope === null ? (
+              <div className="p-6 text-center text-sm text-gray-400 flex items-center justify-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" /> Loading operator
+                scope...
+              </div>
+            ) : operatorScope.isSuperuser ? (
+              operatorMissingGroups.length === 0 ? (
+                <div className="p-6 text-center text-sm text-gray-400 flex flex-col items-center gap-2">
+                  <PartyPopper className="w-6 h-6 text-gray-300" />
+                  Every assigned operator's employees are fully checked in and
+                  out for {missingSectionDate}.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {operatorMissingGroups.map(({ operator, missing }) => {
+                    const opKey = String(operator.id || operator.email);
+                    const isExpanded = expandedOperatorKeys.has(opKey);
+                    return (
+                      <div
+                        key={opKey}
+                        className="border border-gray-200 rounded-md overflow-hidden"
+                      >
+                        <button
+                          onClick={() => toggleOperatorExpanded(opKey)}
+                          className="w-full flex items-center justify-between gap-3 p-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <UserX className="w-4 h-4 text-red-500 flex-shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-gray-800 truncate">
+                                {operator.email}
+                              </p>
+                              <p className="text-[11px] text-gray-500 truncate">
+                                {operator.department || "N/A"}
+                                {operator.costCenter
+                                  ? ` • ${operator.costCenter}`
+                                  : ""}
+                              </p>
+                            </div>
+                          </div>
+                          <span className="text-xs font-bold text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full flex-shrink-0">
+                            {missing.length} missing
+                          </span>
+                        </button>
+                        {isExpanded && (
+                          <div className="divide-y divide-gray-100">
+                            {missing.map((emp) =>
+                              renderMissingEmployeeRow(emp, missingSectionDate),
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )
+            ) : !operatorScope.department ? (
+              <div className="p-6 text-center text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-md">
+                No department or cost center is assigned to your account yet.
+                Contact an administrator to be scoped to a workspace.
+              </div>
+            ) : ownMissingEmployees.length === 0 ? (
+              <div className="p-6 text-center text-sm text-gray-400 flex flex-col items-center gap-2">
+                <PartyPopper className="w-6 h-6 text-gray-300" />
+                All of your employees are fully checked in and out for{" "}
+                {missingSectionDate}.
+              </div>
+            ) : (
+              <div className="border border-gray-200 rounded-md divide-y divide-gray-100">
+                {ownMissingEmployees.map((emp) =>
+                  renderMissingEmployeeRow(emp, missingSectionDate),
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Confirmation Modal */}
@@ -1228,9 +1786,7 @@ const DailyChecklist: React.FC<Props> = ({
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-md shadow-sm flex items-center gap-2 disabled:opacity-50 transition-all active:scale-95 hover:shadow-md"
               >
                 {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                {isSubmitting
-                  ? "Posting Records..."
-                  : "Confirm & Submit Batch"}
+                {isSubmitting ? "Posting Records..." : "Confirm & Submit Batch"}
               </button>
             </div>
           </div>

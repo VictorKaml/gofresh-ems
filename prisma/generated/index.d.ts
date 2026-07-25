@@ -1175,6 +1175,8 @@ export namespace Prisma {
     isSuperuser: boolean | null
     canIngestChrono: boolean | null
     canModifyRoster: boolean | null
+    department: string | null
+    costCenter: string | null
     createdAt: Date | null
   }
 
@@ -1186,6 +1188,8 @@ export namespace Prisma {
     isSuperuser: boolean | null
     canIngestChrono: boolean | null
     canModifyRoster: boolean | null
+    department: string | null
+    costCenter: string | null
     createdAt: Date | null
   }
 
@@ -1197,6 +1201,8 @@ export namespace Prisma {
     isSuperuser: number
     canIngestChrono: number
     canModifyRoster: number
+    department: number
+    costCenter: number
     createdAt: number
     _all: number
   }
@@ -1210,6 +1216,8 @@ export namespace Prisma {
     isSuperuser?: true
     canIngestChrono?: true
     canModifyRoster?: true
+    department?: true
+    costCenter?: true
     createdAt?: true
   }
 
@@ -1221,6 +1229,8 @@ export namespace Prisma {
     isSuperuser?: true
     canIngestChrono?: true
     canModifyRoster?: true
+    department?: true
+    costCenter?: true
     createdAt?: true
   }
 
@@ -1232,6 +1242,8 @@ export namespace Prisma {
     isSuperuser?: true
     canIngestChrono?: true
     canModifyRoster?: true
+    department?: true
+    costCenter?: true
     createdAt?: true
     _all?: true
   }
@@ -1316,6 +1328,8 @@ export namespace Prisma {
     isSuperuser: boolean
     canIngestChrono: boolean
     canModifyRoster: boolean
+    department: string | null
+    costCenter: string | null
     createdAt: Date
     _count: SystemUserCountAggregateOutputType | null
     _min: SystemUserMinAggregateOutputType | null
@@ -1344,6 +1358,8 @@ export namespace Prisma {
     isSuperuser?: boolean
     canIngestChrono?: boolean
     canModifyRoster?: boolean
+    department?: boolean
+    costCenter?: boolean
     createdAt?: boolean
   }, ExtArgs["result"]["systemUser"]>
 
@@ -1355,6 +1371,8 @@ export namespace Prisma {
     isSuperuser?: boolean
     canIngestChrono?: boolean
     canModifyRoster?: boolean
+    department?: boolean
+    costCenter?: boolean
     createdAt?: boolean
   }, ExtArgs["result"]["systemUser"]>
 
@@ -1366,6 +1384,8 @@ export namespace Prisma {
     isSuperuser?: boolean
     canIngestChrono?: boolean
     canModifyRoster?: boolean
+    department?: boolean
+    costCenter?: boolean
     createdAt?: boolean
   }, ExtArgs["result"]["systemUser"]>
 
@@ -1377,10 +1397,12 @@ export namespace Prisma {
     isSuperuser?: boolean
     canIngestChrono?: boolean
     canModifyRoster?: boolean
+    department?: boolean
+    costCenter?: boolean
     createdAt?: boolean
   }
 
-  export type SystemUserOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "email" | "passwordHash" | "roleTier" | "isSuperuser" | "canIngestChrono" | "canModifyRoster" | "createdAt", ExtArgs["result"]["systemUser"]>
+  export type SystemUserOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "email" | "passwordHash" | "roleTier" | "isSuperuser" | "canIngestChrono" | "canModifyRoster" | "department" | "costCenter" | "createdAt", ExtArgs["result"]["systemUser"]>
 
   export type $SystemUserPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "SystemUser"
@@ -1393,6 +1415,8 @@ export namespace Prisma {
       isSuperuser: boolean
       canIngestChrono: boolean
       canModifyRoster: boolean
+      department: string | null
+      costCenter: string | null
       createdAt: Date
     }, ExtArgs["result"]["systemUser"]>
     composites: {}
@@ -1824,6 +1848,8 @@ export namespace Prisma {
     readonly isSuperuser: FieldRef<"SystemUser", 'Boolean'>
     readonly canIngestChrono: FieldRef<"SystemUser", 'Boolean'>
     readonly canModifyRoster: FieldRef<"SystemUser", 'Boolean'>
+    readonly department: FieldRef<"SystemUser", 'String'>
+    readonly costCenter: FieldRef<"SystemUser", 'String'>
     readonly createdAt: FieldRef<"SystemUser", 'DateTime'>
   }
     
@@ -2212,6 +2238,8 @@ export namespace Prisma {
     designation: string | null
     department: string | null
     costCenter: string | null
+    subCenter: string | null
+    subItem: string | null
     createdAt: Date | null
     updatedAt: Date | null
   }
@@ -2222,6 +2250,8 @@ export namespace Prisma {
     designation: string | null
     department: string | null
     costCenter: string | null
+    subCenter: string | null
+    subItem: string | null
     createdAt: Date | null
     updatedAt: Date | null
   }
@@ -2232,6 +2262,8 @@ export namespace Prisma {
     designation: number
     department: number
     costCenter: number
+    subCenter: number
+    subItem: number
     createdAt: number
     updatedAt: number
     _all: number
@@ -2244,6 +2276,8 @@ export namespace Prisma {
     designation?: true
     department?: true
     costCenter?: true
+    subCenter?: true
+    subItem?: true
     createdAt?: true
     updatedAt?: true
   }
@@ -2254,6 +2288,8 @@ export namespace Prisma {
     designation?: true
     department?: true
     costCenter?: true
+    subCenter?: true
+    subItem?: true
     createdAt?: true
     updatedAt?: true
   }
@@ -2264,6 +2300,8 @@ export namespace Prisma {
     designation?: true
     department?: true
     costCenter?: true
+    subCenter?: true
+    subItem?: true
     createdAt?: true
     updatedAt?: true
     _all?: true
@@ -2347,6 +2385,8 @@ export namespace Prisma {
     designation: string
     department: string
     costCenter: string
+    subCenter: string
+    subItem: string
     createdAt: Date
     updatedAt: Date
     _count: EmployeeCountAggregateOutputType | null
@@ -2374,6 +2414,8 @@ export namespace Prisma {
     designation?: boolean
     department?: boolean
     costCenter?: boolean
+    subCenter?: boolean
+    subItem?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }, ExtArgs["result"]["employee"]>
@@ -2384,6 +2426,8 @@ export namespace Prisma {
     designation?: boolean
     department?: boolean
     costCenter?: boolean
+    subCenter?: boolean
+    subItem?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }, ExtArgs["result"]["employee"]>
@@ -2394,6 +2438,8 @@ export namespace Prisma {
     designation?: boolean
     department?: boolean
     costCenter?: boolean
+    subCenter?: boolean
+    subItem?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }, ExtArgs["result"]["employee"]>
@@ -2404,11 +2450,13 @@ export namespace Prisma {
     designation?: boolean
     department?: boolean
     costCenter?: boolean
+    subCenter?: boolean
+    subItem?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }
 
-  export type EmployeeOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"staffCode" | "fullName" | "designation" | "department" | "costCenter" | "createdAt" | "updatedAt", ExtArgs["result"]["employee"]>
+  export type EmployeeOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"staffCode" | "fullName" | "designation" | "department" | "costCenter" | "subCenter" | "subItem" | "createdAt" | "updatedAt", ExtArgs["result"]["employee"]>
 
   export type $EmployeePayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "Employee"
@@ -2419,6 +2467,8 @@ export namespace Prisma {
       designation: string
       department: string
       costCenter: string
+      subCenter: string
+      subItem: string
       createdAt: Date
       updatedAt: Date
     }, ExtArgs["result"]["employee"]>
@@ -2849,6 +2899,8 @@ export namespace Prisma {
     readonly designation: FieldRef<"Employee", 'String'>
     readonly department: FieldRef<"Employee", 'String'>
     readonly costCenter: FieldRef<"Employee", 'String'>
+    readonly subCenter: FieldRef<"Employee", 'String'>
+    readonly subItem: FieldRef<"Employee", 'String'>
     readonly createdAt: FieldRef<"Employee", 'DateTime'>
     readonly updatedAt: FieldRef<"Employee", 'DateTime'>
   }
@@ -5309,6 +5361,8 @@ export namespace Prisma {
     isSuperuser: 'isSuperuser',
     canIngestChrono: 'canIngestChrono',
     canModifyRoster: 'canModifyRoster',
+    department: 'department',
+    costCenter: 'costCenter',
     createdAt: 'createdAt'
   };
 
@@ -5321,6 +5375,8 @@ export namespace Prisma {
     designation: 'designation',
     department: 'department',
     costCenter: 'costCenter',
+    subCenter: 'subCenter',
+    subItem: 'subItem',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
   };
@@ -5461,6 +5517,8 @@ export namespace Prisma {
     isSuperuser?: BoolFilter<"SystemUser"> | boolean
     canIngestChrono?: BoolFilter<"SystemUser"> | boolean
     canModifyRoster?: BoolFilter<"SystemUser"> | boolean
+    department?: StringNullableFilter<"SystemUser"> | string | null
+    costCenter?: StringNullableFilter<"SystemUser"> | string | null
     createdAt?: DateTimeFilter<"SystemUser"> | Date | string
   }
 
@@ -5472,6 +5530,8 @@ export namespace Prisma {
     isSuperuser?: SortOrder
     canIngestChrono?: SortOrder
     canModifyRoster?: SortOrder
+    department?: SortOrderInput | SortOrder
+    costCenter?: SortOrderInput | SortOrder
     createdAt?: SortOrder
   }
 
@@ -5486,6 +5546,8 @@ export namespace Prisma {
     isSuperuser?: BoolFilter<"SystemUser"> | boolean
     canIngestChrono?: BoolFilter<"SystemUser"> | boolean
     canModifyRoster?: BoolFilter<"SystemUser"> | boolean
+    department?: StringNullableFilter<"SystemUser"> | string | null
+    costCenter?: StringNullableFilter<"SystemUser"> | string | null
     createdAt?: DateTimeFilter<"SystemUser"> | Date | string
   }, "id" | "email">
 
@@ -5497,6 +5559,8 @@ export namespace Prisma {
     isSuperuser?: SortOrder
     canIngestChrono?: SortOrder
     canModifyRoster?: SortOrder
+    department?: SortOrderInput | SortOrder
+    costCenter?: SortOrderInput | SortOrder
     createdAt?: SortOrder
     _count?: SystemUserCountOrderByAggregateInput
     _max?: SystemUserMaxOrderByAggregateInput
@@ -5514,6 +5578,8 @@ export namespace Prisma {
     isSuperuser?: BoolWithAggregatesFilter<"SystemUser"> | boolean
     canIngestChrono?: BoolWithAggregatesFilter<"SystemUser"> | boolean
     canModifyRoster?: BoolWithAggregatesFilter<"SystemUser"> | boolean
+    department?: StringNullableWithAggregatesFilter<"SystemUser"> | string | null
+    costCenter?: StringNullableWithAggregatesFilter<"SystemUser"> | string | null
     createdAt?: DateTimeWithAggregatesFilter<"SystemUser"> | Date | string
   }
 
@@ -5526,6 +5592,8 @@ export namespace Prisma {
     designation?: StringFilter<"Employee"> | string
     department?: StringFilter<"Employee"> | string
     costCenter?: StringFilter<"Employee"> | string
+    subCenter?: StringFilter<"Employee"> | string
+    subItem?: StringFilter<"Employee"> | string
     createdAt?: DateTimeFilter<"Employee"> | Date | string
     updatedAt?: DateTimeFilter<"Employee"> | Date | string
   }
@@ -5536,6 +5604,8 @@ export namespace Prisma {
     designation?: SortOrder
     department?: SortOrder
     costCenter?: SortOrder
+    subCenter?: SortOrder
+    subItem?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -5549,6 +5619,8 @@ export namespace Prisma {
     designation?: StringFilter<"Employee"> | string
     department?: StringFilter<"Employee"> | string
     costCenter?: StringFilter<"Employee"> | string
+    subCenter?: StringFilter<"Employee"> | string
+    subItem?: StringFilter<"Employee"> | string
     createdAt?: DateTimeFilter<"Employee"> | Date | string
     updatedAt?: DateTimeFilter<"Employee"> | Date | string
   }, "staffCode">
@@ -5559,6 +5631,8 @@ export namespace Prisma {
     designation?: SortOrder
     department?: SortOrder
     costCenter?: SortOrder
+    subCenter?: SortOrder
+    subItem?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
     _count?: EmployeeCountOrderByAggregateInput
@@ -5575,6 +5649,8 @@ export namespace Prisma {
     designation?: StringWithAggregatesFilter<"Employee"> | string
     department?: StringWithAggregatesFilter<"Employee"> | string
     costCenter?: StringWithAggregatesFilter<"Employee"> | string
+    subCenter?: StringWithAggregatesFilter<"Employee"> | string
+    subItem?: StringWithAggregatesFilter<"Employee"> | string
     createdAt?: DateTimeWithAggregatesFilter<"Employee"> | Date | string
     updatedAt?: DateTimeWithAggregatesFilter<"Employee"> | Date | string
   }
@@ -5717,6 +5793,8 @@ export namespace Prisma {
     isSuperuser?: boolean
     canIngestChrono?: boolean
     canModifyRoster?: boolean
+    department?: string | null
+    costCenter?: string | null
     createdAt?: Date | string
   }
 
@@ -5728,6 +5806,8 @@ export namespace Prisma {
     isSuperuser?: boolean
     canIngestChrono?: boolean
     canModifyRoster?: boolean
+    department?: string | null
+    costCenter?: string | null
     createdAt?: Date | string
   }
 
@@ -5739,6 +5819,8 @@ export namespace Prisma {
     isSuperuser?: BoolFieldUpdateOperationsInput | boolean
     canIngestChrono?: BoolFieldUpdateOperationsInput | boolean
     canModifyRoster?: BoolFieldUpdateOperationsInput | boolean
+    department?: NullableStringFieldUpdateOperationsInput | string | null
+    costCenter?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
@@ -5750,6 +5832,8 @@ export namespace Prisma {
     isSuperuser?: BoolFieldUpdateOperationsInput | boolean
     canIngestChrono?: BoolFieldUpdateOperationsInput | boolean
     canModifyRoster?: BoolFieldUpdateOperationsInput | boolean
+    department?: NullableStringFieldUpdateOperationsInput | string | null
+    costCenter?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
@@ -5761,6 +5845,8 @@ export namespace Prisma {
     isSuperuser?: boolean
     canIngestChrono?: boolean
     canModifyRoster?: boolean
+    department?: string | null
+    costCenter?: string | null
     createdAt?: Date | string
   }
 
@@ -5772,6 +5858,8 @@ export namespace Prisma {
     isSuperuser?: BoolFieldUpdateOperationsInput | boolean
     canIngestChrono?: BoolFieldUpdateOperationsInput | boolean
     canModifyRoster?: BoolFieldUpdateOperationsInput | boolean
+    department?: NullableStringFieldUpdateOperationsInput | string | null
+    costCenter?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
@@ -5783,6 +5871,8 @@ export namespace Prisma {
     isSuperuser?: BoolFieldUpdateOperationsInput | boolean
     canIngestChrono?: BoolFieldUpdateOperationsInput | boolean
     canModifyRoster?: BoolFieldUpdateOperationsInput | boolean
+    department?: NullableStringFieldUpdateOperationsInput | string | null
+    costCenter?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
@@ -5792,6 +5882,8 @@ export namespace Prisma {
     designation?: string
     department?: string
     costCenter?: string
+    subCenter?: string
+    subItem?: string
     createdAt?: Date | string
     updatedAt?: Date | string
   }
@@ -5802,6 +5894,8 @@ export namespace Prisma {
     designation?: string
     department?: string
     costCenter?: string
+    subCenter?: string
+    subItem?: string
     createdAt?: Date | string
     updatedAt?: Date | string
   }
@@ -5812,6 +5906,8 @@ export namespace Prisma {
     designation?: StringFieldUpdateOperationsInput | string
     department?: StringFieldUpdateOperationsInput | string
     costCenter?: StringFieldUpdateOperationsInput | string
+    subCenter?: StringFieldUpdateOperationsInput | string
+    subItem?: StringFieldUpdateOperationsInput | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -5822,6 +5918,8 @@ export namespace Prisma {
     designation?: StringFieldUpdateOperationsInput | string
     department?: StringFieldUpdateOperationsInput | string
     costCenter?: StringFieldUpdateOperationsInput | string
+    subCenter?: StringFieldUpdateOperationsInput | string
+    subItem?: StringFieldUpdateOperationsInput | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -5832,6 +5930,8 @@ export namespace Prisma {
     designation?: string
     department?: string
     costCenter?: string
+    subCenter?: string
+    subItem?: string
     createdAt?: Date | string
     updatedAt?: Date | string
   }
@@ -5842,6 +5942,8 @@ export namespace Prisma {
     designation?: StringFieldUpdateOperationsInput | string
     department?: StringFieldUpdateOperationsInput | string
     costCenter?: StringFieldUpdateOperationsInput | string
+    subCenter?: StringFieldUpdateOperationsInput | string
+    subItem?: StringFieldUpdateOperationsInput | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -5852,6 +5954,8 @@ export namespace Prisma {
     designation?: StringFieldUpdateOperationsInput | string
     department?: StringFieldUpdateOperationsInput | string
     costCenter?: StringFieldUpdateOperationsInput | string
+    subCenter?: StringFieldUpdateOperationsInput | string
+    subItem?: StringFieldUpdateOperationsInput | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -6042,6 +6146,21 @@ export namespace Prisma {
     not?: NestedBoolFilter<$PrismaModel> | boolean
   }
 
+  export type StringNullableFilter<$PrismaModel = never> = {
+    equals?: string | StringFieldRefInput<$PrismaModel> | null
+    in?: string[] | ListStringFieldRefInput<$PrismaModel> | null
+    notIn?: string[] | ListStringFieldRefInput<$PrismaModel> | null
+    lt?: string | StringFieldRefInput<$PrismaModel>
+    lte?: string | StringFieldRefInput<$PrismaModel>
+    gt?: string | StringFieldRefInput<$PrismaModel>
+    gte?: string | StringFieldRefInput<$PrismaModel>
+    contains?: string | StringFieldRefInput<$PrismaModel>
+    startsWith?: string | StringFieldRefInput<$PrismaModel>
+    endsWith?: string | StringFieldRefInput<$PrismaModel>
+    mode?: QueryMode
+    not?: NestedStringNullableFilter<$PrismaModel> | string | null
+  }
+
   export type DateTimeFilter<$PrismaModel = never> = {
     equals?: Date | string | DateTimeFieldRefInput<$PrismaModel>
     in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
@@ -6053,6 +6172,11 @@ export namespace Prisma {
     not?: NestedDateTimeFilter<$PrismaModel> | Date | string
   }
 
+  export type SortOrderInput = {
+    sort: SortOrder
+    nulls?: NullsOrder
+  }
+
   export type SystemUserCountOrderByAggregateInput = {
     id?: SortOrder
     email?: SortOrder
@@ -6061,6 +6185,8 @@ export namespace Prisma {
     isSuperuser?: SortOrder
     canIngestChrono?: SortOrder
     canModifyRoster?: SortOrder
+    department?: SortOrder
+    costCenter?: SortOrder
     createdAt?: SortOrder
   }
 
@@ -6072,6 +6198,8 @@ export namespace Prisma {
     isSuperuser?: SortOrder
     canIngestChrono?: SortOrder
     canModifyRoster?: SortOrder
+    department?: SortOrder
+    costCenter?: SortOrder
     createdAt?: SortOrder
   }
 
@@ -6083,6 +6211,8 @@ export namespace Prisma {
     isSuperuser?: SortOrder
     canIngestChrono?: SortOrder
     canModifyRoster?: SortOrder
+    department?: SortOrder
+    costCenter?: SortOrder
     createdAt?: SortOrder
   }
 
@@ -6137,6 +6267,24 @@ export namespace Prisma {
     _max?: NestedBoolFilter<$PrismaModel>
   }
 
+  export type StringNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: string | StringFieldRefInput<$PrismaModel> | null
+    in?: string[] | ListStringFieldRefInput<$PrismaModel> | null
+    notIn?: string[] | ListStringFieldRefInput<$PrismaModel> | null
+    lt?: string | StringFieldRefInput<$PrismaModel>
+    lte?: string | StringFieldRefInput<$PrismaModel>
+    gt?: string | StringFieldRefInput<$PrismaModel>
+    gte?: string | StringFieldRefInput<$PrismaModel>
+    contains?: string | StringFieldRefInput<$PrismaModel>
+    startsWith?: string | StringFieldRefInput<$PrismaModel>
+    endsWith?: string | StringFieldRefInput<$PrismaModel>
+    mode?: QueryMode
+    not?: NestedStringNullableWithAggregatesFilter<$PrismaModel> | string | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedStringNullableFilter<$PrismaModel>
+    _max?: NestedStringNullableFilter<$PrismaModel>
+  }
+
   export type DateTimeWithAggregatesFilter<$PrismaModel = never> = {
     equals?: Date | string | DateTimeFieldRefInput<$PrismaModel>
     in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
@@ -6157,6 +6305,8 @@ export namespace Prisma {
     designation?: SortOrder
     department?: SortOrder
     costCenter?: SortOrder
+    subCenter?: SortOrder
+    subItem?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -6167,6 +6317,8 @@ export namespace Prisma {
     designation?: SortOrder
     department?: SortOrder
     costCenter?: SortOrder
+    subCenter?: SortOrder
+    subItem?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -6177,6 +6329,8 @@ export namespace Prisma {
     designation?: SortOrder
     department?: SortOrder
     costCenter?: SortOrder
+    subCenter?: SortOrder
+    subItem?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -6184,26 +6338,6 @@ export namespace Prisma {
   export type BoolNullableFilter<$PrismaModel = never> = {
     equals?: boolean | BooleanFieldRefInput<$PrismaModel> | null
     not?: NestedBoolNullableFilter<$PrismaModel> | boolean | null
-  }
-
-  export type StringNullableFilter<$PrismaModel = never> = {
-    equals?: string | StringFieldRefInput<$PrismaModel> | null
-    in?: string[] | ListStringFieldRefInput<$PrismaModel> | null
-    notIn?: string[] | ListStringFieldRefInput<$PrismaModel> | null
-    lt?: string | StringFieldRefInput<$PrismaModel>
-    lte?: string | StringFieldRefInput<$PrismaModel>
-    gt?: string | StringFieldRefInput<$PrismaModel>
-    gte?: string | StringFieldRefInput<$PrismaModel>
-    contains?: string | StringFieldRefInput<$PrismaModel>
-    startsWith?: string | StringFieldRefInput<$PrismaModel>
-    endsWith?: string | StringFieldRefInput<$PrismaModel>
-    mode?: QueryMode
-    not?: NestedStringNullableFilter<$PrismaModel> | string | null
-  }
-
-  export type SortOrderInput = {
-    sort: SortOrder
-    nulls?: NullsOrder
   }
 
   export type AttendanceRecordStaffCodeDateTimeSwipeTypeCompoundUniqueInput = {
@@ -6263,24 +6397,6 @@ export namespace Prisma {
     _max?: NestedBoolNullableFilter<$PrismaModel>
   }
 
-  export type StringNullableWithAggregatesFilter<$PrismaModel = never> = {
-    equals?: string | StringFieldRefInput<$PrismaModel> | null
-    in?: string[] | ListStringFieldRefInput<$PrismaModel> | null
-    notIn?: string[] | ListStringFieldRefInput<$PrismaModel> | null
-    lt?: string | StringFieldRefInput<$PrismaModel>
-    lte?: string | StringFieldRefInput<$PrismaModel>
-    gt?: string | StringFieldRefInput<$PrismaModel>
-    gte?: string | StringFieldRefInput<$PrismaModel>
-    contains?: string | StringFieldRefInput<$PrismaModel>
-    startsWith?: string | StringFieldRefInput<$PrismaModel>
-    endsWith?: string | StringFieldRefInput<$PrismaModel>
-    mode?: QueryMode
-    not?: NestedStringNullableWithAggregatesFilter<$PrismaModel> | string | null
-    _count?: NestedIntNullableFilter<$PrismaModel>
-    _min?: NestedStringNullableFilter<$PrismaModel>
-    _max?: NestedStringNullableFilter<$PrismaModel>
-  }
-
   export type UserCountOrderByAggregateInput = {
     id?: SortOrder
     email?: SortOrder
@@ -6314,16 +6430,16 @@ export namespace Prisma {
     set?: boolean
   }
 
+  export type NullableStringFieldUpdateOperationsInput = {
+    set?: string | null
+  }
+
   export type DateTimeFieldUpdateOperationsInput = {
     set?: Date | string
   }
 
   export type NullableBoolFieldUpdateOperationsInput = {
     set?: boolean | null
-  }
-
-  export type NullableStringFieldUpdateOperationsInput = {
-    set?: string | null
   }
 
   export type NestedUuidFilter<$PrismaModel = never> = {
@@ -6361,6 +6477,20 @@ export namespace Prisma {
   export type NestedBoolFilter<$PrismaModel = never> = {
     equals?: boolean | BooleanFieldRefInput<$PrismaModel>
     not?: NestedBoolFilter<$PrismaModel> | boolean
+  }
+
+  export type NestedStringNullableFilter<$PrismaModel = never> = {
+    equals?: string | StringFieldRefInput<$PrismaModel> | null
+    in?: string[] | ListStringFieldRefInput<$PrismaModel> | null
+    notIn?: string[] | ListStringFieldRefInput<$PrismaModel> | null
+    lt?: string | StringFieldRefInput<$PrismaModel>
+    lte?: string | StringFieldRefInput<$PrismaModel>
+    gt?: string | StringFieldRefInput<$PrismaModel>
+    gte?: string | StringFieldRefInput<$PrismaModel>
+    contains?: string | StringFieldRefInput<$PrismaModel>
+    startsWith?: string | StringFieldRefInput<$PrismaModel>
+    endsWith?: string | StringFieldRefInput<$PrismaModel>
+    not?: NestedStringNullableFilter<$PrismaModel> | string | null
   }
 
   export type NestedDateTimeFilter<$PrismaModel = never> = {
@@ -6434,6 +6564,34 @@ export namespace Prisma {
     _max?: NestedBoolFilter<$PrismaModel>
   }
 
+  export type NestedStringNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: string | StringFieldRefInput<$PrismaModel> | null
+    in?: string[] | ListStringFieldRefInput<$PrismaModel> | null
+    notIn?: string[] | ListStringFieldRefInput<$PrismaModel> | null
+    lt?: string | StringFieldRefInput<$PrismaModel>
+    lte?: string | StringFieldRefInput<$PrismaModel>
+    gt?: string | StringFieldRefInput<$PrismaModel>
+    gte?: string | StringFieldRefInput<$PrismaModel>
+    contains?: string | StringFieldRefInput<$PrismaModel>
+    startsWith?: string | StringFieldRefInput<$PrismaModel>
+    endsWith?: string | StringFieldRefInput<$PrismaModel>
+    not?: NestedStringNullableWithAggregatesFilter<$PrismaModel> | string | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedStringNullableFilter<$PrismaModel>
+    _max?: NestedStringNullableFilter<$PrismaModel>
+  }
+
+  export type NestedIntNullableFilter<$PrismaModel = never> = {
+    equals?: number | IntFieldRefInput<$PrismaModel> | null
+    in?: number[] | ListIntFieldRefInput<$PrismaModel> | null
+    notIn?: number[] | ListIntFieldRefInput<$PrismaModel> | null
+    lt?: number | IntFieldRefInput<$PrismaModel>
+    lte?: number | IntFieldRefInput<$PrismaModel>
+    gt?: number | IntFieldRefInput<$PrismaModel>
+    gte?: number | IntFieldRefInput<$PrismaModel>
+    not?: NestedIntNullableFilter<$PrismaModel> | number | null
+  }
+
   export type NestedDateTimeWithAggregatesFilter<$PrismaModel = never> = {
     equals?: Date | string | DateTimeFieldRefInput<$PrismaModel>
     in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
@@ -6453,54 +6611,12 @@ export namespace Prisma {
     not?: NestedBoolNullableFilter<$PrismaModel> | boolean | null
   }
 
-  export type NestedStringNullableFilter<$PrismaModel = never> = {
-    equals?: string | StringFieldRefInput<$PrismaModel> | null
-    in?: string[] | ListStringFieldRefInput<$PrismaModel> | null
-    notIn?: string[] | ListStringFieldRefInput<$PrismaModel> | null
-    lt?: string | StringFieldRefInput<$PrismaModel>
-    lte?: string | StringFieldRefInput<$PrismaModel>
-    gt?: string | StringFieldRefInput<$PrismaModel>
-    gte?: string | StringFieldRefInput<$PrismaModel>
-    contains?: string | StringFieldRefInput<$PrismaModel>
-    startsWith?: string | StringFieldRefInput<$PrismaModel>
-    endsWith?: string | StringFieldRefInput<$PrismaModel>
-    not?: NestedStringNullableFilter<$PrismaModel> | string | null
-  }
-
   export type NestedBoolNullableWithAggregatesFilter<$PrismaModel = never> = {
     equals?: boolean | BooleanFieldRefInput<$PrismaModel> | null
     not?: NestedBoolNullableWithAggregatesFilter<$PrismaModel> | boolean | null
     _count?: NestedIntNullableFilter<$PrismaModel>
     _min?: NestedBoolNullableFilter<$PrismaModel>
     _max?: NestedBoolNullableFilter<$PrismaModel>
-  }
-
-  export type NestedIntNullableFilter<$PrismaModel = never> = {
-    equals?: number | IntFieldRefInput<$PrismaModel> | null
-    in?: number[] | ListIntFieldRefInput<$PrismaModel> | null
-    notIn?: number[] | ListIntFieldRefInput<$PrismaModel> | null
-    lt?: number | IntFieldRefInput<$PrismaModel>
-    lte?: number | IntFieldRefInput<$PrismaModel>
-    gt?: number | IntFieldRefInput<$PrismaModel>
-    gte?: number | IntFieldRefInput<$PrismaModel>
-    not?: NestedIntNullableFilter<$PrismaModel> | number | null
-  }
-
-  export type NestedStringNullableWithAggregatesFilter<$PrismaModel = never> = {
-    equals?: string | StringFieldRefInput<$PrismaModel> | null
-    in?: string[] | ListStringFieldRefInput<$PrismaModel> | null
-    notIn?: string[] | ListStringFieldRefInput<$PrismaModel> | null
-    lt?: string | StringFieldRefInput<$PrismaModel>
-    lte?: string | StringFieldRefInput<$PrismaModel>
-    gt?: string | StringFieldRefInput<$PrismaModel>
-    gte?: string | StringFieldRefInput<$PrismaModel>
-    contains?: string | StringFieldRefInput<$PrismaModel>
-    startsWith?: string | StringFieldRefInput<$PrismaModel>
-    endsWith?: string | StringFieldRefInput<$PrismaModel>
-    not?: NestedStringNullableWithAggregatesFilter<$PrismaModel> | string | null
-    _count?: NestedIntNullableFilter<$PrismaModel>
-    _min?: NestedStringNullableFilter<$PrismaModel>
-    _max?: NestedStringNullableFilter<$PrismaModel>
   }
 
 

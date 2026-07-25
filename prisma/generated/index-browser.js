@@ -128,6 +128,8 @@ exports.Prisma.SystemUserScalarFieldEnum = {
   isSuperuser: 'isSuperuser',
   canIngestChrono: 'canIngestChrono',
   canModifyRoster: 'canModifyRoster',
+  department: 'department',
+  costCenter: 'costCenter',
   createdAt: 'createdAt'
 };
 
@@ -137,6 +139,8 @@ exports.Prisma.EmployeeScalarFieldEnum = {
   designation: 'designation',
   department: 'department',
   costCenter: 'costCenter',
+  subCenter: 'subCenter',
+  subItem: 'subItem',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 };

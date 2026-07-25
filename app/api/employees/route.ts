@@ -1,21 +1,42 @@
 // app/api/employees/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server"; // Using your project's server utility pattern
+import { getOperatorScope } from "@/lib/get-operator-scope";
 
 export const dynamic = "force-dynamic";
 
 /**
  * FETCH CURRENT EMPLOYEE ROSTER
+ * Scoped server-side to the logged-in operator's department / cost center.
+ * Superusers see everyone. Operators with no department/cost center
+ * assigned see nothing until an admin assigns one.
  */
 export async function GET() {
   try {
+    const scope = await getOperatorScope();
+    if (!scope) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+
     const supabase = await createClient();
 
-    // Query your employee table from Supabase including the sub_center and sub_item columns
-    const { data: employees, error } = await supabase
+    let query = supabase
       .from("employees")
       .select("staff_code, full_name, designation, department, cost_center, sub_center, sub_item")
       .order("staff_code", { ascending: true });
+
+    if (!scope.isSuperuser) {
+      if (!scope.department) {
+        // Unassigned operator: sees no employees until an admin assigns a department
+        return NextResponse.json([], { status: 200 });
+      }
+      query = query.eq("department", scope.department);
+      if (scope.costCenter) {
+        query = query.eq("cost_center", scope.costCenter);
+      }
+    }
+
+    const { data: employees, error } = await query;
 
     if (error) {
       console.error("Supabase query error:", error);
@@ -48,6 +69,11 @@ export async function GET() {
  */
 export async function POST(request: Request) {
   try {
+    const scope = await getOperatorScope();
+    if (!scope) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+
     const supabase = await createClient();
     const body = await request.json();
     
@@ -66,6 +92,22 @@ export async function POST(request: Request) {
         { error: "Missing required employee schema fields including sub_center or sub_item." },
         { status: 400 }
       );
+    }
+
+    // Non-superusers may only register employees inside their own assigned scope
+    if (!scope.isSuperuser) {
+      if (!scope.department || department.trim() !== scope.department) {
+        return NextResponse.json(
+          { error: "You are not authorized to register employees outside your assigned department." },
+          { status: 403 }
+        );
+      }
+      if (scope.costCenter && cost_center.trim() !== scope.costCenter) {
+        return NextResponse.json(
+          { error: "You are not authorized to register employees outside your assigned cost center." },
+          { status: 403 }
+        );
+      }
     }
 
     // 2. Perform Database Operation matching your columns

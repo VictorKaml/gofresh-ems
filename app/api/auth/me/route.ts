@@ -1,44 +1,27 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-
-interface GofreshSessionCookie {
-  id: string;
-  email: string;
-  role: string;
-  isSuperuser: boolean;
-  rights: {
-    chrono: boolean;
-    roster: boolean;
-  };
-}
+import { getOperatorScope } from "@/lib/get-operator-scope";
 
 export async function GET() {
   try {
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get("gofresh_session");
+    const scope = await getOperatorScope();
 
-    if (!sessionCookie?.value) {
+    if (!scope) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-
-    let session: GofreshSessionCookie;
-    try {
-      session = JSON.parse(sessionCookie.value);
-    } catch {
-      return NextResponse.json({ error: "Invalid session" }, { status: 401 });
-    }
-
-    if (!session?.email) {
-      return NextResponse.json({ error: "Invalid session" }, { status: 401 });
     }
 
     return NextResponse.json({
       user: {
-        id: session.id,
-        email: session.email,
-        role: session.role,
-        superuser: session.isSuperuser,
-        rights: session.rights,
+        id: scope.id,
+        email: scope.email,
+        role: scope.roleTier,
+        superuser: scope.isSuperuser,
+        rights: {
+          chrono: scope.canIngestChrono,
+          roster: scope.canModifyRoster,
+        },
+        // 🔹 Live department / cost center scope, resolved fresh from the DB
+        department: scope.department,
+        costCenter: scope.costCenter,
       },
     });
   } catch (err) {
