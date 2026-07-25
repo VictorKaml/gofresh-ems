@@ -1178,6 +1178,7 @@ export namespace Prisma {
     department: string | null
     costCenter: string | null
     createdAt: Date | null
+    updatedAt: Date | null
   }
 
   export type SystemUserMaxAggregateOutputType = {
@@ -1191,6 +1192,7 @@ export namespace Prisma {
     department: string | null
     costCenter: string | null
     createdAt: Date | null
+    updatedAt: Date | null
   }
 
   export type SystemUserCountAggregateOutputType = {
@@ -1204,6 +1206,7 @@ export namespace Prisma {
     department: number
     costCenter: number
     createdAt: number
+    updatedAt: number
     _all: number
   }
 
@@ -1219,6 +1222,7 @@ export namespace Prisma {
     department?: true
     costCenter?: true
     createdAt?: true
+    updatedAt?: true
   }
 
   export type SystemUserMaxAggregateInputType = {
@@ -1232,6 +1236,7 @@ export namespace Prisma {
     department?: true
     costCenter?: true
     createdAt?: true
+    updatedAt?: true
   }
 
   export type SystemUserCountAggregateInputType = {
@@ -1245,6 +1250,7 @@ export namespace Prisma {
     department?: true
     costCenter?: true
     createdAt?: true
+    updatedAt?: true
     _all?: true
   }
 
@@ -1331,6 +1337,7 @@ export namespace Prisma {
     department: string | null
     costCenter: string | null
     createdAt: Date
+    updatedAt: Date
     _count: SystemUserCountAggregateOutputType | null
     _min: SystemUserMinAggregateOutputType | null
     _max: SystemUserMaxAggregateOutputType | null
@@ -1361,6 +1368,7 @@ export namespace Prisma {
     department?: boolean
     costCenter?: boolean
     createdAt?: boolean
+    updatedAt?: boolean
   }, ExtArgs["result"]["systemUser"]>
 
   export type SystemUserSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -1374,6 +1382,7 @@ export namespace Prisma {
     department?: boolean
     costCenter?: boolean
     createdAt?: boolean
+    updatedAt?: boolean
   }, ExtArgs["result"]["systemUser"]>
 
   export type SystemUserSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -1387,6 +1396,7 @@ export namespace Prisma {
     department?: boolean
     costCenter?: boolean
     createdAt?: boolean
+    updatedAt?: boolean
   }, ExtArgs["result"]["systemUser"]>
 
   export type SystemUserSelectScalar = {
@@ -1400,9 +1410,10 @@ export namespace Prisma {
     department?: boolean
     costCenter?: boolean
     createdAt?: boolean
+    updatedAt?: boolean
   }
 
-  export type SystemUserOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "email" | "passwordHash" | "roleTier" | "isSuperuser" | "canIngestChrono" | "canModifyRoster" | "department" | "costCenter" | "createdAt", ExtArgs["result"]["systemUser"]>
+  export type SystemUserOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "email" | "passwordHash" | "roleTier" | "isSuperuser" | "canIngestChrono" | "canModifyRoster" | "department" | "costCenter" | "createdAt" | "updatedAt", ExtArgs["result"]["systemUser"]>
 
   export type $SystemUserPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "SystemUser"
@@ -1418,6 +1429,7 @@ export namespace Prisma {
       department: string | null
       costCenter: string | null
       createdAt: Date
+      updatedAt: Date
     }, ExtArgs["result"]["systemUser"]>
     composites: {}
   }
@@ -1851,6 +1863,7 @@ export namespace Prisma {
     readonly department: FieldRef<"SystemUser", 'String'>
     readonly costCenter: FieldRef<"SystemUser", 'String'>
     readonly createdAt: FieldRef<"SystemUser", 'DateTime'>
+    readonly updatedAt: FieldRef<"SystemUser", 'DateTime'>
   }
     
 
@@ -5363,7 +5376,8 @@ export namespace Prisma {
     canModifyRoster: 'canModifyRoster',
     department: 'department',
     costCenter: 'costCenter',
-    createdAt: 'createdAt'
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
   };
 
   export type SystemUserScalarFieldEnum = (typeof SystemUserScalarFieldEnum)[keyof typeof SystemUserScalarFieldEnum]
@@ -5520,6 +5534,7 @@ export namespace Prisma {
     department?: StringNullableFilter<"SystemUser"> | string | null
     costCenter?: StringNullableFilter<"SystemUser"> | string | null
     createdAt?: DateTimeFilter<"SystemUser"> | Date | string
+    updatedAt?: DateTimeFilter<"SystemUser"> | Date | string
   }
 
   export type SystemUserOrderByWithRelationInput = {
@@ -5533,6 +5548,7 @@ export namespace Prisma {
     department?: SortOrderInput | SortOrder
     costCenter?: SortOrderInput | SortOrder
     createdAt?: SortOrder
+    updatedAt?: SortOrder
   }
 
   export type SystemUserWhereUniqueInput = Prisma.AtLeast<{
@@ -5549,6 +5565,7 @@ export namespace Prisma {
     department?: StringNullableFilter<"SystemUser"> | string | null
     costCenter?: StringNullableFilter<"SystemUser"> | string | null
     createdAt?: DateTimeFilter<"SystemUser"> | Date | string
+    updatedAt?: DateTimeFilter<"SystemUser"> | Date | string
   }, "id" | "email">
 
   export type SystemUserOrderByWithAggregationInput = {
@@ -5562,6 +5579,7 @@ export namespace Prisma {
     department?: SortOrderInput | SortOrder
     costCenter?: SortOrderInput | SortOrder
     createdAt?: SortOrder
+    updatedAt?: SortOrder
     _count?: SystemUserCountOrderByAggregateInput
     _max?: SystemUserMaxOrderByAggregateInput
     _min?: SystemUserMinOrderByAggregateInput
@@ -5581,6 +5599,7 @@ export namespace Prisma {
     department?: StringNullableWithAggregatesFilter<"SystemUser"> | string | null
     costCenter?: StringNullableWithAggregatesFilter<"SystemUser"> | string | null
     createdAt?: DateTimeWithAggregatesFilter<"SystemUser"> | Date | string
+    updatedAt?: DateTimeWithAggregatesFilter<"SystemUser"> | Date | string
   }
 
   export type EmployeeWhereInput = {
@@ -5796,6 +5815,7 @@ export namespace Prisma {
     department?: string | null
     costCenter?: string | null
     createdAt?: Date | string
+    updatedAt?: Date | string
   }
 
   export type SystemUserUncheckedCreateInput = {
@@ -5809,6 +5829,7 @@ export namespace Prisma {
     department?: string | null
     costCenter?: string | null
     createdAt?: Date | string
+    updatedAt?: Date | string
   }
 
   export type SystemUserUpdateInput = {
@@ -5822,6 +5843,7 @@ export namespace Prisma {
     department?: NullableStringFieldUpdateOperationsInput | string | null
     costCenter?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
   export type SystemUserUncheckedUpdateInput = {
@@ -5835,6 +5857,7 @@ export namespace Prisma {
     department?: NullableStringFieldUpdateOperationsInput | string | null
     costCenter?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
   export type SystemUserCreateManyInput = {
@@ -5848,6 +5871,7 @@ export namespace Prisma {
     department?: string | null
     costCenter?: string | null
     createdAt?: Date | string
+    updatedAt?: Date | string
   }
 
   export type SystemUserUpdateManyMutationInput = {
@@ -5861,6 +5885,7 @@ export namespace Prisma {
     department?: NullableStringFieldUpdateOperationsInput | string | null
     costCenter?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
   export type SystemUserUncheckedUpdateManyInput = {
@@ -5874,6 +5899,7 @@ export namespace Prisma {
     department?: NullableStringFieldUpdateOperationsInput | string | null
     costCenter?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
   export type EmployeeCreateInput = {
@@ -6188,6 +6214,7 @@ export namespace Prisma {
     department?: SortOrder
     costCenter?: SortOrder
     createdAt?: SortOrder
+    updatedAt?: SortOrder
   }
 
   export type SystemUserMaxOrderByAggregateInput = {
@@ -6201,6 +6228,7 @@ export namespace Prisma {
     department?: SortOrder
     costCenter?: SortOrder
     createdAt?: SortOrder
+    updatedAt?: SortOrder
   }
 
   export type SystemUserMinOrderByAggregateInput = {
@@ -6214,6 +6242,7 @@ export namespace Prisma {
     department?: SortOrder
     costCenter?: SortOrder
     createdAt?: SortOrder
+    updatedAt?: SortOrder
   }
 
   export type UuidWithAggregatesFilter<$PrismaModel = never> = {

@@ -130,7 +130,8 @@ exports.Prisma.SystemUserScalarFieldEnum = {
   canModifyRoster: 'canModifyRoster',
   department: 'department',
   costCenter: 'costCenter',
-  createdAt: 'createdAt'
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
 };
 
 exports.Prisma.EmployeeScalarFieldEnum = {

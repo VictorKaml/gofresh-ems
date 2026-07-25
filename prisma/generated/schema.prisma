@@ -21,6 +21,7 @@ model SystemUser {
   costCenter String? @map("cost_center") // 👈 THIS IS THE CRITICAL FIX
 
   createdAt DateTime @default(dbgenerated("timezone('utc'::text, now())")) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(dbgenerated("timezone('utc'::text, now())")) @map("updated_at") @db.Timestamptz(6)
 
   @@map("system_users")
 }
