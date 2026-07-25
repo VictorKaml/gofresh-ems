@@ -17,7 +17,9 @@ import {
   AlertTriangle,
   Calendar,
   Fingerprint,
-  RotateCcw
+  RotateCcw,
+  Search,
+  X
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -79,6 +81,9 @@ export default function Overview() {
   
   const [selectedSubCenter, setSelectedSubCenter] = useState<string>("All");
   const [selectedSubItem, setSelectedSubItem] = useState<string>("All");
+
+  // New Search State
+  const [searchQuery, setSearchQuery] = useState<string>("");
 
   const [employeeDirectory, setEmployeeDirectory] = useState<EmployeeProfile[]>([]);
   const [rawSwipesBuffer, setRawSwipesBuffer] = useState<RawSwipe[]>([]);
@@ -230,6 +235,7 @@ export default function Overview() {
 
   const fullyCalculatedDataset = useMemo(() => {
     const todayStr = new Date().toISOString().split("T")[0];
+    const cleanSearch = searchQuery.trim().toLowerCase();
 
     return employeeDirectory
       .filter((emp) => {
@@ -244,7 +250,12 @@ export default function Overview() {
           selectedSubItem === "All" ||
           String(emp.subItem).toLowerCase().trim() === String(selectedSubItem).toLowerCase().trim();
 
-        return deptMatch && ccMatch && subCenterMatch && subItemMatch;
+        // Individual Search Matching (Name or Staff Code)
+        const matchesSearch = cleanSearch === "" || 
+          emp.fullName.toLowerCase().includes(cleanSearch) || 
+          emp.staffCode.toLowerCase().includes(cleanSearch);
+
+        return deptMatch && ccMatch && subCenterMatch && subItemMatch && matchesSearch;
       })
       .map((emp) => {
         let regularTotal = 0;
@@ -290,7 +301,6 @@ export default function Overview() {
 
           rangeOnsite = true;
 
-          // Adjusted single punch behavior: force 0 hours instead of applying day cap framework
           if (daySwipes.length === 1) {
             rangeLate = true; 
             rangeSinglePunch = true; 
@@ -357,7 +367,6 @@ export default function Overview() {
           const [outH, outM] = lastOutTime.split(":").map(Number);
 
           if (isNaN(inH) || isNaN(outH)) {
-            // Treat unexpected structural formatting errors as zero-hour outputs
             return {
               dateStr: day.dateStr,
               clockIn: firstInTime,
@@ -409,7 +418,7 @@ export default function Overview() {
           grandTotalLabel: `${regularTotal.toFixed(1)} / ${overtimeTotal.toFixed(1)}`
         };
       });
-  }, [employeeDirectory, rawSwipesBuffer, targetWeekDays, reportDept, reportCC, selectedSubCenter, selectedSubItem]);
+  }, [employeeDirectory, rawSwipesBuffer, targetWeekDays, reportDept, reportCC, selectedSubCenter, selectedSubItem, searchQuery]);
 
   const liveMetricsRollup = useMemo(() => {
     let onsite = 0;
@@ -548,7 +557,6 @@ export default function Overview() {
 
             if (daySwipes.length === 0) return { label: "0.0 / 0.0" };
             
-            // Single punch yields zero hours layout inside the master download
             if (daySwipes.length === 1) {
               return { label: "0.0 / 0.0" };
             }
@@ -783,6 +791,31 @@ export default function Overview() {
           </div>
 
           <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-wrap gap-4 items-end">
+            {/* Individual Employee Search Input */}
+            <div className="flex flex-col gap-1 min-w-[220px]">
+              <label className="text-[10px] font-black uppercase text-slate-400 pl-0.5">
+                Search Individual:
+              </label>
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-slate-400" />
+                <Input
+                  type="text"
+                  placeholder="Name or Staff Code..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="h-9 pl-8 pr-8 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 shadow-xs focus-visible:ring-1 focus-visible:ring-blue-500 uppercase"
+                />
+                {searchQuery && (
+                  <button 
+                    onClick={() => setSearchQuery("")} 
+                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+
             <div className="flex flex-col gap-1">
               <label className="text-[10px] font-black uppercase text-slate-400 pl-0.5">
                 Department Filter:
@@ -972,7 +1005,7 @@ export default function Overview() {
                     ) : (
                       <tr>
                         <td colSpan={ targetWeekDays.length + 4 } className="text-center p-8 text-slate-400 font-semibold italic uppercase">
-                          No tracking entries match the requested metric filter combinations.
+                          No tracking entries match the requested search or metric filter combinations.
                         </td>
                       </tr>
                     )}
