@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Chart as ChartJS, registerables } from "chart.js";
 import { supabase } from "@/lib/supabase/client";
-import { fetchRetailDataset } from "@/lib/dashboard/fetchData";
+import { fetchRetailDataset } from "@/lib/dashboard/fetchData_copy";
 import { computeD } from "@/lib/dashboard/computeD";
 import type { RawDataset, DashboardData } from "@/lib/dashboard/types";
 
