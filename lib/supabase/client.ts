@@ -7,7 +7,10 @@ import { createClient } from "@supabase/supabase-js";
  * Required env vars:
  *   NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
  *   NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+ * 
+ * 
  */
+
 export const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
