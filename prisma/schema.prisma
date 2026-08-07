@@ -27,15 +27,22 @@ model SystemUser {
 }
 
 model Employee {
-  staffCode   String   @id @map("staff_code")
-  fullName    String   @map("full_name")
-  designation String   @default("Operator")
-  department  String   @default("Operations")
-  costCenter  String   @default("CC-LOCAL") @map("cost_center")
-  subCenter   String   @default("") @map("sub_center")
-  subItem     String   @default("") @map("sub_item")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  staffCode   String    @id @map("staff_code")
+  fullName    String    @map("full_name")
+  designation String    @default("Operator")
+  department  String    @default("Operations")
+  costCenter  String    @default("CC-LOCAL") @map("cost_center")
+  subCenter   String    @default("") @map("sub_center")
+  subItem     String    @default("") @map("sub_item")
+
+  // 🔹 Shift roster: which sheet this employee normally clocks against.
+  // Drives (a) the late-arrival cutoff used in attendance calc, and
+  // (b) whether an orphaned clock-out swipe should be looked up on the
+  // *previous* calendar date when pairing punches into a session.
+  shiftType   ShiftType @default(day) @map("shift_type")
+
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
   @@index([fullName])
   @@index([department, costCenter, subCenter, subItem], map: "employees_hierarchy_idx")
@@ -75,4 +82,11 @@ enum AppRoleTier {
   admin
 
   @@map("app_role_tier")
+}
+
+enum ShiftType {
+  day
+  night
+
+  @@map("shift_type")
 }

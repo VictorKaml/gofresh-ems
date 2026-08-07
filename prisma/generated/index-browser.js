@@ -142,6 +142,7 @@ exports.Prisma.EmployeeScalarFieldEnum = {
   costCenter: 'costCenter',
   subCenter: 'subCenter',
   subItem: 'subItem',
+  shiftType: 'shiftType',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 };
@@ -185,6 +186,11 @@ exports.AppRoleTier = exports.$Enums.AppRoleTier = {
   operator: 'operator',
   manager: 'manager',
   admin: 'admin'
+};
+
+exports.ShiftType = exports.$Enums.ShiftType = {
+  day: 'day',
+  night: 'night'
 };
 
 exports.Prisma.ModelName = {

@@ -22,7 +22,7 @@ export async function GET() {
 
     let query = supabase
       .from("employees")
-      .select("staff_code, full_name, designation, department, cost_center, sub_center, sub_item")
+      .select("staff_code, full_name, designation, department, cost_center, sub_center, sub_item, shift_type")
       .order("staff_code", { ascending: true });
 
     if (!scope.isSuperuser) {
@@ -52,6 +52,7 @@ export async function GET() {
       costCenter: emp.cost_center || "",
       subCenter: emp.sub_center || "", 
       subItem: emp.sub_item || "Wholebirds", // Added subItem mapping fallback
+      shiftType: emp.shift_type || "day",
     }));
 
     return NextResponse.json(formattedEmployees, { status: 200 });
@@ -85,6 +86,8 @@ export async function POST(request: Request) {
     const cost_center = body.cost_center || body.costCenter;
     const sub_center = body.sub_center || body.subCenter;
     const sub_item = body.sub_item || body.subItem;
+    const shiftTypeRaw = (body.shift_type || body.shiftType || "day").toString().toLowerCase();
+    const shift_type = shiftTypeRaw === "night" ? "night" : "day";
 
     // 1. Precise Server-Side Input Validation (Now ensuring both sub_center and sub_item fields exist)
     if (!staff_code || !full_name || !designation || !department || !cost_center || !sub_center || !sub_item) {
@@ -122,6 +125,7 @@ export async function POST(request: Request) {
           cost_center: cost_center.trim(),
           sub_center: sub_center.trim(), 
           sub_item: sub_item.trim(), // Insert sub_item into DB
+          shift_type,
           updated_at: new Date().toISOString(), // Required column constraint
         },
       ])
@@ -149,6 +153,7 @@ export async function POST(request: Request) {
       costCenter: data.cost_center,
       subCenter: data.sub_center, 
       subItem: data.sub_item, // Return subItem back to client state
+      shiftType: data.shift_type,
     };
 
     return NextResponse.json(

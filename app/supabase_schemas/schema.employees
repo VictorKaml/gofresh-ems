@@ -4,6 +4,7 @@ create table public.employees (
   designation text not null default 'Operator'::text,
   department text not null default 'Operations'::text,
   cost_center text not null default 'CC-LOCAL'::text,
+  shift_type public.shift_type not null default 'day'::shift_type,
   created_at timestamp without time zone not null default CURRENT_TIMESTAMP,
   updated_at timestamp without time zone not null,
   constraint employees_pkey primary key (staff_code)

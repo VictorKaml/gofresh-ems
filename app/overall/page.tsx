@@ -29,6 +29,14 @@ import {
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import { sessionsForDate, DEFAULT_LATE_CUTOFF, type ShiftType } from "@/lib/attendance/pairSessions";
+
+// Adds/subtracts whole days from a "YYYY-MM-DD" string.
+function addDays(dateStr: string, delta: number): string {
+  const d = new Date(`${dateStr}T00:00:00`);
+  d.setDate(d.getDate() + delta);
+  return d.toISOString().split("T")[0];
+}
 
 interface EmployeeProfile {
   staffCode: string;
@@ -36,6 +44,7 @@ interface EmployeeProfile {
   designation: string;
   department: string;
   costCenter: string;
+  shiftType?: ShiftType; // "day" | "night" — which roster sheet they clock against
 }
 
 interface RawSwipe {
@@ -213,12 +222,13 @@ export default function AttendanceReportPage() {
       code: emp.staffCode,
       name: emp.fullName,
       department: emp.department || "General Operations",
+      shiftType: (emp.shiftType || "day") as ShiftType,
     }));
 
     distinctSwipedIds.forEach(id => {
       if (!baseEmployees.some(e => e.code === id)) {
         const fallbackName = rawSwipesBuffer.find(s => s.id === id)?.name || "Unknown Staff";
-        baseEmployees.push({ code: id, name: fallbackName, department: "Unassigned Sector" });
+        baseEmployees.push({ code: id, name: fallbackName, department: "Unassigned Sector", shiftType: "day" });
       }
     });
 
@@ -254,10 +264,25 @@ export default function AttendanceReportPage() {
         if (hasPH) { dailyMap[dateObj.iso] = { display: "PH", hours: 0, ot: 0 }; ph++; ph_hours += maxStandardThreshold; return; }
         if (hasAL) { dailyMap[dateObj.iso] = { display: "AL", hours: 0, ot: 0 }; al++; return; }
 
-        const checkIns = matches.filter(m => m.type.toLowerCase().includes("in")).sort((a, b) => a.time.localeCompare(b.time));
-        const checkOuts = matches.filter(m => m.type.toLowerCase().includes("out")).sort((a, b) => b.time.localeCompare(a.time));
+        // 🌙 CROSS-MIDNIGHT FIX: a night-shift clock-out lands on the next
+        // calendar date, so pair IN/OUT from a widened window (prev/next
+        // day included) rather than off `matches`, which is date-locked.
+        const windowSwipes = rawSwipesBuffer.filter(
+          (s) =>
+            s.id === emp.code &&
+            (s.date === addDays(dateObj.iso, -1) ||
+              s.date === dateObj.iso ||
+              s.date === addDays(dateObj.iso, 1)),
+        );
+        const [session] = sessionsForDate(
+          emp.code,
+          windowSwipes,
+          dateObj.iso,
+          emp.shiftType,
+          DEFAULT_LATE_CUTOFF[emp.shiftType],
+        );
 
-        if (checkIns.length > 0 && checkOuts.length === 0) {
+        if (session?.clockIn && !session.clockOut) {
           totalHours += maxStandardThreshold;
           std_hr += maxStandardThreshold;
           dailyMap[dateObj.iso] = { 
@@ -268,14 +293,19 @@ export default function AttendanceReportPage() {
           return;
         }
 
-        if (checkIns.length === 0 || checkOuts.length === 0) {
+        if (!session || !session.clockIn || !session.clockOut) {
           dailyMap[dateObj.iso] = { display: "0", hours: 0, ot: 0 };
           ab_hr += maxStandardThreshold; 
           return;
         }
 
-        const firstInDecimal = timeStringToDecimal(checkIns[0].time);
-        const lastOutDecimal = timeStringToDecimal(checkOuts[0].time);
+        const firstInDecimal = timeStringToDecimal(session.clockIn);
+        // session.clockOut is local time-of-day on its own date, which may
+        // be the next calendar day (crossesMidnight) — add 24h so the
+        // existing decimal-hour arithmetic below still works correctly.
+        const lastOutDecimal =
+          timeStringToDecimal(session.clockOut) +
+          (session.crossesMidnight ? 24 : 0);
         const standardCheckOutTime = isWeekend ? timeStringToDecimal("13:00") : timeStringToDecimal("17:00");
 
         let dailyStd = (standardCheckOutTime - firstInDecimal) - 1.0;

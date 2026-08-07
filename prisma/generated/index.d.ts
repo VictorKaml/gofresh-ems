@@ -46,11 +46,23 @@ export namespace $Enums {
 
 export type AppRoleTier = (typeof AppRoleTier)[keyof typeof AppRoleTier]
 
+
+export const ShiftType: {
+  day: 'day',
+  night: 'night'
+};
+
+export type ShiftType = (typeof ShiftType)[keyof typeof ShiftType]
+
 }
 
 export type AppRoleTier = $Enums.AppRoleTier
 
 export const AppRoleTier: typeof $Enums.AppRoleTier
+
+export type ShiftType = $Enums.ShiftType
+
+export const ShiftType: typeof $Enums.ShiftType
 
 /**
  * ##  Prisma Client ʲˢ
@@ -2253,6 +2265,7 @@ export namespace Prisma {
     costCenter: string | null
     subCenter: string | null
     subItem: string | null
+    shiftType: $Enums.ShiftType | null
     createdAt: Date | null
     updatedAt: Date | null
   }
@@ -2265,6 +2278,7 @@ export namespace Prisma {
     costCenter: string | null
     subCenter: string | null
     subItem: string | null
+    shiftType: $Enums.ShiftType | null
     createdAt: Date | null
     updatedAt: Date | null
   }
@@ -2277,6 +2291,7 @@ export namespace Prisma {
     costCenter: number
     subCenter: number
     subItem: number
+    shiftType: number
     createdAt: number
     updatedAt: number
     _all: number
@@ -2291,6 +2306,7 @@ export namespace Prisma {
     costCenter?: true
     subCenter?: true
     subItem?: true
+    shiftType?: true
     createdAt?: true
     updatedAt?: true
   }
@@ -2303,6 +2319,7 @@ export namespace Prisma {
     costCenter?: true
     subCenter?: true
     subItem?: true
+    shiftType?: true
     createdAt?: true
     updatedAt?: true
   }
@@ -2315,6 +2332,7 @@ export namespace Prisma {
     costCenter?: true
     subCenter?: true
     subItem?: true
+    shiftType?: true
     createdAt?: true
     updatedAt?: true
     _all?: true
@@ -2400,6 +2418,7 @@ export namespace Prisma {
     costCenter: string
     subCenter: string
     subItem: string
+    shiftType: $Enums.ShiftType
     createdAt: Date
     updatedAt: Date
     _count: EmployeeCountAggregateOutputType | null
@@ -2429,6 +2448,7 @@ export namespace Prisma {
     costCenter?: boolean
     subCenter?: boolean
     subItem?: boolean
+    shiftType?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }, ExtArgs["result"]["employee"]>
@@ -2441,6 +2461,7 @@ export namespace Prisma {
     costCenter?: boolean
     subCenter?: boolean
     subItem?: boolean
+    shiftType?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }, ExtArgs["result"]["employee"]>
@@ -2453,6 +2474,7 @@ export namespace Prisma {
     costCenter?: boolean
     subCenter?: boolean
     subItem?: boolean
+    shiftType?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }, ExtArgs["result"]["employee"]>
@@ -2465,11 +2487,12 @@ export namespace Prisma {
     costCenter?: boolean
     subCenter?: boolean
     subItem?: boolean
+    shiftType?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }
 
-  export type EmployeeOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"staffCode" | "fullName" | "designation" | "department" | "costCenter" | "subCenter" | "subItem" | "createdAt" | "updatedAt", ExtArgs["result"]["employee"]>
+  export type EmployeeOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"staffCode" | "fullName" | "designation" | "department" | "costCenter" | "subCenter" | "subItem" | "shiftType" | "createdAt" | "updatedAt", ExtArgs["result"]["employee"]>
 
   export type $EmployeePayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "Employee"
@@ -2482,6 +2505,7 @@ export namespace Prisma {
       costCenter: string
       subCenter: string
       subItem: string
+      shiftType: $Enums.ShiftType
       createdAt: Date
       updatedAt: Date
     }, ExtArgs["result"]["employee"]>
@@ -2914,6 +2938,7 @@ export namespace Prisma {
     readonly costCenter: FieldRef<"Employee", 'String'>
     readonly subCenter: FieldRef<"Employee", 'String'>
     readonly subItem: FieldRef<"Employee", 'String'>
+    readonly shiftType: FieldRef<"Employee", 'ShiftType'>
     readonly createdAt: FieldRef<"Employee", 'DateTime'>
     readonly updatedAt: FieldRef<"Employee", 'DateTime'>
   }
@@ -5391,6 +5416,7 @@ export namespace Prisma {
     costCenter: 'costCenter',
     subCenter: 'subCenter',
     subItem: 'subItem',
+    shiftType: 'shiftType',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
   };
@@ -5504,6 +5530,20 @@ export namespace Prisma {
 
 
   /**
+   * Reference to a field of type 'ShiftType'
+   */
+  export type EnumShiftTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'ShiftType'>
+    
+
+
+  /**
+   * Reference to a field of type 'ShiftType[]'
+   */
+  export type ListEnumShiftTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'ShiftType[]'>
+    
+
+
+  /**
    * Reference to a field of type 'Int'
    */
   export type IntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Int'>
@@ -5613,6 +5653,7 @@ export namespace Prisma {
     costCenter?: StringFilter<"Employee"> | string
     subCenter?: StringFilter<"Employee"> | string
     subItem?: StringFilter<"Employee"> | string
+    shiftType?: EnumShiftTypeFilter<"Employee"> | $Enums.ShiftType
     createdAt?: DateTimeFilter<"Employee"> | Date | string
     updatedAt?: DateTimeFilter<"Employee"> | Date | string
   }
@@ -5625,6 +5666,7 @@ export namespace Prisma {
     costCenter?: SortOrder
     subCenter?: SortOrder
     subItem?: SortOrder
+    shiftType?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -5640,6 +5682,7 @@ export namespace Prisma {
     costCenter?: StringFilter<"Employee"> | string
     subCenter?: StringFilter<"Employee"> | string
     subItem?: StringFilter<"Employee"> | string
+    shiftType?: EnumShiftTypeFilter<"Employee"> | $Enums.ShiftType
     createdAt?: DateTimeFilter<"Employee"> | Date | string
     updatedAt?: DateTimeFilter<"Employee"> | Date | string
   }, "staffCode">
@@ -5652,6 +5695,7 @@ export namespace Prisma {
     costCenter?: SortOrder
     subCenter?: SortOrder
     subItem?: SortOrder
+    shiftType?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
     _count?: EmployeeCountOrderByAggregateInput
@@ -5670,6 +5714,7 @@ export namespace Prisma {
     costCenter?: StringWithAggregatesFilter<"Employee"> | string
     subCenter?: StringWithAggregatesFilter<"Employee"> | string
     subItem?: StringWithAggregatesFilter<"Employee"> | string
+    shiftType?: EnumShiftTypeWithAggregatesFilter<"Employee"> | $Enums.ShiftType
     createdAt?: DateTimeWithAggregatesFilter<"Employee"> | Date | string
     updatedAt?: DateTimeWithAggregatesFilter<"Employee"> | Date | string
   }
@@ -5910,6 +5955,7 @@ export namespace Prisma {
     costCenter?: string
     subCenter?: string
     subItem?: string
+    shiftType?: $Enums.ShiftType
     createdAt?: Date | string
     updatedAt?: Date | string
   }
@@ -5922,6 +5968,7 @@ export namespace Prisma {
     costCenter?: string
     subCenter?: string
     subItem?: string
+    shiftType?: $Enums.ShiftType
     createdAt?: Date | string
     updatedAt?: Date | string
   }
@@ -5934,6 +5981,7 @@ export namespace Prisma {
     costCenter?: StringFieldUpdateOperationsInput | string
     subCenter?: StringFieldUpdateOperationsInput | string
     subItem?: StringFieldUpdateOperationsInput | string
+    shiftType?: EnumShiftTypeFieldUpdateOperationsInput | $Enums.ShiftType
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -5946,6 +5994,7 @@ export namespace Prisma {
     costCenter?: StringFieldUpdateOperationsInput | string
     subCenter?: StringFieldUpdateOperationsInput | string
     subItem?: StringFieldUpdateOperationsInput | string
+    shiftType?: EnumShiftTypeFieldUpdateOperationsInput | $Enums.ShiftType
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -5958,6 +6007,7 @@ export namespace Prisma {
     costCenter?: string
     subCenter?: string
     subItem?: string
+    shiftType?: $Enums.ShiftType
     createdAt?: Date | string
     updatedAt?: Date | string
   }
@@ -5970,6 +6020,7 @@ export namespace Prisma {
     costCenter?: StringFieldUpdateOperationsInput | string
     subCenter?: StringFieldUpdateOperationsInput | string
     subItem?: StringFieldUpdateOperationsInput | string
+    shiftType?: EnumShiftTypeFieldUpdateOperationsInput | $Enums.ShiftType
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -5982,6 +6033,7 @@ export namespace Prisma {
     costCenter?: StringFieldUpdateOperationsInput | string
     subCenter?: StringFieldUpdateOperationsInput | string
     subItem?: StringFieldUpdateOperationsInput | string
+    shiftType?: EnumShiftTypeFieldUpdateOperationsInput | $Enums.ShiftType
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -6328,6 +6380,13 @@ export namespace Prisma {
     _max?: NestedDateTimeFilter<$PrismaModel>
   }
 
+  export type EnumShiftTypeFilter<$PrismaModel = never> = {
+    equals?: $Enums.ShiftType | EnumShiftTypeFieldRefInput<$PrismaModel>
+    in?: $Enums.ShiftType[] | ListEnumShiftTypeFieldRefInput<$PrismaModel>
+    notIn?: $Enums.ShiftType[] | ListEnumShiftTypeFieldRefInput<$PrismaModel>
+    not?: NestedEnumShiftTypeFilter<$PrismaModel> | $Enums.ShiftType
+  }
+
   export type EmployeeCountOrderByAggregateInput = {
     staffCode?: SortOrder
     fullName?: SortOrder
@@ -6336,6 +6395,7 @@ export namespace Prisma {
     costCenter?: SortOrder
     subCenter?: SortOrder
     subItem?: SortOrder
+    shiftType?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -6348,6 +6408,7 @@ export namespace Prisma {
     costCenter?: SortOrder
     subCenter?: SortOrder
     subItem?: SortOrder
+    shiftType?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -6360,8 +6421,19 @@ export namespace Prisma {
     costCenter?: SortOrder
     subCenter?: SortOrder
     subItem?: SortOrder
+    shiftType?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
+  }
+
+  export type EnumShiftTypeWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.ShiftType | EnumShiftTypeFieldRefInput<$PrismaModel>
+    in?: $Enums.ShiftType[] | ListEnumShiftTypeFieldRefInput<$PrismaModel>
+    notIn?: $Enums.ShiftType[] | ListEnumShiftTypeFieldRefInput<$PrismaModel>
+    not?: NestedEnumShiftTypeWithAggregatesFilter<$PrismaModel> | $Enums.ShiftType
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedEnumShiftTypeFilter<$PrismaModel>
+    _max?: NestedEnumShiftTypeFilter<$PrismaModel>
   }
 
   export type BoolNullableFilter<$PrismaModel = never> = {
@@ -6465,6 +6537,10 @@ export namespace Prisma {
 
   export type DateTimeFieldUpdateOperationsInput = {
     set?: Date | string
+  }
+
+  export type EnumShiftTypeFieldUpdateOperationsInput = {
+    set?: $Enums.ShiftType
   }
 
   export type NullableBoolFieldUpdateOperationsInput = {
@@ -6633,6 +6709,23 @@ export namespace Prisma {
     _count?: NestedIntFilter<$PrismaModel>
     _min?: NestedDateTimeFilter<$PrismaModel>
     _max?: NestedDateTimeFilter<$PrismaModel>
+  }
+
+  export type NestedEnumShiftTypeFilter<$PrismaModel = never> = {
+    equals?: $Enums.ShiftType | EnumShiftTypeFieldRefInput<$PrismaModel>
+    in?: $Enums.ShiftType[] | ListEnumShiftTypeFieldRefInput<$PrismaModel>
+    notIn?: $Enums.ShiftType[] | ListEnumShiftTypeFieldRefInput<$PrismaModel>
+    not?: NestedEnumShiftTypeFilter<$PrismaModel> | $Enums.ShiftType
+  }
+
+  export type NestedEnumShiftTypeWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.ShiftType | EnumShiftTypeFieldRefInput<$PrismaModel>
+    in?: $Enums.ShiftType[] | ListEnumShiftTypeFieldRefInput<$PrismaModel>
+    notIn?: $Enums.ShiftType[] | ListEnumShiftTypeFieldRefInput<$PrismaModel>
+    not?: NestedEnumShiftTypeWithAggregatesFilter<$PrismaModel> | $Enums.ShiftType
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedEnumShiftTypeFilter<$PrismaModel>
+    _max?: NestedEnumShiftTypeFilter<$PrismaModel>
   }
 
   export type NestedBoolNullableFilter<$PrismaModel = never> = {

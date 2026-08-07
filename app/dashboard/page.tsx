@@ -1,6 +1,15 @@
 "use client";
 import { useState, useRef, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { sessionsForDate, DEFAULT_LATE_CUTOFF, type ShiftType } from "@/lib/attendance/pairSessions";
+
+// Adds/subtracts whole days from a "YYYY-MM-DD" string without falling
+// into local-timezone-shift traps.
+function addDays(dateStr: string, delta: number): string {
+  const d = new Date(`${dateStr}T00:00:00`);
+  d.setDate(d.getDate() + delta);
+  return d.toISOString().split("T")[0];
+}
 import {
   Card,
   CardContent,
@@ -36,6 +45,7 @@ import {
   FileText,
   Loader2,
   LogOut,
+  Pencil,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
@@ -54,6 +64,7 @@ interface EmployeeProfile {
   costCenter: string;
   status: "Active" | "Inactive";
   workType: "In Office" | "Remote" | "Hybrid";
+  shiftType: ShiftType; // "day" | "night" — which roster sheet they clock against
 }
 
 interface RawSwipe {
@@ -182,6 +193,74 @@ export default function EMSDashboard() {
   const [newStaffWorkType, setNewStaffWorkType] = useState<
     "In Office" | "Remote" | "Hybrid"
   >("In Office");
+  const [newStaffShiftType, setNewStaffShiftType] = useState<ShiftType>("day");
+
+  // Edit Employee modal state — reuses the same field set as Add, plus
+  // the staffCode of the record being edited (null = modal closed).
+  const [editingStaffCode, setEditingStaffCode] = useState<string | null>(null);
+  const [editStaffName, setEditStaffName] = useState("");
+  const [editStaffDesignation, setEditStaffDesignation] = useState("");
+  const [editStaffDept, setEditStaffDept] = useState("Operations");
+  const [editStaffCostCenter, setEditStaffCostCenter] = useState("Main Barn");
+  const [editStaffShiftType, setEditStaffShiftType] = useState<ShiftType>("day");
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  const openEditModal = (emp: EmployeeProfile) => {
+    setEditingStaffCode(emp.staffCode);
+    setEditStaffName(emp.fullName);
+    setEditStaffDesignation(emp.designation);
+    setEditStaffDept(emp.department);
+    setEditStaffCostCenter(emp.costCenter);
+    setEditStaffShiftType(emp.shiftType || "day");
+  };
+
+  const handleUpdateStaffSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStaffCode || isSavingEdit) return;
+    setIsSavingEdit(true);
+
+    try {
+      const payload = {
+        full_name: editStaffName.trim().toUpperCase(),
+        designation: editStaffDesignation,
+        department: editStaffDept,
+        cost_center: editStaffCostCenter,
+        shift_type: editStaffShiftType,
+      };
+
+      const response = await fetch(
+        `/api/employees/${encodeURIComponent(editingStaffCode)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+      );
+
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to update employee record.");
+      }
+
+      const { employee } = result;
+      setEmployeeDirectory((prev) =>
+        prev.map((e) =>
+          e.staffCode === editingStaffCode ? { ...e, ...employee } : e,
+        ),
+      );
+
+      addLog(
+        `[SUCCESS] Updated employee ${employee.staffCode} (${employee.fullName}).`,
+      );
+      setEditingStaffCode(null);
+    } catch (error: any) {
+      console.error("Employee update failure:", error);
+      alert(`Update Error: ${error.message}`);
+      addLog(`[ERROR] Failed to update employee: ${error.message}`);
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
 
   // Daily Checklist Workspace States
   const [checklistDept, setChecklistDept] = useState<string>("");
@@ -376,6 +455,7 @@ export default function EMSDashboard() {
             costCenter: "Main Barn",
             status: "Active",
             workType: "In Office",
+            shiftType: "day",
           },
           {
             staffCode: "GF002",
@@ -386,6 +466,7 @@ export default function EMSDashboard() {
             costCenter: "Front Office",
             status: "Active",
             workType: "Hybrid",
+            shiftType: "day",
           },
           {
             staffCode: "GF003",
@@ -396,6 +477,7 @@ export default function EMSDashboard() {
             costCenter: "Workshop",
             status: "Active",
             workType: "In Office",
+            shiftType: "day",
           },
           {
             staffCode: "GF004",
@@ -406,6 +488,7 @@ export default function EMSDashboard() {
             costCenter: "HQ",
             status: "Active",
             workType: "Hybrid",
+            shiftType: "day",
           },
           {
             staffCode: "GF005",
@@ -416,6 +499,7 @@ export default function EMSDashboard() {
             costCenter: "Remote Hub",
             status: "Inactive",
             workType: "Remote",
+            shiftType: "day",
           },
         ]);
       } finally {
@@ -558,6 +642,7 @@ export default function EMSDashboard() {
         designation: newStaffDesignation,
         department: newStaffDept,
         cost_center: newStaffCostCenter,
+        shift_type: newStaffShiftType,
       };
 
       // 3. Post data to your Next.js API route handler
@@ -593,6 +678,7 @@ export default function EMSDashboard() {
       setNewStaffDesignation("");
       setNewStaffDept("");
       setNewStaffCostCenter("");
+      setNewStaffShiftType("day");
       setIsAddModalOpen(false);
 
       setSystemLogs((prev) => [
@@ -649,6 +735,7 @@ export default function EMSDashboard() {
           const designationIdx = headers.indexOf("Designation");
           const departmentIdx = headers.indexOf("Department Name");
           const costCenterIdx = headers.indexOf("Cost Centre");
+          const shiftIdx = headers.indexOf("Shift"); // optional column: "Day" / "Night"
 
           const cleanEmployees: any[] = [];
 
@@ -672,6 +759,12 @@ export default function EMSDashboard() {
                 costCenterIdx !== -1 && row[costCenterIdx]
                   ? String(row[costCenterIdx]).trim()
                   : "Main Barn",
+              shiftType:
+                shiftIdx !== -1 && row[shiftIdx]
+                  ? String(row[shiftIdx]).trim().toLowerCase() === "night"
+                    ? "night"
+                    : "day"
+                  : "day",
             });
           });
 
@@ -763,30 +856,19 @@ export default function EMSDashboard() {
         if (monthFilter !== "ALL" && !dateStr.startsWith(monthFilter)) return;
         const weekNum = "Wk " + dateStr;
 
-        const daySwipes = rawSwipesBuffer.filter(
+        // Swipes literally recorded on this calendar date — used only to
+        // detect a leave marker (SK/AL) and to grab a weekDay label.
+        // Deliberately NOT used for IN/OUT pairing (see below) since a
+        // night-shift clock-out lands on the *next* calendar date.
+        const daySwipesStrict = rawSwipesBuffer.filter(
           (s) => s.id === emp.staffCode && s.date === dateStr,
         );
-        if (daySwipes.length === 0) {
-          dailyAttendanceRecords.push({
-            date: dateStr,
-            weekDay: "Workday",
-            weekOfYear: weekNum,
-            clockIn: "—",
-            clockOut: "—",
-            hoursWorked: 0,
-            overtimeHours: 0,
-            totalShiftHours: 0,
-            status: "NO RECORD FOUND",
-          });
-          return;
-        }
-
-        const weekDay = daySwipes[0].weekDay || "Workday";
+        const weekDay = daySwipesStrict[0]?.weekDay || "Workday";
 
         // Leave marking (SK = Sick Leave, AL = Annual Leave) takes priority
         // over any punch calculation — these are logged as a single record
         // via the Manual Checklist "Mark Leave" flow, not an IN/OUT pair.
-        const leaveSwipe = daySwipes.find(
+        const leaveSwipe = daySwipesStrict.find(
           (s) => s.type === "SK" || s.type === "AL",
         );
         if (leaveSwipe) {
@@ -817,52 +899,59 @@ export default function EMSDashboard() {
           return;
         }
 
-        const checkIns = daySwipes
-          .filter((s) => s.type.toLowerCase().includes("in"))
-          .sort((a, b) => a.time.localeCompare(b.time));
-        const checkOuts = daySwipes
-          .filter((s) => s.type.toLowerCase().includes("out"))
-          .sort((a, b) => a.time.localeCompare(b.time));
+        // 🌙 CROSS-MIDNIGHT FIX: widen the window a day on each side so a
+        // night-shift clock-out that lands on the following calendar date
+        // still pairs with last night's clock-in, and an overnight shift
+        // that started YESTERDAY doesn't get misread as missing today.
+        const prevDateStr = addDays(dateStr, -1);
+        const nextDateStr = addDays(dateStr, 1);
+        const windowSwipes = rawSwipesBuffer.filter(
+          (s) =>
+            s.id === emp.staffCode &&
+            (s.date === prevDateStr ||
+              s.date === dateStr ||
+              s.date === nextDateStr),
+        );
 
-        let clockIn = checkIns.length > 0 ? checkIns[0].time : "—";
-        let clockOut =
-          checkOuts.length > 0 ? checkOuts[checkOuts.length - 1].time : "—";
+        const shiftType = emp.shiftType || "day";
+        const sessions = sessionsForDate(
+          emp.staffCode,
+          windowSwipes,
+          dateStr,
+          shiftType,
+          DEFAULT_LATE_CUTOFF[shiftType],
+        );
+
+        if (sessions.length === 0) {
+          dailyAttendanceRecords.push({
+            date: dateStr,
+            weekDay,
+            weekOfYear: weekNum,
+            clockIn: "—",
+            clockOut: "—",
+            hoursWorked: 0,
+            overtimeHours: 0,
+            totalShiftHours: 0,
+            status: "NO RECORD FOUND",
+          });
+          return;
+        }
+
+        // An employee could technically punch more than one session in a
+        // day (rare double-shift); take the first — a future enhancement
+        // could render each as its own row.
+        const session = sessions[0];
 
         let regularHours = 0;
         let overtimeHours = 0;
-        let totalShiftHours = 0;
-        let dayStatus: "ON TIME" | "LATE" | "MISSED A CLOCK PUNCH" = "ON TIME";
+        const totalShiftHours = session.totalShiftHours;
 
         const dateObj = new Date(dateStr);
         const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
         const currentDayCap = isWeekend ? 5.5 : 8.5;
 
-        // CRITICAL CHANGE: Only process calculations if BOTH clockIn and clockOut exist
-        if (clockIn === "—" || clockOut === "—") {
-          dayStatus = "MISSED A CLOCK PUNCH";
-          regularHours = 0;
-          overtimeHours = 0;
-          totalShiftHours = 0;
-
-          // Optional: If you still consider them late if their partial checkIn is late
-          if (clockIn !== "—" && clockIn > "07:30") {
-            dayStatus = "LATE";
-          }
-        } else {
-          const [inH, inM] = clockIn.split(":").map(Number);
-          const [outH, outM] = clockOut.split(":").map(Number);
-          const minutesDiff = outH * 60 + outM - (inH * 60 + inM);
-
-          totalShiftHours = parseFloat((minutesDiff / 60).toFixed(2));
-          if (totalShiftHours < 0) totalShiftHours = 0;
-
-          if (clockIn > "07:30") {
-            dayStatus = "LATE";
-          } else {
-            dayStatus = "ON TIME";
-          }
+        if (session.status !== "MISSED A CLOCK PUNCH") {
           presentDaysCount++;
-
           if (totalShiftHours > currentDayCap) {
             regularHours = currentDayCap;
             overtimeHours = parseFloat(
@@ -879,14 +968,16 @@ export default function EMSDashboard() {
 
         dailyAttendanceRecords.push({
           date: dateStr,
-          weekDay,
+          weekDay: session.weekDay || weekDay,
           weekOfYear: weekNum,
-          clockIn,
-          clockOut,
+          clockIn: session.clockIn ?? "—",
+          clockOut: session.crossesMidnight && session.clockOut
+            ? `${session.clockOut} (+1d)`
+            : session.clockOut ?? "—",
           hoursWorked: regularHours,
           overtimeHours,
           totalShiftHours,
-          status: dayStatus,
+          status: session.status,
         });
       });
 
@@ -1557,12 +1648,20 @@ export default function EMSDashboard() {
                               </div>
                             </TableCell>
                             <TableCell>
-                              <Badge
-                                variant="secondary"
-                                className="text-[9px] uppercase font-bold"
-                              >
-                                {emp.workType}
-                              </Badge>
+                              <div className="flex flex-col gap-1 items-start">
+                                <Badge
+                                  variant="secondary"
+                                  className="text-[9px] uppercase font-bold"
+                                >
+                                  {emp.workType}
+                                </Badge>
+                                <Badge
+                                  variant="secondary"
+                                  className={`text-[9px] uppercase font-bold ${emp.shiftType === "night" ? "bg-indigo-50 text-indigo-700 border border-indigo-200" : "bg-amber-50 text-amber-700 border border-amber-200"}`}
+                                >
+                                  {emp.shiftType === "night" ? "Night Sheet" : "Day Sheet"}
+                                </Badge>
+                              </div>
                             </TableCell>
                             <TableCell>
                               <Badge
@@ -1573,6 +1672,14 @@ export default function EMSDashboard() {
                               </Badge>
                             </TableCell>
                             <TableCell className="text-right space-x-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openEditModal(emp)}
+                                className="h-7 text-[10px] border-slate-200 text-slate-600 font-bold uppercase rounded-md inline-flex items-center gap-1"
+                              >
+                                <Pencil className="w-3 h-3" /> Edit
+                              </Button>
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -1802,6 +1909,24 @@ export default function EMSDashboard() {
                             </select>
                           </div>
                         </div>
+
+                        <div className="grid grid-cols-2 gap-4 mt-4">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-wide block">
+                              Shift Roster *
+                            </label>
+                            <select
+                              value={newStaffShiftType}
+                              onChange={(e) =>
+                                setNewStaffShiftType(e.target.value as ShiftType)
+                              }
+                              className="w-full bg-white border border-slate-200 text-xs font-bold rounded-lg p-2 h-9 uppercase text-slate-800 focus:ring-1 focus:ring-blue-500"
+                            >
+                              <option value="day">Day Sheet</option>
+                              <option value="night">Night Sheet</option>
+                            </select>
+                          </div>
+                        </div>
                       </CardContent>
 
                       <div className="bg-slate-50 px-5 py-3 border-t border-slate-100 flex justify-end gap-2">
@@ -1825,6 +1950,144 @@ export default function EMSDashboard() {
                             </>
                           ) : (
                             <span>Register Employee</span>
+                          )}
+                        </Button>
+                      </div>
+                    </form>
+                  </Card>
+                </div>
+              )}
+
+              {editingStaffCode && (
+                <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+                  <Card className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                    <CardHeader className="border-b border-slate-100 p-5 flex flex-row items-center justify-between">
+                      <div>
+                        <CardTitle className="text-sm font-black text-slate-900 uppercase tracking-wide">
+                          Edit Employee — {editingStaffCode}
+                        </CardTitle>
+                        <CardDescription className="text-[11px] font-medium text-slate-400 uppercase mt-0.5">
+                          Update role, assignment, or shift roster for this
+                          team member. Staff Code cannot be changed.
+                        </CardDescription>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        onClick={() => setEditingStaffCode(null)}
+                        className="h-8 w-8 p-0 text-slate-400 hover:text-slate-600 rounded-lg text-xs"
+                      >
+                        ✕
+                      </Button>
+                    </CardHeader>
+
+                    <form onSubmit={handleUpdateStaffSubmit}>
+                      <CardContent className="p-5 space-y-4">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-wide block">
+                            Full Corporate Name *
+                          </label>
+                          <Input
+                            required
+                            value={editStaffName}
+                            onChange={(e) => setEditStaffName(e.target.value)}
+                            placeholder="FIRSTNAME LASTNAME"
+                            className="h-9 text-xs font-bold uppercase"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-wide block">
+                            Corporate Designation *
+                          </label>
+                          <Input
+                            required
+                            value={editStaffDesignation}
+                            onChange={(e) =>
+                              setEditStaffDesignation(e.target.value)
+                            }
+                            placeholder="e.g. Field Enforcement Officer"
+                            className="h-9 text-xs font-bold uppercase"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-wide block">
+                              Assigned Department *
+                            </label>
+                            <select
+                              value={editStaffDept}
+                              onChange={(e) => setEditStaffDept(e.target.value)}
+                              className="w-full bg-white border border-slate-200 text-xs font-bold rounded-lg p-2 h-9 uppercase text-slate-800 focus:ring-1 focus:ring-blue-500"
+                            >
+                              <option value="Operations">Operations</option>
+                              <option value="Administration">
+                                Administration
+                              </option>
+                              <option value="Engineering">Engineering</option>
+                              <option value="Design">Design</option>
+                            </select>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-wide block">
+                              Cost Center Assignment *
+                            </label>
+                            <select
+                              value={editStaffCostCenter}
+                              onChange={(e) =>
+                                setEditStaffCostCenter(e.target.value)
+                              }
+                              className="w-full bg-white border border-slate-200 text-xs font-bold rounded-lg p-2 h-9 uppercase text-slate-800 focus:ring-1 focus:ring-blue-500"
+                            >
+                              <option value="Main Barn">Main Barn</option>
+                              <option value="Front Office">Front Office</option>
+                              <option value="Workshop">Workshop</option>
+                              <option value="HQ">HQ</option>
+                              <option value="Remote Hub">Remote Hub</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4 mt-4">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-wide block">
+                              Shift Roster *
+                            </label>
+                            <select
+                              value={editStaffShiftType}
+                              onChange={(e) =>
+                                setEditStaffShiftType(e.target.value as ShiftType)
+                              }
+                              className="w-full bg-white border border-slate-200 text-xs font-bold rounded-lg p-2 h-9 uppercase text-slate-800 focus:ring-1 focus:ring-blue-500"
+                            >
+                              <option value="day">Day Sheet</option>
+                              <option value="night">Night Sheet</option>
+                            </select>
+                          </div>
+                        </div>
+                      </CardContent>
+
+                      <div className="bg-slate-50 px-5 py-3 border-t border-slate-100 flex justify-end gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setEditingStaffCode(null)}
+                          className="h-9 text-xs font-bold uppercase px-4 rounded-lg"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="submit"
+                          disabled={isSavingEdit}
+                          className="h-9 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold uppercase px-4 rounded-lg inline-flex items-center gap-1"
+                        >
+                          {isSavingEdit ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>Saving...</span>
+                            </>
+                          ) : (
+                            <span>Save Changes</span>
                           )}
                         </Button>
                       </div>

@@ -27,6 +27,7 @@ export async function POST(request: Request) {
       // only "Processing" staff carry Fillets/Mixed Portion/Drumsticks/Cutlets/Wings.
       sub_center: String(emp.subCenter || emp.sub_center || "").trim(),
       sub_item: String(emp.subItem || emp.sub_item || "").trim(),
+      shift_type: String(emp.shiftType || emp.shift_type || "day").trim().toLowerCase() === "night" ? "night" : "day",
       updated_at: new Date().toISOString(),
     })).filter(emp => emp.staff_code && emp.full_name);
 
