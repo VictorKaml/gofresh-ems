@@ -109,6 +109,15 @@ const OVERRIDE_REASONS = [
   "Manual Attendance Form Approved",
   "Official Travel / Duty Out of Station",
   "Management Override / Special Approval",
+  "Sick Leave",
+  "Annual Leave",
+];
+
+// Leave codes used when marking an employee as away from work rather than
+// logging an actual IN/OUT punch pair.
+const LEAVE_TYPES: { code: "SK" | "AL"; label: string }[] = [
+  { code: "SK", label: "Sick Leave" },
+  { code: "AL", label: "Annual Leave" },
 ];
 
 const DailyChecklist: React.FC<Props> = ({
@@ -304,6 +313,25 @@ const DailyChecklist: React.FC<Props> = ({
   const [checkInTime, setCheckInTime] = useState<string>("07:30");
   const [checkOutTime, setCheckOutTime] = useState<string>("16:30");
   const [auditReason, setAuditReason] = useState<string>(OVERRIDE_REASONS[0]);
+
+  // Batch entry mode: log an actual IN/OUT punch pair, or mark the employee(s)
+  // as on leave (SK = Sick Leave, AL = Annual Leave) for the selected date(s).
+  const [attendanceMode, setAttendanceMode] = useState<"PUNCH" | "LEAVE">(
+    "PUNCH",
+  );
+  const [leaveType, setLeaveType] = useState<"SK" | "AL">("SK");
+
+  // Keep the audit/change reason in sync with the chosen leave type whenever
+  // Leave mode is active, so the change_reason saved to the DB always reads
+  // "Sick Leave" / "Annual Leave" without requiring a separate manual pick.
+  useEffect(() => {
+    if (attendanceMode === "LEAVE") {
+      const matchingReason = LEAVE_TYPES.find(
+        (lt) => lt.code === leaveType,
+      )?.label;
+      if (matchingReason) setAuditReason(matchingReason);
+    }
+  }, [attendanceMode, leaveType]);
 
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [notification, setNotification] = useState<{
@@ -580,7 +608,7 @@ const DailyChecklist: React.FC<Props> = ({
     if (
       selectedEmployeeList.length === 0 ||
       selectedDates.size === 0 ||
-      hasConflictingRecords
+      (attendanceMode === "PUNCH" && hasConflictingRecords)
     )
       return;
 
@@ -603,47 +631,77 @@ const DailyChecklist: React.FC<Props> = ({
     setIsSubmitting(true);
     setNotification(null);
 
-    const formattedInTime =
-      checkInTime.length === 5 ? `${checkInTime}:00` : checkInTime;
-    const formattedOutTime =
-      checkOutTime.length === 5 ? `${checkOutTime}:00` : checkOutTime;
-
     const batchRecords: any[] = [];
 
-    sortedSelectedDates.forEach((targetDate) => {
-      const dateObj = new Date(`${targetDate}T00:00:00`);
-      const weekDayName = dateObj.toLocaleDateString("en-US", {
-        weekday: "long",
-      });
+    if (attendanceMode === "LEAVE") {
+      // Leave marking: a single record per employee per selected date, using
+      // the leave code (SK/AL) as the swipe type instead of an IN/OUT pair.
+      const leaveLabel =
+        LEAVE_TYPES.find((lt) => lt.code === leaveType)?.label || leaveType;
 
-      selectedEmployeeList.forEach((emp) => {
-        const staffId = emp.staffCode || emp.id;
-
-        batchRecords.push({
-          id: staffId,
-          staffCode: staffId,
-          date: targetDate,
-          weekday: weekDayName,
-          time: formattedInTime,
-          type: "IN",
-          isManualOverride: true,
-          adjusted_by: activeOperatorEmail,
-          reason: `${auditReason.trim()} (Check-In)`,
+      sortedSelectedDates.forEach((targetDate) => {
+        const dateObj = new Date(`${targetDate}T00:00:00`);
+        const weekDayName = dateObj.toLocaleDateString("en-US", {
+          weekday: "long",
         });
 
-        batchRecords.push({
-          id: staffId,
-          staffCode: staffId,
-          date: targetDate,
-          weekday: weekDayName,
-          time: formattedOutTime,
-          type: "OUT",
-          isManualOverride: true,
-          adjusted_by: activeOperatorEmail,
-          reason: `${auditReason.trim()} (Check-Out)`,
+        selectedEmployeeList.forEach((emp) => {
+          const staffId = emp.staffCode || emp.id;
+
+          batchRecords.push({
+            id: staffId,
+            staffCode: staffId,
+            date: targetDate,
+            weekday: weekDayName,
+            time: "00:00:00",
+            type: leaveType,
+            isManualOverride: true,
+            adjusted_by: activeOperatorEmail,
+            reason: leaveLabel,
+          });
         });
       });
-    });
+    } else {
+      const formattedInTime =
+        checkInTime.length === 5 ? `${checkInTime}:00` : checkInTime;
+      const formattedOutTime =
+        checkOutTime.length === 5 ? `${checkOutTime}:00` : checkOutTime;
+
+      sortedSelectedDates.forEach((targetDate) => {
+        const dateObj = new Date(`${targetDate}T00:00:00`);
+        const weekDayName = dateObj.toLocaleDateString("en-US", {
+          weekday: "long",
+        });
+
+        selectedEmployeeList.forEach((emp) => {
+          const staffId = emp.staffCode || emp.id;
+
+          batchRecords.push({
+            id: staffId,
+            staffCode: staffId,
+            date: targetDate,
+            weekday: weekDayName,
+            time: formattedInTime,
+            type: "IN",
+            isManualOverride: true,
+            adjusted_by: activeOperatorEmail,
+            reason: `${auditReason.trim()} (Check-In)`,
+          });
+
+          batchRecords.push({
+            id: staffId,
+            staffCode: staffId,
+            date: targetDate,
+            weekday: weekDayName,
+            time: formattedOutTime,
+            type: "OUT",
+            isManualOverride: true,
+            adjusted_by: activeOperatorEmail,
+            reason: `${auditReason.trim()} (Check-Out)`,
+          });
+        });
+      });
+    }
 
     const payload = {
       operatorEmail: activeOperatorEmail,
@@ -667,7 +725,10 @@ const DailyChecklist: React.FC<Props> = ({
 
       setNotification({
         type: "success",
-        message: `Attendance logged successfully for ${selectedEmployeeList.length} employee(s) across ${selectedDates.size} date(s). Total entries: ${batchRecords.length / 2}`,
+        message:
+          attendanceMode === "LEAVE"
+            ? `${LEAVE_TYPES.find((lt) => lt.code === leaveType)?.label || leaveType} marked successfully for ${selectedEmployeeList.length} employee(s) across ${selectedDates.size} date(s).`
+            : `Attendance logged successfully for ${selectedEmployeeList.length} employee(s) across ${selectedDates.size} date(s). Total entries: ${batchRecords.length / 2}`,
       });
 
       setShowPreviewModal(false);
@@ -1501,65 +1562,142 @@ const DailyChecklist: React.FC<Props> = ({
               </div>
             </div>
 
-            {/* Time Configuration */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5 text-gray-400" /> Check-In Time
-                </label>
-                <input
-                  type="time"
-                  disabled={
-                    hasFutureDateSelected ||
-                    selectedEmployeeIds.size === 0 ||
-                    hasConflictingRecords
-                  }
-                  value={checkInTime}
-                  onChange={(e) => setCheckInTime(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100 disabled:cursor-not-allowed transition-all"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5 text-gray-400" /> Check-Out Time
-                </label>
-                <input
-                  type="time"
-                  disabled={
-                    hasFutureDateSelected ||
-                    selectedEmployeeIds.size === 0 ||
-                    hasConflictingRecords
-                  }
-                  value={checkOutTime}
-                  onChange={(e) => setCheckOutTime(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100 disabled:cursor-not-allowed transition-all"
-                />
-              </div>
-            </div>
-
-            {/* Audit Reason Selector */}
+            {/* Entry Mode Toggle: Punch (IN/OUT) vs Leave (SK/AL) */}
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
                 <FileEdit className="w-3.5 h-3.5 text-blue-600" />
-                Reason / Change Reason <span className="text-red-500">*</span>
+                Entry Type
               </label>
-              <select
-                disabled={
-                  hasFutureDateSelected ||
-                  selectedEmployeeIds.size === 0 ||
-                  hasConflictingRecords
-                }
-                value={auditReason}
-                onChange={(e) => setAuditReason(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white cursor-pointer disabled:bg-gray-100 disabled:cursor-not-allowed transition-all"
-              >
-                {OVERRIDE_REASONS.map((reasonOption) => (
-                  <option key={reasonOption} value={reasonOption}>
-                    {reasonOption}
-                  </option>
-                ))}
-              </select>
+              <div className="grid grid-cols-2 gap-2 p-1 bg-gray-100 rounded-md">
+                <button
+                  type="button"
+                  onClick={() => setAttendanceMode("PUNCH")}
+                  className={`flex items-center justify-center gap-1.5 py-2 rounded-md text-xs font-semibold transition-all ${
+                    attendanceMode === "PUNCH"
+                      ? "bg-white text-blue-700 shadow-sm border border-gray-200"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  <Clock className="w-3.5 h-3.5" /> Log Attendance (IN/OUT)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAttendanceMode("LEAVE")}
+                  className={`flex items-center justify-center gap-1.5 py-2 rounded-md text-xs font-semibold transition-all ${
+                    attendanceMode === "LEAVE"
+                      ? "bg-white text-blue-700 shadow-sm border border-gray-200"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  <CalendarDays className="w-3.5 h-3.5" /> Mark Leave (SK / AL)
+                </button>
+              </div>
             </div>
+
+            {attendanceMode === "PUNCH" ? (
+              <>
+                {/* Time Configuration */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5 text-gray-400" /> Check-In Time
+                    </label>
+                    <input
+                      type="time"
+                      disabled={
+                        hasFutureDateSelected ||
+                        selectedEmployeeIds.size === 0 ||
+                        hasConflictingRecords
+                      }
+                      value={checkInTime}
+                      onChange={(e) => setCheckInTime(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100 disabled:cursor-not-allowed transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5 text-gray-400" /> Check-Out Time
+                    </label>
+                    <input
+                      type="time"
+                      disabled={
+                        hasFutureDateSelected ||
+                        selectedEmployeeIds.size === 0 ||
+                        hasConflictingRecords
+                      }
+                      value={checkOutTime}
+                      onChange={(e) => setCheckOutTime(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100 disabled:cursor-not-allowed transition-all"
+                    />
+                  </div>
+                </div>
+
+                {/* Audit Reason Selector */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
+                    <FileEdit className="w-3.5 h-3.5 text-blue-600" />
+                    Reason / Change Reason{" "}
+                    <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    disabled={
+                      hasFutureDateSelected ||
+                      selectedEmployeeIds.size === 0 ||
+                      hasConflictingRecords
+                    }
+                    value={auditReason}
+                    onChange={(e) => setAuditReason(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white cursor-pointer disabled:bg-gray-100 disabled:cursor-not-allowed transition-all"
+                  >
+                    {OVERRIDE_REASONS.map((reasonOption) => (
+                      <option key={reasonOption} value={reasonOption}>
+                        {reasonOption}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Leave Type Selector */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
+                    <CalendarDays className="w-3.5 h-3.5 text-blue-600" />
+                    Leave Type <span className="text-red-500">*</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {LEAVE_TYPES.map((lt) => (
+                      <button
+                        key={lt.code}
+                        type="button"
+                        disabled={
+                          hasFutureDateSelected ||
+                          selectedEmployeeIds.size === 0
+                        }
+                        onClick={() => setLeaveType(lt.code)}
+                        className={`flex flex-col items-center justify-center gap-0.5 py-2 rounded-md text-xs font-semibold border transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                          leaveType === lt.code
+                            ? "bg-blue-50 border-blue-300 text-blue-700"
+                            : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
+                        }`}
+                      >
+                        <span className="text-sm font-bold">{lt.code}</span>
+                        <span>{lt.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-gray-500 pt-0.5">
+                    Marks each selected employee as{" "}
+                    <span className="font-semibold">
+                      {LEAVE_TYPES.find((lt) => lt.code === leaveType)?.label}
+                    </span>{" "}
+                    ({leaveType}) for every selected date — no check-in /
+                    check-out punch is required. Change Reason will be saved
+                    as &quot;{auditReason}&quot;.
+                  </p>
+                </div>
+              </>
+            )}
 
             {/* Modal Trigger */}
             <div className="pt-2">
@@ -1569,13 +1707,14 @@ const DailyChecklist: React.FC<Props> = ({
                   selectedEmployeeIds.size === 0 ||
                   selectedDates.size === 0 ||
                   hasFutureDateSelected ||
-                  hasConflictingRecords
+                  (attendanceMode === "PUNCH" && hasConflictingRecords)
                 }
                 className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-md shadow-sm transition-all active:scale-[0.98] hover:shadow-md flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-sm"
               >
                 <UserCheck className="w-5 h-5" />
-                Preview & Confirm Batch ({selectedEmployeeIds.size} Employees ×{" "}
-                {selectedDates.size} Days)
+                {attendanceMode === "LEAVE"
+                  ? `Preview & Confirm Leave (${selectedEmployeeIds.size} Employees × ${selectedDates.size} Days)`
+                  : `Preview & Confirm Batch (${selectedEmployeeIds.size} Employees × ${selectedDates.size} Days)`}
               </button>
             </div>
           </div>
@@ -1719,7 +1858,9 @@ const DailyChecklist: React.FC<Props> = ({
             <div className="flex justify-between items-center border-b pb-3">
               <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                 <UserCheck className="w-5 h-5 text-blue-600" />
-                Confirm Multi-Date Batch Preview
+                {attendanceMode === "LEAVE"
+                  ? "Confirm Multi-Date Leave Preview"
+                  : "Confirm Multi-Date Batch Preview"}
               </h3>
               <button
                 onClick={() => setShowPreviewModal(false)}
@@ -1734,21 +1875,32 @@ const DailyChecklist: React.FC<Props> = ({
                 <strong>Target Dates ({selectedDates.size}):</strong>{" "}
                 {sortedSelectedDates.join(", ")}
               </p>
+              {attendanceMode === "LEAVE" ? (
+                <p>
+                  <strong>Leave Type:</strong>{" "}
+                  {LEAVE_TYPES.find((lt) => lt.code === leaveType)?.label} (
+                  {leaveType})
+                </p>
+              ) : (
+                <>
+                  <p>
+                    <strong>Check-In Time:</strong> {checkInTime}
+                  </p>
+                  <p>
+                    <strong>Check-Out Time:</strong> {checkOutTime}
+                  </p>
+                </>
+              )}
               <p>
-                <strong>Check-In Time:</strong> {checkInTime}
-              </p>
-              <p>
-                <strong>Check-Out Time:</strong> {checkOutTime}
-              </p>
-              <p>
-                <strong>Override Reason:</strong> {auditReason}
+                <strong>Change Reason:</strong> {auditReason}
               </p>
               <p>
                 <strong>Adjusted By Operator:</strong> {activeOperatorEmail}
               </p>
               <p className="font-bold text-blue-700 pt-1">
-                Total Attendance Swipes to Create:{" "}
-                {selectedEmployeeList.length * selectedDates.size * 2} records
+                {attendanceMode === "LEAVE"
+                  ? `Total Leave Records to Create: ${selectedEmployeeList.length * selectedDates.size} records`
+                  : `Total Attendance Swipes to Create: ${selectedEmployeeList.length * selectedDates.size * 2} records`}
               </p>
             </div>
 
@@ -1788,11 +1940,18 @@ const DailyChecklist: React.FC<Props> = ({
               </button>
               <button
                 onClick={handleBatchConfirmAttendance}
-                disabled={isSubmitting || hasConflictingRecords}
+                disabled={
+                  isSubmitting ||
+                  (attendanceMode === "PUNCH" && hasConflictingRecords)
+                }
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-md shadow-sm flex items-center gap-2 disabled:opacity-50 transition-all active:scale-95 hover:shadow-md"
               >
                 {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                {isSubmitting ? "Posting Records..." : "Confirm & Submit Batch"}
+                {isSubmitting
+                  ? "Posting Records..."
+                  : attendanceMode === "LEAVE"
+                    ? "Confirm & Submit Leave"
+                    : "Confirm & Submit Batch"}
               </button>
             </div>
           </div>

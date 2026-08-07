@@ -73,7 +73,13 @@ interface DailyAttendanceGroup {
   hoursWorked: number;
   overtimeHours: number;
   totalShiftHours: number;
-  status: "ON TIME" | "LATE" | "MISSED A CLOCK PUNCH" | "NO RECORD FOUND";
+  status:
+    | "ON TIME"
+    | "LATE"
+    | "MISSED A CLOCK PUNCH"
+    | "NO RECORD FOUND"
+    | "SICK LEAVE"
+    | "ANNUAL LEAVE";
 }
 
 interface SessionUser {
@@ -749,6 +755,8 @@ export default function EMSDashboard() {
       let totalRegularHours = 0;
       let totalOvertimeHours = 0;
       let presentDaysCount = 0;
+      let sickLeaveDaysCount = 0;
+      let annualLeaveDaysCount = 0;
       const dailyAttendanceRecords: DailyAttendanceGroup[] = [];
 
       uniqueDates.forEach((dateStr) => {
@@ -774,6 +782,41 @@ export default function EMSDashboard() {
         }
 
         const weekDay = daySwipes[0].weekDay || "Workday";
+
+        // Leave marking (SK = Sick Leave, AL = Annual Leave) takes priority
+        // over any punch calculation — these are logged as a single record
+        // via the Manual Checklist "Mark Leave" flow, not an IN/OUT pair.
+        const leaveSwipe = daySwipes.find(
+          (s) => s.type === "SK" || s.type === "AL",
+        );
+        if (leaveSwipe) {
+          if (leaveSwipe.type === "SK") sickLeaveDaysCount++;
+          if (leaveSwipe.type === "AL") annualLeaveDaysCount++;
+
+          // Paid leave still counts toward the employee's regular hours for
+          // the day (standard shift cap), rather than 0 — they aren't
+          // penalized on hours/payroll totals for being on approved leave.
+          const leaveDateObj = new Date(dateStr);
+          const isLeaveWeekend =
+            leaveDateObj.getDay() === 0 || leaveDateObj.getDay() === 6;
+          const leaveDayHours = isLeaveWeekend ? 5.5 : 8.5;
+
+          totalRegularHours += leaveDayHours;
+
+          dailyAttendanceRecords.push({
+            date: dateStr,
+            weekDay,
+            weekOfYear: weekNum,
+            clockIn: "—",
+            clockOut: "—",
+            hoursWorked: leaveDayHours,
+            overtimeHours: 0,
+            totalShiftHours: leaveDayHours,
+            status: leaveSwipe.type === "SK" ? "SICK LEAVE" : "ANNUAL LEAVE",
+          });
+          return;
+        }
+
         const checkIns = daySwipes
           .filter((s) => s.type.toLowerCase().includes("in"))
           .sort((a, b) => a.time.localeCompare(b.time));
@@ -856,10 +899,37 @@ export default function EMSDashboard() {
           totalOvertimeHours: parseFloat(totalOvertimeHours.toFixed(2)),
           totalHoursSum: parseFloat(totalHoursSum.toFixed(2)),
           presentDaysCount,
+          sickLeaveDaysCount,
+          annualLeaveDaysCount,
         },
       };
     });
   }, [employeeDirectory, rawSwipesBuffer, monthFilter, selectedDate]);
+
+  // Aggregate Sick Leave / Annual Leave headcount across the currently
+  // filtered scope (drives the Leave KPI cards in the Staff Workspace).
+  const leaveMetricsSummary = useMemo(() => {
+    let totalSickLeaveDays = 0;
+    let totalAnnualLeaveDays = 0;
+    let employeesOnSickLeave = 0;
+    let employeesOnAnnualLeave = 0;
+
+    systemProcessedDataset.forEach((emp: any) => {
+      const sk = emp.metrics?.sickLeaveDaysCount || 0;
+      const al = emp.metrics?.annualLeaveDaysCount || 0;
+      totalSickLeaveDays += sk;
+      totalAnnualLeaveDays += al;
+      if (sk > 0) employeesOnSickLeave++;
+      if (al > 0) employeesOnAnnualLeave++;
+    });
+
+    return {
+      totalSickLeaveDays,
+      totalAnnualLeaveDays,
+      employeesOnSickLeave,
+      employeesOnAnnualLeave,
+    };
+  }, [systemProcessedDataset]);
 
   // Derive dynamic list of Cost Centers based on selected department to avoid dead-ends
 
@@ -1087,6 +1157,14 @@ export default function EMSDashboard() {
         [
           "Validated Active Attendance Days",
           `${emp.metrics.presentDaysCount} days`,
+        ],
+        [
+          "Sick Leave (SK) Days Logged",
+          `${emp.metrics.sickLeaveDaysCount} days`,
+        ],
+        [
+          "Annual Leave (AL) Days Logged",
+          `${emp.metrics.annualLeaveDaysCount} days`,
         ],
       ];
 
@@ -1324,6 +1402,49 @@ export default function EMSDashboard() {
                 </Button>
               </div>
 
+              {/* Leave KPI Cards — Sick Leave / Annual Leave for the currently selected date/period */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <Card className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs">
+                  <CardContent className="p-0 flex items-center justify-between">
+                    <div>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                        On Sick Leave
+                      </p>
+                      <p className="text-2xl font-black text-amber-600 mt-1">
+                        {leaveMetricsSummary.employeesOnSickLeave}
+                      </p>
+                      <p className="text-[10px] font-semibold text-slate-400 uppercase mt-0.5">
+                        {leaveMetricsSummary.totalSickLeaveDays} SK day(s)
+                        logged
+                      </p>
+                    </div>
+                    <div className="w-10 h-10 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center flex-shrink-0">
+                      <CalendarDays className="w-5 h-5 text-amber-600" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs">
+                  <CardContent className="p-0 flex items-center justify-between">
+                    <div>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                        On Annual Leave
+                      </p>
+                      <p className="text-2xl font-black text-purple-600 mt-1">
+                        {leaveMetricsSummary.employeesOnAnnualLeave}
+                      </p>
+                      <p className="text-[10px] font-semibold text-slate-400 uppercase mt-0.5">
+                        {leaveMetricsSummary.totalAnnualLeaveDays} AL day(s)
+                        logged
+                      </p>
+                    </div>
+                    <div className="w-10 h-10 rounded-lg bg-purple-50 border border-purple-100 flex items-center justify-center flex-shrink-0">
+                      <CalendarDays className="w-5 h-5 text-purple-600" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
               <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2">
                 <button
                   onClick={() => setStaffSubTab("REGISTER")}
@@ -1550,13 +1671,25 @@ export default function EMSDashboard() {
                           <TableCell>
                             <Badge
                               variant={
-                                swipe.type.toLowerCase().includes("in")
-                                  ? "default"
-                                  : "secondary"
+                                swipe.type === "SK" || swipe.type === "AL"
+                                  ? "outline"
+                                  : swipe.type.toLowerCase().includes("in")
+                                    ? "default"
+                                    : "secondary"
                               }
-                              className="text-[9px] uppercase font-bold"
+                              className={`text-[9px] uppercase font-bold ${
+                                swipe.type === "SK"
+                                  ? "border-amber-300 text-amber-700 bg-amber-50"
+                                  : swipe.type === "AL"
+                                    ? "border-purple-300 text-purple-700 bg-purple-50"
+                                    : ""
+                              }`}
                             >
-                              {swipe.type}
+                              {swipe.type === "SK"
+                                ? "Sick Leave"
+                                : swipe.type === "AL"
+                                  ? "Annual Leave"
+                                  : swipe.type}
                             </Badge>
                           </TableCell>
                         </TableRow>

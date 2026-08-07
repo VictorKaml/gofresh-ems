@@ -16,6 +16,7 @@ import {
   FileSpreadsheet,
   AlertTriangle,
   Calendar,
+  CalendarDays,
   Fingerprint,
   RotateCcw,
   Search,
@@ -46,7 +47,7 @@ interface OnsiteStaffRecord {
   time: string;
 }
 
-type MetricFilterMode = "ALL" | "ON_TIME" | "ABSENT" | "LATE" | "ONSITE" | "SINGLE_PUNCH";
+type MetricFilterMode = "ALL" | "ON_TIME" | "ABSENT" | "LATE" | "ONSITE" | "SINGLE_PUNCH" | "SICK_LEAVE" | "ANNUAL_LEAVE";
 
 const getBase64ImageFromUrl = async (imageUrl: string): Promise<string> => {
   const res = await fetch(imageUrl);
@@ -266,6 +267,8 @@ export default function Overview() {
         let rangeOnTime = false;
         let rangeAbsent = false;
         let rangeSinglePunch = false;
+        let rangeSickLeave = false;
+        let rangeAnnualLeave = false;
 
         const currentStaffCodeClean = String(emp.staffCode).trim().toLowerCase();
         let totalWeekdaysWithNoSwipes = 0;
@@ -283,6 +286,32 @@ export default function Overview() {
 
           if (!isWeekend && !isFuture) {
             totalTrackedWeekdays++;
+          }
+
+          // Leave marking (SK = Sick Leave, AL = Annual Leave) — logged as a
+          // single record via the Manual Checklist "Mark Leave" flow. Treat
+          // it as neither absent nor a punch, and skip normal punch logic.
+          const leaveSwipe = daySwipes.find((s) => {
+            const t = String(s.type).toUpperCase().trim();
+            return t === "SK" || t === "AL";
+          });
+          if (leaveSwipe) {
+            const t = String(leaveSwipe.type).toUpperCase().trim();
+            if (t === "SK") rangeSickLeave = true;
+            if (t === "AL") rangeAnnualLeave = true;
+
+            // Paid leave still counts toward regular hours for the day
+            // (standard shift cap) rather than 0.
+            regularTotal += currentDayCap;
+
+            return {
+              dateStr: day.dateStr,
+              clockIn: "—",
+              clockOut: t === "SK" ? "SICK LEAVE" : "ANNUAL LEAVE",
+              regularHours: currentDayCap,
+              overtimeHours: 0,
+              label: `${t} (${currentDayCap.toFixed(1)} / 0.0)`
+            };
           }
 
           if (daySwipes.length === 0) {
@@ -408,7 +437,9 @@ export default function Overview() {
             late: rangeLate,
             onTime: rangeOnTime,
             absent: rangeAbsent,
-            singlePunch: rangeSinglePunch
+            singlePunch: rangeSinglePunch,
+            sickLeave: rangeSickLeave,
+            annualLeave: rangeAnnualLeave
           },
           metricsSummary: {
             regularTotal,
@@ -426,6 +457,8 @@ export default function Overview() {
     let onTime = 0;
     let late = 0;
     let singlePunch = 0;
+    let sickLeave = 0;
+    let annualLeave = 0;
 
     fullyCalculatedDataset.forEach((row) => {
       if (row.rangeDateFlags.onsite) onsite++;
@@ -433,9 +466,11 @@ export default function Overview() {
       if (row.rangeDateFlags.onTime) onTime++;
       if (row.rangeDateFlags.late) late++;
       if (row.rangeDateFlags.singlePunch) singlePunch++;
+      if (row.rangeDateFlags.sickLeave) sickLeave++;
+      if (row.rangeDateFlags.annualLeave) annualLeave++;
     });
 
-    return { onsite, absent, onTime, late, singlePunch };
+    return { onsite, absent, onTime, late, singlePunch, sickLeave, annualLeave };
   }, [fullyCalculatedDataset]);
 
   const filteredViewDataset = useMemo(() => {
@@ -445,6 +480,8 @@ export default function Overview() {
       if (selectedMetricFilter === "ON_TIME") return row.rangeDateFlags.onTime;
       if (selectedMetricFilter === "LATE") return row.rangeDateFlags.late;
       if (selectedMetricFilter === "SINGLE_PUNCH") return row.rangeDateFlags.singlePunch;
+      if (selectedMetricFilter === "SICK_LEAVE") return row.rangeDateFlags.sickLeave;
+      if (selectedMetricFilter === "ANNUAL_LEAVE") return row.rangeDateFlags.annualLeave;
       return true;
     });
   }, [fullyCalculatedDataset, selectedMetricFilter]);
@@ -556,7 +593,21 @@ export default function Overview() {
             });
 
             if (daySwipes.length === 0) return { label: "0.0 / 0.0" };
-            
+
+            const leaveSwipe = daySwipes.find((s) => {
+              const t = String(s.type).toUpperCase().trim();
+              return t === "SK" || t === "AL";
+            });
+            if (leaveSwipe) {
+              const t = String(leaveSwipe.type).toUpperCase().trim();
+              const checkDate = new Date(day.dateStr);
+              const isWeekend = checkDate.getDay() === 0 || checkDate.getDay() === 6;
+              const currentDayCap = isWeekend ? 5.5 : 8.5;
+              // Paid leave still counts toward regular hours for the day.
+              regularTotal += currentDayCap;
+              return { label: `${t} (${currentDayCap.toFixed(1)} / 0.0)` };
+            }
+
             if (daySwipes.length === 1) {
               return { label: "0.0 / 0.0" };
             }
@@ -703,7 +754,7 @@ export default function Overview() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-7 gap-4">
             <Card
               onClick={() => setSelectedMetricFilter(selectedMetricFilter === "ONSITE" ? "ALL" : "ONSITE")}
               className={`bg-white border border-slate-200 rounded-xl border-l-4 border-l-blue-600 shadow-xs cursor-pointer transition-all hover:scale-[1.01] ${
@@ -785,6 +836,40 @@ export default function Overview() {
                 <CardTitle className="text-xl font-black text-rose-600 mt-1 flex justify-between items-center">
                   <span>{liveMetricsRollup.late}</span>
                   {selectedMetricFilter === "LATE" && <Badge className="bg-rose-600 text-[9px]">ACTIVE</Badge>}
+                </CardTitle>
+              </CardHeader>
+            </Card>
+
+            <Card
+              onClick={() => setSelectedMetricFilter(selectedMetricFilter === "SICK_LEAVE" ? "ALL" : "SICK_LEAVE")}
+              className={`bg-white border border-slate-200 rounded-xl border-l-4 border-l-amber-600 shadow-xs cursor-pointer transition-all hover:scale-[1.01] ${
+                selectedMetricFilter === "SICK_LEAVE" ? "ring-2 ring-amber-600 bg-amber-50/10" : ""
+              }`}
+            >
+              <CardHeader className="p-4">
+                <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                  <CalendarDays className="w-4 h-4 text-amber-600" /> Sick Leave (SK)
+                </CardDescription>
+                <CardTitle className="text-xl font-black text-amber-600 mt-1 flex justify-between items-center">
+                  <span>{liveMetricsRollup.sickLeave}</span>
+                  {selectedMetricFilter === "SICK_LEAVE" && <Badge className="bg-amber-600 text-[9px]">ACTIVE</Badge>}
+                </CardTitle>
+              </CardHeader>
+            </Card>
+
+            <Card
+              onClick={() => setSelectedMetricFilter(selectedMetricFilter === "ANNUAL_LEAVE" ? "ALL" : "ANNUAL_LEAVE")}
+              className={`bg-white border border-slate-200 rounded-xl border-l-4 border-l-purple-500 shadow-xs cursor-pointer transition-all hover:scale-[1.01] ${
+                selectedMetricFilter === "ANNUAL_LEAVE" ? "ring-2 ring-purple-500 bg-purple-50/10" : ""
+              }`}
+            >
+              <CardHeader className="p-4">
+                <CardDescription className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                  <CalendarDays className="w-4 h-4 text-purple-500" /> Annual Leave (AL)
+                </CardDescription>
+                <CardTitle className="text-xl font-black text-purple-600 mt-1 flex justify-between items-center">
+                  <span>{liveMetricsRollup.annualLeave}</span>
+                  {selectedMetricFilter === "ANNUAL_LEAVE" && <Badge className="bg-purple-500 text-[9px]">ACTIVE</Badge>}
                 </CardTitle>
               </CardHeader>
             </Card>
@@ -959,6 +1044,16 @@ export default function Overview() {
                                 {emp.rangeDateFlags.singlePunch && (
                                   <Badge className="text-[7px] px-1 py-0 h-3.5 tracking-tighter bg-purple-100 text-purple-800 border-none">
                                     INCOMPLETE
+                                  </Badge>
+                                )}
+                                {emp.rangeDateFlags.sickLeave && (
+                                  <Badge className="text-[7px] px-1 py-0 h-3.5 tracking-tighter bg-amber-100 text-amber-800 border-none">
+                                    SK
+                                  </Badge>
+                                )}
+                                {emp.rangeDateFlags.annualLeave && (
+                                  <Badge className="text-[7px] px-1 py-0 h-3.5 tracking-tighter bg-purple-100 text-purple-700 border-none">
+                                    AL
                                   </Badge>
                                 )}
                                 <Badge className="text-[7px] px-1 py-0 h-3.5 tracking-tighter" variant={emp.rangeDateFlags.onsite ? "secondary" : "destructive"}>
